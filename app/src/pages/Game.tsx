@@ -9,6 +9,7 @@ import ActionBar from '../components/ActionBar';
 import TankCard from '../components/TankCard';
 import EventFeed from '../components/EventFeed';
 import HistoryScrubber from '../components/HistoryScrubber';
+import { Icon, trophySvg } from '../lib/icons';
 import { useGameEvents } from '../lib/useGameEvents';
 import { action } from '../lib/api';
 
@@ -57,6 +58,23 @@ export default function Game() {
 
   const displayState: GameState | null = scrubbedState ?? state;
   const scrubbing = scrubIdx !== null;
+
+  // AP countdown: seconds until the next AP point. Based on tickClockMinutes
+  // + config.apIntervalMinutes, defaulting to a 30s local-test drip.
+  const [apRemaining, setApRemaining] = useState<number | null>(null);
+  useEffect(() => {
+    if (!displayState) return;
+    const intervalMinutes = displayState.config.apIntervalMinutes;
+    const intervalSeconds = intervalMinutes && intervalMinutes > 0 ? intervalMinutes * 60 : 30;
+    const elapsedSeconds = (displayState.tickClockMinutes ?? 0) * 60;
+    let remaining = intervalSeconds - (elapsedSeconds % intervalSeconds);
+    if (remaining <= 0) remaining = intervalSeconds;
+    setApRemaining(remaining);
+    const id = setInterval(() => {
+      setApRemaining((t) => (t == null || t <= 1 ? intervalSeconds : t - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [displayState]);
 
   // dead player goes to the jury screen
   useEffect(() => {
@@ -127,12 +145,18 @@ export default function Game() {
         <span className="mode-badge">
           {detail?.mode === 'test' ? 'TEST' : 'PLAY'}{scrubbing ? ' · HISTORY' : ''}
         </span>
+        {apRemaining != null && (
+          <span className="timer" data-testid="ap-timer">
+            Next AP in {apRemaining}s
+          </span>
+        )}
         <Link to="/dashboard" className="link-button">Exit</Link>
       </header>
 
       {displayState.winner && !scrubbing && (
         <div className="banner" data-testid="winner-banner">
-          🏆 {displayState.players[displayState.winner]?.name ?? displayState.winner} wins!{' '}
+          <Icon html={trophySvg} className="winner-icon" width={16} height={16} />{' '}
+          {displayState.players[displayState.winner]?.name ?? displayState.winner} wins!{' '}
           <Link to="/dashboard">Back to dashboard</Link>
         </div>
       )}

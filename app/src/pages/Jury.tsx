@@ -2,6 +2,7 @@ import { useParams } from 'react-router-dom';
 import Board from '../components/Board';
 import EventFeed from '../components/EventFeed';
 import TankCard from '../components/TankCard';
+import { Icon, skullSvg } from '../lib/icons';
 import { useGameEvents } from '../lib/useGameEvents';
 import { action } from '../lib/api';
 
@@ -39,7 +40,7 @@ export default function Jury() {
       </header>
 
       <p className="subtitle">
-        ☠️ You are on the jury — vote daily to grant a player bonus AP (3+ votes needed).
+        <Icon html={skullSvg} width={14} height={14} className="stat-icon" /> You are on the jury — vote daily to grant a player bonus AP (3+ votes needed).
       </p>
 
       {alreadyVoted && (
