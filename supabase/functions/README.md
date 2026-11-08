@@ -38,9 +38,10 @@ Supabase dashboard — pushes to `main` apply new migrations and deploy edge
 functions automatically. 0003's cron URL is already set to this project.
 
 The cron schedule in 0003 presents `CRON_SECRET` (set with
-`supabase secrets set`) as the bearer token; tick checks it against the
-`app.cron_secret` database setting:
-
-```sql
-alter database postgres set app.cron_secret = '<same value as CRON_SECRET>';
-```
+`supabase secrets set`) as the bearer token; tick checks it against
+`app_settings` (0009): the platform JWT gate rejects opaque bearer tokens
+(UNAUTHORIZED_INVALID_JWT_FORMAT), so `tick` deploys with
+`--no-verify-jwt` and checks `CRON_SECRET` itself; the secret lives in the
+RLS-locked `app_settings` table (Supabase's `postgres` role cannot set
+custom GUCs, so the original `alter database postgres set app.cron_secret`
+design was dropped).
