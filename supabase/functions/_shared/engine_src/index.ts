@@ -1,5 +1,6 @@
 export * from './types.ts';
 export * from './rng.ts';
+export * from './geom.ts';
 export * from './state.ts';
 export * from './reducer.ts';
 export * from './replay.ts';
