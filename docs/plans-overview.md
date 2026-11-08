@@ -17,12 +17,12 @@ React+Vite mobile-first frontend on GitHub Pages.
 
 ## Plan order
 
-| Plan | Doc | Deliverable |
-|---|---|---|
-| A | `docs/plan-a-engine.md` | `packages/engine` — reducer, RNG, bots, rewind; fully unit-tested |
-| B | `docs/plan-b-backend.md` | Supabase schema, RLS, auth + action + tick Edge Functions, cron |
-| C | `docs/plan-c-frontend-shell.md` | Deployable app: landing, instructions, auth, dashboard, lobby, test-mode config |
-| D | `docs/plan-d-game-screen.md` | Playable game: board, actions, realtime, jury, history scrubber |
+| Plan | Doc | Deliverable | Status |
+|---|---|---|---|
+| A | `docs/plan-a-engine.md` | `packages/engine` — reducer, RNG, bots, rewind; fully unit-tested | ✅ complete (49/49 unit) |
+| B | `docs/plan-b-backend.md` | Supabase schema, RLS, auth + action + tick Edge Functions, cron | ✅ complete (15/15 smoke; B7 hosted deploy deferred) |
+| C | `docs/plan-c-frontend-shell.md` | Deployable app: landing, instructions, auth, dashboard, lobby, test-mode config | ✅ complete (C7 Pages workflow committed; needs repo + secrets) |
+| D | `docs/plan-d-game-screen.md` | Playable game: board, actions, realtime, jury, history scrubber | ✅ complete (48/48 unit, 1/1 e2e) |
 
 Each plan ends with working, testable software. B depends on A (imports the
 engine). C depends on B (auth + games API). D depends on C.
