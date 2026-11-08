@@ -14,6 +14,19 @@ const state = (overrides?: Partial<GameState>): GameState => ({
   ...overrides,
 });
 
+const attackEvent = () => ({
+  seq: 1, type: 'attack' as const, actorId: 'p1', createdAt: 't',
+  payload: { targetId: 'p2' },
+});
+
+// React resolves onAnimationEnd to a vendor-prefixed native event name when the
+// environment lacks AnimationEvent (jsdom: 'webkitAnimationEnd'; real browsers
+// resolve it to 'animationend'). Fire the prefixed variant so the React handler
+// runs under jsdom.
+const fireFxAnimationEnd = (el: Element) => {
+  fireEvent(el, new Event('webkitAnimationEnd', { bubbles: true }));
+};
+
 describe('Board', () => {
   test('renders board² cells', () => {
     render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}} />);
@@ -122,5 +135,40 @@ describe('Board', () => {
     });
     render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
     expect(screen.queryByTestId('life-bar-p2')).not.toBeInTheDocument();
+  });
+
+  test('attack event spawns a red bullet fx (even at a now-dead target)', () => {
+    render(<Board state={state({ players: { ...state().players, p2: { ...state().players.p2, hp: 0 } } })}
+                  selectedMode="none" me="p1" onCellTap={() => {}} lastEvent={attackEvent()} />);
+    const fx = screen.getByTestId('fx-attack');
+    expect(fx.querySelector('circle')).not.toBeNull();
+    expect(fx.querySelector('circle')!.getAttribute('fill')).toBe('#e33');
+  });
+
+  test('give_ap event spawns a green bullet fx', () => {
+    render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}}
+      lastEvent={{ seq: 2, type: 'give_ap', actorId: 'p1', createdAt: 't', payload: { targetId: 'p2', amount: 1 } }} />);
+    expect(screen.getByTestId('fx-give_ap').querySelector('circle')!.getAttribute('fill')).toBe('#3c3');
+  });
+
+  test('upgrade_range event spawns a pulse ring on the actor', () => {
+    render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}}
+      lastEvent={{ seq: 3, type: 'upgrade_range', actorId: 'p1', createdAt: 't', payload: {} }} />);
+    expect(screen.getByTestId('fx-pulse')).toBeInTheDocument();
+  });
+
+  test('move events spawn no fx; fx is removed on animationend', () => {
+    const { rerender } = render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}}
+      lastEvent={{ seq: 4, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } } }} />);
+    expect(screen.queryByTestId('fx-move')).not.toBeInTheDocument();
+    rerender(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}} lastEvent={attackEvent()} />);
+    fireFxAnimationEnd(screen.getByTestId('fx-attack'));
+    expect(screen.queryByTestId('fx-attack')).not.toBeInTheDocument();
+  });
+
+  test('missing actor/target position renders no fx', () => {
+    render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}}
+      lastEvent={{ seq: 5, type: 'attack', actorId: 'ghost', createdAt: 't', payload: { targetId: 'p2' } }} />);
+    expect(screen.queryByTestId('fx-attack')).not.toBeInTheDocument();
   });
 });

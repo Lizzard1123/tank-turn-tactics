@@ -15,8 +15,8 @@ vi.mock('../lib/useGameEvents', () => ({
 import { useGameEvents } from '../lib/useGameEvents';
 
 vi.mock('../components/Board', () => ({
-  default: ({ onCellTap }: { onCellTap: (p: { x: number; y: number }) => void }) => (
-    <div data-testid="board">
+  default: ({ onCellTap, lastEvent }: { onCellTap: (p: { x: number; y: number }) => void; lastEvent?: { type: string } | null }) => (
+    <div data-testid="board" data-last-event={lastEvent?.type ?? ''}>
       <button data-testid="tap-legal" onClick={() => onCellTap({ x: 1, y: 0 })}>tap</button>
     </div>
   ),
@@ -227,5 +227,18 @@ describe('Game page', () => {
     expect(items[1].className).not.toContain('future');
     expect(items[2].className).not.toContain('active');
     expect(items[3].className).not.toContain('active');
+  });
+
+  test('replay/scrub feeds the stepped event to Board as lastEvent', () => {
+    setup({
+      history: [
+        { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
+        { seq: 2, type: 'attack', actorId: 'p2', createdAt: 't', payload: { targetId: 'p1' }, generation: 1 },
+      ],
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: /view state after event 2/i })[0]);
+    expect(screen.getByTestId('board')).toHaveAttribute('data-last-event', 'attack');
+    fireEvent.click(screen.getByTestId('back-to-live'));
+    expect(screen.getByTestId('board')).toHaveAttribute('data-last-event', 'attack'); // newest event
   });
 });

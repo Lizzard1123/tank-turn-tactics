@@ -1,4 +1,5 @@
-import type { GameState, Vec } from '@ttt/engine';
+import { useEffect, useState } from 'react';
+import type { GameEvent, GameState, Vec } from '@ttt/engine';
 import { manhattan, occupantAt } from '@ttt/engine';
 import { flagUrl } from '../lib/flags';
 
@@ -10,9 +11,13 @@ interface BoardProps {
   me: string | null;
   avatars?: Record<string, string>;
   onCellTap: (pos: Vec) => void;
+  lastEvent?: GameEvent | null;
 }
 
 const CELL = 40; // px per cell; container scrolls for large boards
+
+// fx layer testids (data-testids are part of the public DOM contract)
+const FX_TESTIDS = { attack: 'fx-attack', give_ap: 'fx-give_ap', upgrade_range: 'fx-pulse' } as const;
 
 // Life bar: ONE horizontal bar per occupant, along the cell bottom. Width is
 // proportional to remaining HP (relative to the game's startingHp).
@@ -44,10 +49,30 @@ function lifeBar(
 // SVG grid: cells, range overlay, legal-target highlights, tanks.
 // The .board wrapper is a square (aspect-ratio 1) so cells stay square and
 // there is no letterboxing / black box.
-export default function Board({ state, selectedMode, me, avatars, onCellTap }: BoardProps) {
+export default function Board({ state, selectedMode, me, avatars, onCellTap, lastEvent }: BoardProps) {
   const n = state.config.board;
   const own = me ? state.players[me] : null;
   const size = n * CELL;
+
+  // fx lifetime: shown for the newest event, hidden once its animation ends,
+  // re-shown when the event changes (keyed remount restarts the animation).
+  const [fxLive, setFxLive] = useState(true);
+  useEffect(() => setFxLive(true), [lastEvent?.seq]);
+
+  // Derive the fx geometry from the event: the actor cell (and the target cell
+  // for attack / give_ap). Looked up in state.players REGARDLESS of hp — an
+  // attack on a now-dead tank still draws the bullet (the tank layer skips the
+  // dead, the fx layer does not).
+  let fx: { kind: 'attack' | 'give_ap' | 'upgrade_range'; from: Vec; to: Vec | null } | null = null;
+  if (lastEvent && fxLive) {
+    const actor = state.players[lastEvent.actorId];
+    if (actor && (lastEvent.type === 'attack' || lastEvent.type === 'give_ap')) {
+      const target = state.players[(lastEvent.payload as { targetId?: string }).targetId ?? ''];
+      if (target) fx = { kind: lastEvent.type, from: actor.pos, to: target.pos };
+    } else if (actor && lastEvent.type === 'upgrade_range') {
+      fx = { kind: 'upgrade_range', from: actor.pos, to: null };
+    }
+  }
 
   const inRange = (p: Vec) =>
     !!own && own.hp > 0 && manhattan(own.pos, p) <= own.range;
@@ -134,6 +159,47 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap }: B
             {lifeBar(p, 0, 0, state.config.startingHp)}
           </g>
         ))}
+        {/* fx layer: one keyed <g> for the newest event's effect. Keyed by seq
+            so a new event remounts the layer and restarts the animations.
+            animationend hides the layer — except the bullet's, which would cut
+            the victim flash short (bullet 250ms vs flash 400ms). */}
+        {fx && lastEvent && (
+          <g
+            key={lastEvent.seq}
+            data-testid={FX_TESTIDS[fx.kind]}
+            onAnimationEnd={(e) => {
+              if (!(e.target as Element).classList.contains('fx-bullet')) setFxLive(false);
+            }}
+          >
+            {(fx.kind === 'attack' || fx.kind === 'give_ap') && (
+              <>
+                <circle
+                  r={5}
+                  fill={fx.kind === 'attack' ? '#e33' : '#3c3'}
+                  className="fx-bullet"
+                  style={{
+                    ['--fx-dx' as string]: `${(fx.to!.x - fx.from.x) * CELL}px`,
+                    ['--fx-dy' as string]: `${(fx.to!.y - fx.from.y) * CELL}px`,
+                  }}
+                />
+                <circle
+                  cx={fx.to!.x * CELL + CELL / 2}
+                  cy={fx.to!.y * CELL + CELL / 2}
+                  r={CELL / 2}
+                  className="fx-victim"
+                />
+              </>
+            )}
+            {fx.kind === 'upgrade_range' && (
+              <circle
+                cx={fx.from.x * CELL + CELL / 2}
+                cy={fx.from.y * CELL + CELL / 2}
+                r={CELL * 1.5}
+                className="fx-pulse"
+              />
+            )}
+          </g>
+        )}
       </svg>
     </div>
   );

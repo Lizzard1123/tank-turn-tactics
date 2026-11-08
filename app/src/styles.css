@@ -400,6 +400,33 @@ input[type='radio'] {
   stroke-width: 1;
 }
 
+/* event fx: attack bullet flies actor→target over 250ms, victim ring flashes,
+   upgrade_range pulses a dashed ring around the actor; each layer unmounts on
+   animationend (see Board.tsx) */
+.fx-bullet { animation: ttt-bullet 250ms ease-in forwards; }
+@keyframes ttt-bullet {
+  from { transform: translate(0, 0); }
+  to { transform: translate(var(--fx-dx), var(--fx-dy)); }
+}
+.fx-victim {
+  fill: none;
+  stroke: #e33;
+  animation: ttt-flash 400ms ease-out forwards;
+}
+@keyframes ttt-flash { from { opacity: .9; } to { opacity: 0; } }
+.fx-pulse {
+  fill: none;
+  stroke: var(--signal);
+  stroke-dasharray: 6 4;
+  animation: ttt-pulse 600ms ease-out forwards;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes ttt-pulse {
+  from { transform: scale(.4); opacity: 1; }
+  to { transform: scale(1.6); opacity: 0; }
+}
+
 /* AP countdown timer (game header) */
 .timer {
   font-family: var(--font-mono);

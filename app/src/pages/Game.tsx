@@ -122,6 +122,13 @@ function LocalGameView() {
     (p) => p.id !== me && mine && mine.hp > 0 && manhattan(mine.pos, p.pos) <= mine.range,
   );
 
+  // Newest applied event, or (while scrubbing/replaying) the event at the scrub
+  // position — Board plays its fx for this event. scrubIdx is the index ONE
+  // PAST the viewed event, so the viewed event is scrubIdx - 1.
+  const lastEvent: GameEvent | null = scrubIdx !== null
+    ? (game.history[Math.min(scrubIdx, game.history.length) - 1] ?? null)
+    : (game.history[game.history.length - 1] ?? null);
+
   const doAction = useCallback((type: ActionType, payload: Record<string, unknown>) => {
     if (!mine || mine.hp <= 0) return;
     try {
@@ -164,6 +171,7 @@ function LocalGameView() {
         selectedMode={scrubbing ? 'none' : mode}
         me={me}
         avatars={{}}
+        lastEvent={lastEvent}
         onCellTap={(pos) => {
           // historical board taps are inspection only — never commit actions
           if (scrubbing || mode === 'none') return;
@@ -394,6 +402,13 @@ function DbGameView({ gameId }: DbGameProps) {
   );
   const canFork = detail?.mode === 'test' && detail.createdBy === me;
 
+  // Newest applied event, or (while scrubbing/replaying) the event at the scrub
+  // position — Board plays its fx for this event. scrubIdx is the index ONE
+  // PAST the viewed event, so the viewed event is scrubIdx - 1.
+  const lastEvent: GameEvent | null = scrubIdx !== null
+    ? (history[Math.min(scrubIdx, history.length) - 1] ?? null)
+    : (history[history.length - 1] ?? null);
+
   return (
     <main className="page game-page">
       <header className="game-status">
@@ -434,6 +449,7 @@ function DbGameView({ gameId }: DbGameProps) {
         selectedMode={scrubbing ? 'none' : mode}
         me={me}
         avatars={avatars}
+        lastEvent={lastEvent}
         onCellTap={(pos) => {
           // tap semantics: in move mode a legal cell commits; in attack/give
           // mode an enemy in range commits; otherwise nothing
