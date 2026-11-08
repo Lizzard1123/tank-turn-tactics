@@ -1,6 +1,6 @@
 import type { GameState, Vec } from '@ttt/engine';
 import { manhattan, occupantAt } from '@ttt/engine';
-import { flagSvg } from '../lib/flags';
+import { flagUrl } from '../lib/flags';
 
 export type BoardMode = 'none' | 'move' | 'attack' | 'give_ap';
 
@@ -14,30 +14,31 @@ interface BoardProps {
 
 const CELL = 40; // px per cell; container scrolls for large boards
 
-// Life-bar geometry (one vertical bar per HP, drawn at the bottom of the cell).
-const LIFE_BAR_W = CELL * 0.12;
-const LIFE_BAR_GAP = CELL * 0.05;
-const LIFE_BAR_H = CELL * 0.22;
+// Life bar: ONE horizontal bar per occupant, along the cell bottom. Width is
+// proportional to remaining HP (relative to the game's startingHp).
+const LIFE_BAR_H = CELL * 0.14;
+const LIFE_BAR_SIDE_PAD = CELL * 0.12;
 const LIFE_BAR_BOTTOM_PAD = CELL * 0.08;
-const MAX_LIFE_BARS = 3;
+const LIFE_BAR_USABLE = CELL - 2 * LIFE_BAR_SIDE_PAD;
 
-function lifeBars(occ: { id: string; hp: number }, x: number, y: number) {
-  const n = Math.min(occ.hp, MAX_LIFE_BARS);
-  if (n <= 0) return null;
-  const totalW = n * LIFE_BAR_W + (n - 1) * LIFE_BAR_GAP;
-  const startX = x * CELL + (CELL - totalW) / 2;
-  const barY = (y + 1) * CELL - LIFE_BAR_BOTTOM_PAD - LIFE_BAR_H;
-  return Array.from({ length: n }, (_, h) => (
+function lifeBar(
+  occ: { id: string; hp: number },
+  x: number,
+  y: number,
+  startingHp: number,
+) {
+  if (occ.hp <= 0 || startingHp <= 0) return null;
+  const w = LIFE_BAR_USABLE * Math.min(occ.hp, startingHp) / startingHp;
+  return (
     <rect
-      key={h}
       className="life-bar"
-      data-testid={`life-bar-${occ.id}-${h}`}
-      x={startX + h * (LIFE_BAR_W + LIFE_BAR_GAP)}
-      y={barY}
-      width={LIFE_BAR_W}
+      data-testid={`life-bar-${occ.id}`}
+      x={x * CELL + LIFE_BAR_SIDE_PAD}
+      y={(y + 1) * CELL - LIFE_BAR_BOTTOM_PAD - LIFE_BAR_H}
+      width={w}
       height={LIFE_BAR_H}
     />
-  ));
+  );
 }
 
 // SVG grid: cells, range overlay, legal-target highlights, tanks.
@@ -47,9 +48,6 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap }: B
   const n = state.config.board;
   const own = me ? state.players[me] : null;
   const size = n * CELL;
-
-  const flagUri = (playerId: string) =>
-    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(flagSvg(playerId))}`;
 
   const inRange = (p: Vec) =>
     !!own && own.hp > 0 && manhattan(own.pos, p) <= own.range;
@@ -118,7 +116,7 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap }: B
                   {/* tank fills the full square: avatar image or generated flag */}
                   <image
                     x={x * CELL} y={y * CELL} width={CELL} height={CELL}
-                    href={avatars?.[occ.id] ?? flagUri(occ.id)}
+                    href={avatars?.[occ.id] ?? flagUrl(occ.id)}
                     preserveAspectRatio="xMidYMid slice"
                     className="tank-image"
                     data-testid={`tank-image-${occ.id}`}
@@ -131,7 +129,7 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap }: B
                     strokeWidth="3"
                     pointer-events="none"
                   />
-                  {lifeBars(occ, x, y)}
+                  {lifeBar(occ, x, y, state.config.startingHp)}
                 </g>
               )}
             </g>

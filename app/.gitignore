@@ -12,6 +12,9 @@ dist
 dist-ssr
 *.local
 
+# real-flag SVGs copied from node_modules/flag-icons at build time
+public/flags
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

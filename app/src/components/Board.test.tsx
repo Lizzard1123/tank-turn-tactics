@@ -73,12 +73,30 @@ describe('Board', () => {
     expect(screen.queryByText('F')).not.toBeInTheDocument();
   });
 
-  test('renders life bars at the bottom of occupied squares (one per HP)', () => {
-    render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}} />);
-    // p1 and p2 both have hp 3 -> 3 life bars each
-    const bars = screen.getAllByTestId((id) =>
-      typeof id === 'string' && id.startsWith('life-bar-'),
-    );
-    expect(bars).toHaveLength(6);
+  test('renders ONE horizontal HP bar per occupied square, width proportional to HP', () => {
+    const damaged = state({
+      players: {
+        p1: { id: 'p1', name: 'me', pos: { x: 0, y: 0 }, hp: 3, ap: 1, range: 2, isBot: false, botDifficulty: null },
+        p2: { id: 'p2', name: 'foe', pos: { x: 2, y: 0 }, hp: 1, ap: 1, range: 2, isBot: false, botDifficulty: null },
+      },
+    });
+    render(<Board state={damaged} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    const full = screen.getByTestId('life-bar-p1');
+    const hurt = screen.getByTestId('life-bar-p2');
+    // horizontal bar: width >> height
+    expect(Number(full.getAttribute('height'))).toBeLessThan(Number(full.getAttribute('width')));
+    // hp 3/3 vs hp 1/3 → p2's bar is one third of p1's width
+    expect(Number(hurt.getAttribute('width'))).toBeCloseTo(Number(full.getAttribute('width')) / 3, 5);
+  });
+
+  test('no HP bar for zero-HP tanks', () => {
+    const dead = state({
+      players: {
+        p1: { id: 'p1', name: 'me', pos: { x: 0, y: 0 }, hp: 3, ap: 1, range: 2, isBot: false, botDifficulty: null },
+        p2: { id: 'p2', name: 'foe', pos: { x: 2, y: 0 }, hp: 0, ap: 1, range: 2, isBot: false, botDifficulty: null },
+      },
+    });
+    render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    expect(screen.queryByTestId('life-bar-p2')).not.toBeInTheDocument();
   });
 });

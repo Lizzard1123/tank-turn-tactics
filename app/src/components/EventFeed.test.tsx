@@ -1,34 +1,87 @@
 import { describe, test, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import EventFeed from './EventFeed';
+import EventFeed, { type FeedEntry } from './EventFeed';
 
-const log = [
-  { seq: 1, text: 'Alpha moved east.' },
-  { seq: 2, text: 'Bravo attacked Alpha.' },
-  { seq: 3, text: 'Charlie joined the Jury.' },
+const entries: FeedEntry[] = [
+  { seq: 1, type: 'move', actorId: 'a', createdAt: '2026-11-08T10:00:00Z', text: 'Alpha moved east.' },
+  { seq: 2, type: 'attack', actorId: 'b', createdAt: '2026-11-08T10:01:00Z', text: 'Bravo attacked Alpha.' },
+  { seq: 3, type: 'jury_vote', actorId: 'c', createdAt: '2026-11-08T10:02:00Z', text: 'Charlie joined the Jury.' },
 ];
 
+function base(overrides: Partial<Parameters<typeof EventFeed>[0]> = {}) {
+  return {
+    entries, activeSeq: null, live: true,
+    onView: vi.fn(), onReplay: vi.fn(), onStop: vi.fn(), replaying: false,
+    ...overrides,
+  };
+}
+
 describe('EventFeed', () => {
-  test('renders entries newest-first', () => {
-    render(<EventFeed log={log} />);
+  test('renders the FULL entry list newest-first, with timestamps in a Details dropdown', () => {
+    render(<EventFeed {...base()} />);
     const items = screen.getAllByRole('listitem').filter((li) => !li.className.includes('empty'));
-    expect(items.map((li) => li.textContent)).toEqual([log[2].text, log[1].text, log[0].text]);
+    const texts = items.map((li) => li.querySelector('.feed-text')?.textContent);
+    expect(texts).toEqual([entries[2].text, entries[1].text, entries[0].text]);
+    // every entry carries its timestamp as a machine-readable <time>
+    for (const e of entries) {
+      expect(document.querySelector(`time[datetime="${e.createdAt}"]`)).not.toBeNull();
+    }
   });
 
-  test('no view buttons without onView', () => {
-    render(<EventFeed log={log} />);
-    expect(screen.queryByRole('button', { name: /^view state$/i })).not.toBeInTheDocument();
+  test('while scrubbed the later events stay visible (dimmed) and the viewed event is highlighted', () => {
+    render(<EventFeed {...base({ activeSeq: 2, live: false })} />);
+    const items = screen.getAllByRole('listitem').filter((li) => !li.className.includes('empty'));
+    expect(items[0].className).toContain('future'); // seq 3 is after the viewed event
+    expect(items[1].className).toContain('active'); // seq 2 is the viewed event
+    expect(items[2].className).not.toContain('active');
+  });
+
+  test('toolbar: live offers Replay from here; scrubbed offers Back to live', async () => {
+    const user = userEvent.setup();
+    const onReplay = vi.fn();
+    const onStop = vi.fn();
+    const { rerender } = render(<EventFeed {...base({ onReplay, onStop })} />);
+    expect(screen.getByTestId('replay-btn')).toBeInTheDocument();
+    expect(screen.queryByTestId('back-to-live')).not.toBeInTheDocument();
+    await user.click(screen.getByTestId('replay-btn'));
+    expect(onReplay).toHaveBeenCalled();
+
+    rerender(<EventFeed {...base({ activeSeq: 1, live: false, onReplay, onStop })} />);
+    expect(screen.getByTestId('back-to-live')).toBeInTheDocument();
+    await user.click(screen.getByTestId('back-to-live'));
+    expect(onStop).toHaveBeenCalled();
+  });
+
+  test('while replaying, Stop replay replaces the replay button', () => {
+    render(<EventFeed {...base({ activeSeq: 0, live: false, replaying: true })} />);
+    expect(screen.getByTestId('stop-replay-btn')).toBeInTheDocument();
+    expect(screen.queryByTestId('replay-btn')).not.toBeInTheDocument();
+  });
+
+  test('Rewind game to here lives in the Details dropdown when allowed', async () => {
+    const user = userEvent.setup();
+    const onFork = vi.fn();
+    render(<EventFeed {...base({ canFork: true, onFork })} />);
+    const items = screen.getAllByRole('listitem').filter((li) => !li.className.includes('empty'));
+    // open the details of the newest event (seq 3)
+    await user.click(within(items[0]).getByText(/details/i));
+    await user.click(within(items[0]).getByRole('button', { name: /rewind game to here/i }));
+    expect(onFork).toHaveBeenCalledWith(3);
+  });
+
+  test('no rewind control without canFork', () => {
+    render(<EventFeed {...base({ canFork: false })} />);
+    expect(screen.queryAllByRole('button', { name: /rewind/i })).toHaveLength(0);
   });
 
   test('view button per entry calls onView with its seq', async () => {
     const onView = vi.fn();
     const user = userEvent.setup();
-    render(<EventFeed log={log} onView={onView} />);
+    render(<EventFeed {...base({ onView })} />);
     const buttons = screen.getAllByRole('button', { name: /view state after event/i });
     expect(buttons.length).toBe(3);
-    // newest entry (seq 3) is the first row
-    await user.click(buttons[0]);
+    await user.click(buttons[0]); // newest entry (seq 3)
     expect(onView).toHaveBeenCalledWith(3);
   });
 });

@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "prebuild": "rm -rf public/flags && mkdir -p public/flags && cp -R ../node_modules/flag-icons/flags/4x3/. public/flags/",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
@@ -14,6 +15,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",
     "@ttt/engine": "*",
+    "flag-icons": "^7.6.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router-dom": "^7.18.5"

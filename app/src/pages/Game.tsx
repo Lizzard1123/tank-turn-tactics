@@ -7,14 +7,40 @@ import {
 import Board, { type BoardMode } from '../components/Board';
 import ActionBar from '../components/ActionBar';
 import TankCard from '../components/TankCard';
-import EventFeed from '../components/EventFeed';
-import HistoryScrubber from '../components/HistoryScrubber';
+import EventFeed, { type FeedEntry } from '../components/EventFeed';
 import { Icon, trophySvg } from '../lib/icons';
 import { useGameEvents } from '../lib/useGameEvents';
 import { useLocalGame, useLocalGameState } from '../lib/localGameContext';
 import { action } from '../lib/api';
 
 const BOT_NAMES: Record<string, string> = { easy: 'Easy Bot', medium: 'Medium Bot', hard: 'Hard Bot' };
+
+// readable fallback for events without a log line (log lines win when present)
+const EVENT_FALLBACK_TEXT: Record<string, string> = {
+  move: 'moved',
+  attack: 'attacked',
+  give_ap: 'gave AP',
+  upgrade_range: 'upgraded range',
+  daily_tick: 'day tick',
+  bot_action: 'bot acted',
+  jury_vote: 'jury vote',
+  fork: 'forked the timeline',
+};
+
+// Feed entries from the CANONICAL history (never the scrubbed log, which
+// would drop the events that come after the viewed point). Text comes from
+// the live log when it has a line for the seq, else a per-type fallback.
+function feedEntries(events: GameEvent[], live: GameState | null): FeedEntry[] {
+  const textBySeq = new Map<number, string>();
+  for (const l of live?.log ?? []) textBySeq.set(l.seq, l.text);
+  return events.map((e) => ({
+    seq: e.seq,
+    type: e.type,
+    actorId: e.actorId,
+    createdAt: e.createdAt,
+    text: textBySeq.get(e.seq) ?? (EVENT_FALLBACK_TEXT[e.type] ?? e.type),
+  }));
+}
 
 // PlayerSpecs for createInitialState, from the live state's player list
 // (same ids every generation; names only affect log cosmetics in scrubbed
@@ -169,23 +195,17 @@ function LocalGameView() {
         </section>
       )}
 
-      {game.history.length > 0 && (
-        <HistoryScrubber
-          events={game.history}
-          canFork={false}
-          onFork={() => {}}
-          onExit={exitScrub}
-          onScrub={(idx) => { setReplaying(false); setScrubIdx(idx === game.history.length ? null : idx); }}
-          position={scrubIdx ?? game.history.length}
-          onReplay={() => { if (!scrubbing) setScrubIdx(0); setReplaying(true); }}
-          replaying={replaying}
-          onStop={exitScrub}
-        />
-      )}
-
       <section className="card" aria-label="Events">
         <h2>Events</h2>
-        <EventFeed log={displayState.log} onView={viewEvent} />
+        <EventFeed
+          entries={feedEntries(game.history, state)}
+          activeSeq={scrubIdx === null ? null : game.history[Math.min(scrubIdx, game.history.length) - 1]?.seq ?? null}
+          live={!scrubbing}
+          onView={viewEvent}
+          onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
+          onStop={exitScrub}
+          replaying={replaying}
+        />
       </section>
     </main>
   );
@@ -195,14 +215,36 @@ function LocalGameView() {
 // Database-backed game mode (existing behaviour, unchanged).
 // ---------------------------------------------------------------------------
 
-interface DbGameViewProps { gameId: string }
+interface DbGameProps { gameId: string }
 
-function DbGameView({ gameId }: DbGameViewProps) {
-  const { state, history, me, detail, avatars, loading, error, refresh } = useGameEvents(gameId);
+function DbGameView({ gameId }: DbGameProps) {
+  const { state: authState, history: baseHistory, me, detail, avatars, loading, error, refresh } = useGameEvents(gameId);
   const navigate = useNavigate();
   const [mode, setMode] = useState<BoardMode>('none');
   const [toast, setToast] = useState<string | null>(null);
   const [scrubIdx, setScrubIdx] = useState<number | null>(null);
+
+  // Optimistic actions: events posted but not yet confirmed by a refetch.
+  // Applied on top of the authoritative state so the board reacts instantly;
+  // the next authoritative snapshot (seq >= event.seq) drops them naturally.
+  const [pending, setPending] = useState<GameEvent[]>([]);
+  useEffect(() => {
+    if (!authState) return;
+    setPending((prev) => prev.filter((e) => e.seq > authState.seq));
+  }, [authState]);
+
+  const state = useMemo(() => {
+    if (!authState || pending.length === 0) return authState;
+    let s = authState;
+    for (const e of pending) {
+      try { s = applyEvent(s, e); } catch { break; }
+    }
+    return s;
+  }, [authState, pending]);
+  const history = useMemo(
+    () => (pending.length ? [...baseHistory, ...pending] : baseHistory),
+    [baseHistory, pending],
+  );
 
   // --- history scrubbing / recap (any mode; test mode also forks) ---
   // Scrub position counts events from the very start of the game. Event seqs
@@ -251,24 +293,25 @@ function DbGameView({ gameId }: DbGameViewProps) {
   // AP countdown: seconds until the next AP point. Only shown for games with
   // a client-known interval (apIntervalMinutes > 0). Daily server-managed AP
   // (0) has no client-visible schedule, so the timer hides.
+  // Derived from the LIVE state (never the scrubbed display state) so
+  // scrubbing through history does not reset the countdown.
+  const apIntervalMinutes = state?.config.apIntervalMinutes ?? 0;
+  const liveClockMinutes = state?.tickClockMinutes ?? 0;
   const [apRemaining, setApRemaining] = useState<number | null>(null);
   useEffect(() => {
-    if (!displayState) return;
-    const intervalMinutes = displayState.config.apIntervalMinutes;
-    if (!intervalMinutes || intervalMinutes <= 0) {
+    if (!apIntervalMinutes || apIntervalMinutes <= 0) {
       setApRemaining(null);
       return;
     }
-    const intervalSeconds = intervalMinutes * 60;
-    const elapsedSeconds = (displayState.tickClockMinutes ?? 0) * 60;
-    let remaining = intervalSeconds - (elapsedSeconds % intervalSeconds);
+    const intervalSeconds = apIntervalMinutes * 60;
+    let remaining = intervalSeconds - (liveClockMinutes * 60) % intervalSeconds;
     if (remaining <= 0) remaining = intervalSeconds;
     setApRemaining(remaining);
     const id = setInterval(() => {
       setApRemaining((t) => (t == null || t <= 1 ? intervalSeconds : t - 1));
     }, 1000);
     return () => clearInterval(id);
-  }, [displayState]);
+  }, [apIntervalMinutes, liveClockMinutes]);
 
   // dead player goes to the jury screen
   useEffect(() => {
@@ -282,7 +325,8 @@ function DbGameView({ gameId }: DbGameViewProps) {
     const token = localStorage.getItem('ttt_token');
     if (!token) return;
 
-    // optimistic: apply locally first to confirm validity
+    // optimistic: validate against authoritative state, then commit locally so
+    // the board updates before the network round-trip completes
     const optimisticEvent: GameEvent = {
       seq: state.seq + 1, type, actorId: me, createdAt: new Date().toISOString(), payload,
     };
@@ -293,14 +337,15 @@ function DbGameView({ gameId }: DbGameViewProps) {
       // invalid locally — engine buttons should have prevented this
       return;
     }
+    setPending((prev) => [...prev, optimisticEvent]);
 
     try {
       await action(token, gameId, type, payload);
       // authoritative response: realtime/refetch reconciles with the server
-      setMode('none');
       void refresh();
     } catch (e) {
-      // roll back by refetching authoritative state
+      // roll back the optimistic apply and refetch authoritative state
+      setPending([]);
       void refresh();
       setToast(e instanceof Error ? e.message : 'action failed');
       setTimeout(() => setToast(null), 4000);
@@ -313,7 +358,7 @@ function DbGameView({ gameId }: DbGameViewProps) {
     if (!token) return;
     try {
       await action(token, gameId, 'fork', { toSeq: seq });
-      setScrubIdx(null);
+      exitScrub();
       await refresh();
     } catch (e) {
       setToast(e instanceof Error ? e.message : 'rewind failed');
@@ -414,23 +459,19 @@ function DbGameView({ gameId }: DbGameViewProps) {
         </section>
       )}
 
-      {history.length > 0 && (detail?.mode === 'test' || scrubbing || replaying) && (
-        <HistoryScrubber
-          events={history}
-          canFork={canFork}
-          onFork={(seq) => void forkTo(seq)}
-          onExit={exitScrub}
-          onScrub={(idx) => { setReplaying(false); setScrubIdx(idx === history.length ? null : idx); }}
-          position={scrubIdx ?? history.length}
-          onReplay={() => { if (!scrubbing) setScrubIdx(0); setReplaying(true); }}
-          replaying={replaying}
-          onStop={exitScrub}
-        />
-      )}
-
       <section className="card" aria-label="Events">
         <h2>Events</h2>
-        <EventFeed log={displayState.log} onView={viewEvent} />
+        <EventFeed
+          entries={feedEntries(history, state)}
+          activeSeq={scrubIdx === null ? null : history[Math.min(scrubIdx, history.length) - 1]?.seq ?? null}
+          live={!scrubbing}
+          onView={viewEvent}
+          onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
+          onStop={exitScrub}
+          replaying={replaying}
+          canFork={canFork}
+          onFork={(seq) => void forkTo(seq)}
+        />
       </section>
     </main>
   );
