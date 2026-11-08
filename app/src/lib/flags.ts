@@ -1,86 +1,30 @@
-// Deterministic, emoji-free world flags generated from a player id.
-// Each flag is an inline SVG string (no external assets, no npm dependency).
-// Suitable for use as an <image href="data:image/svg+xml;utf8,…"> source.
-// The same id always yields the same flag, so opponents see a consistent marker.
+// Real-world flag assignment. Each player id deterministically maps to one
+// country's flag (FNV-1a over the id, indexed into the sorted ISO 3166-1
+// alpha-2 set shipped by the flag-icons package). The SVGs are copied from
+// node_modules/flag-icons/flags/4x3 into public/flags by the prebuild step,
+// so the same player always carries the same REAL flag image.
 
-const PALETTE = [
-  '#c8471f', // signal
-  '#a07a1e', // brass
-  '#3f6b3a', // radio
-  '#a03024', // rust
-  '#6b6a4f', // olive
-  '#26251d', // ink
-  '#b44a2c', // burnt orange
-  '#7a5a14', // dark brass
-  '#2e4a27', // dark radio
-  '#e9e2cf', // paper
-];
+// Sorted ISO 3166-1 alpha-2 codes with a 4x3 flag in flag-icons@7.
+const COUNTRY_CODES_STR = 'ad,ae,af,ag,ai,al,am,ao,aq,ar,as,at,au,aw,ax,az,ba,bb,bd,be,bf,bg,bh,bi,bj,bl,bm,bn,bo,bq,br,bs,bt,bv,bw,by,bz,ca,cc,cd,cf,cg,ch,ci,ck,cl,cm,cn,co,cp,cr,cu,cv,cw,cx,cy,cz,de,dg,dj,dk,dm,do,dz,ec,ee,eg,eh,er,es,et,eu,fi,fj,fk,fm,fo,fr,ga,gb,gd,ge,gf,gg,gh,gi,gl,gm,gn,gp,gq,gr,gs,gt,gu,gw,gy,hk,hm,hn,hr,ht,hu,ic,id,ie,il,im,in,io,iq,ir,is,it,je,jm,jo,jp,ke,kg,kh,ki,km,kn,kp,kr,kw,ky,kz,la,lb,lc,li,lk,lr,ls,lt,lu,lv,ly,ma,mc,md,me,mf,mg,mh,mk,ml,mm,mn,mo,mp,mq,mr,ms,mt,mu,mv,mw,mx,my,mz,na,nc,ne,nf,ng,ni,nl,no,np,nr,nu,nz,om,pa,pc,pe,pf,pg,ph,pk,pl,pm,pn,pr,ps,pt,pw,py,qa,re,ro,rs,ru,rw,sa,sb,sc,sd,se,sg,sh,si,sj,sk,sl,sm,sn,so,sr,ss,st,sv,sx,sy,sz,tc,td,tf,tg,th,tj,tk,tl,tm,tn,to,tr,tt,tv,tw,tz,ua,ug,um,un,us,uy,uz,va,vc,ve,vg,vi,vn,vu,wf,ws,xk,xx,ye,yt,za,zm,zw';
 
-function hashId(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) {
-    h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+export const COUNTRY_CODES: readonly string[] = COUNTRY_CODES_STR.split(',');
+
+// 32-bit FNV-1a: stable across sessions, no Math.random anywhere.
+function fnv1a(s: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
   }
-  return h;
+  return h >>> 0;
 }
 
-function pick(h: number, arr: string[]): string {
-  return arr[Math.abs(h) % arr.length];
-}
-
-function rect(x: number, y: number, w: number, h: number, fill: string): string {
-  return `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}" />`;
-}
-
-function circle(cx: number, cy: number, r: number, fill: string): string {
-  return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${fill}" />`;
-}
-
-export function flagSvg(playerId: string, size = 120): string {
-  const h = hashId(playerId);
-  const c1 = pick(h, PALETTE);
-  const c2 = pick(h >>> 7, PALETTE);
-  const c3 = pick(h >>> 14, PALETTE);
-  const w = size;
-  const hh = size;
-  const third = hh / 3;
-  const half = w / 2;
-
-  const stripeH = `
-    ${rect(0, 0, w, third, c1)}
-    ${rect(0, third, w, third, c2)}
-    ${rect(0, 2 * third, w, third, c3)}
-  `;
-
-  const stripeV = `
-    ${rect(0, 0, w / 3, hh, c1)}
-    ${rect(w / 3, 0, w / 3, hh, c2)}
-    ${rect((2 * w) / 3, 0, w / 3, hh, c3)}
-  `;
-
-  const crossW = w / 6;
-  const cross = `
-    ${rect(0, (hh - crossW) / 2, w, crossW, c1)}
-    ${rect((w - crossW) / 2, 0, crossW, hh, c2)}
-  `;
-
-  const circleFlag = `
-    ${rect(0, 0, w, hh, c1)}
-    ${circle(half, half, w / 4, c2)}
-  `;
-
-  const diag = `
-    ${rect(0, 0, w, hh, c1)}
-    <polygon points="0,0 ${w},0 ${w},${hh}" fill="${c2}" />
-  `;
-
-  const layouts = [stripeH, stripeV, cross, circleFlag, diag];
-  const body = layouts[Math.abs(h) % layouts.length];
-
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${hh}" viewBox="0 0 ${w} ${hh}">${body}</svg>`;
-}
-
-// Profile-page alias (E6 call sites): same deterministic flag at 96px.
+/** Country code (e.g. 'de') this player id deterministically carries. */
 export function flagForPlayerId(playerId: string): string {
-  return flagSvg(playerId, 96);
+  return COUNTRY_CODES[fnv1a(playerId) % COUNTRY_CODES.length];
+}
+
+/** URL of the bundled real-flag SVG for this player id. */
+export function flagUrl(playerId: string): string {
+  return `${import.meta.env.BASE_URL}flags/${flagForPlayerId(playerId)}.svg`;
 }

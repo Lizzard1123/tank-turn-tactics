@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabaseClient';
-import { flagForPlayerId } from '../lib/flags';
+import { flagUrl } from '../lib/flags';
 
 const MAX_DIM = 256; // downscale target: board circles are tiny; 256px is plenty
 
@@ -15,7 +15,7 @@ export default function Profile() {
   const fileInput = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
   // the avatar persisted on the players row — the big identity display shows
-  // it if the player has one, otherwise their generated world flag
+  // it if the player has one, otherwise their country's real flag
   const [savedAvatar, setSavedAvatar] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +86,7 @@ export default function Profile() {
     <main className="page profile">
       <h1>{player?.name ?? 'Profile'}</h1>
       {/* your identity — the marker opponents see on the board: the uploaded
-          picture when there is one, otherwise your generated world flag */}
+          picture when there is one, otherwise your country's real flag */}
       <div className="flag-badge">
         {identityImage
           ? <img src={identityImage} alt="your avatar" width={96} height={96} className="avatar-preview" />
@@ -94,7 +94,7 @@ export default function Profile() {
             <div
               className="flag"
               style={{
-                backgroundImage: `url("data:image/svg+xml;utf8,${encodeURIComponent(flagForPlayerId(player?.id ?? ''))}")`,
+                backgroundImage: `url(${flagUrl(player?.id ?? '')})`,
               }}
               aria-hidden
               data-testid="player-flag"

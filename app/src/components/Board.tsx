@@ -1,6 +1,6 @@
 import type { GameState, Vec } from '@ttt/engine';
 import { manhattan, occupantAt } from '@ttt/engine';
-import { flagSvg } from '../lib/flags';
+import { flagUrl } from '../lib/flags';
 
 export type BoardMode = 'none' | 'move' | 'attack' | 'give_ap';
 
@@ -48,9 +48,6 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap }: B
   const n = state.config.board;
   const own = me ? state.players[me] : null;
   const size = n * CELL;
-
-  const flagUri = (playerId: string) =>
-    `data:image/svg+xml;charset=utf-8,${encodeURIComponent(flagSvg(playerId))}`;
 
   const inRange = (p: Vec) =>
     !!own && own.hp > 0 && manhattan(own.pos, p) <= own.range;
@@ -119,7 +116,7 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap }: B
                   {/* tank fills the full square: avatar image or generated flag */}
                   <image
                     x={x * CELL} y={y * CELL} width={CELL} height={CELL}
-                    href={avatars?.[occ.id] ?? flagUri(occ.id)}
+                    href={avatars?.[occ.id] ?? flagUrl(occ.id)}
                     preserveAspectRatio="xMidYMid slice"
                     className="tank-image"
                     data-testid={`tank-image-${occ.id}`}
