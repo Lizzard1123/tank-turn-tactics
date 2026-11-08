@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" role="img" aria-label="Flag example">
+  <!-- flag: signal-orange field on a pole, field-operations style -->
+  <line x1="70" y1="40" x2="70" y2="130" stroke="#26251d" stroke-width="4" stroke-linecap="round" />
+  <rect x="70" y="52" width="52" height="36" fill="#c8471f" stroke="#26251d" stroke-width="2" />
+  <text x="80" y="150" text-anchor="middle" fill="#26251d" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="700">Flag marker</text>
+</svg>

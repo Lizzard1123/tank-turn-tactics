@@ -11,6 +11,7 @@ import Lobby from './pages/Lobby';
 import TestMode from './pages/TestMode';
 import Game from './pages/Game';
 import Jury from './pages/Jury';
+import { LocalGameProvider } from './lib/localGameContext';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { player } = useAuth();
@@ -22,21 +23,23 @@ export default function App() {
   const base = import.meta.env.BASE_URL;
   return (
     <AuthProvider>
-      <BrowserRouter basename={base}>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/play" element={<RequireAuth><Play /></RequireAuth>} />
-          <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
-          <Route path="/instructions" element={<Instructions />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
-          <Route path="/test" element={<TestMode />} />
-          <Route path="/lobby/:gameId" element={<RequireAuth><Lobby /></RequireAuth>} />
-          <Route path="/game/:gameId" element={<RequireAuth><Game /></RequireAuth>} />
-          <Route path="/game/:gameId/jury" element={<RequireAuth><Jury /></RequireAuth>} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
+      <LocalGameProvider>
+        <BrowserRouter basename={base}>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/play" element={<RequireAuth><Play /></RequireAuth>} />
+            <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+            <Route path="/instructions" element={<Instructions />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/lobby/:gameId" element={<RequireAuth><Lobby /></RequireAuth>} />
+            <Route path="/game/:gameId" element={<RequireAuth><Game /></RequireAuth>} />
+            <Route path="/game/:gameId/jury" element={<RequireAuth><Jury /></RequireAuth>} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </LocalGameProvider>
     </AuthProvider>
   );
 }

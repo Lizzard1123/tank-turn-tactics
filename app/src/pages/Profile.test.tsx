@@ -8,10 +8,13 @@ import Profile from './Profile';
 const mocks = vi.hoisted(() => {
   const upload = vi.fn();
   const getPublicUrl = vi.fn();
-  // the component chains .update(...).eq(...) — mock the builder shape
+  // the update chain is .update(...).eq(...) — mock the builder shape
   const update = vi.fn(() => ({ eq: vi.fn().mockResolvedValue({ error: null }) }));
+  // the mount fetch is .select('avatar_url').eq(...).single() — same idea
+  const single = vi.fn();
+  const select = vi.fn(() => ({ eq: vi.fn(() => ({ single })) }));
   const from = vi.fn();
-  return { upload, getPublicUrl, update, from };
+  return { upload, getPublicUrl, update, select, single, from };
 });
 
 vi.mock('../lib/auth', () => ({
@@ -36,7 +39,9 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.upload.mockResolvedValue({ error: null });
   mocks.getPublicUrl.mockReturnValue({ data: { publicUrl: 'https://cdn.example/av.jpg' } });
-  mocks.from.mockReturnValue({ update: mocks.update });
+  // Profile reads the persisted avatar on mount; default: no avatar on the row
+  mocks.single.mockResolvedValue({ data: { avatar_url: null } });
+  mocks.from.mockReturnValue({ update: mocks.update, select: mocks.select });
 });
 
 // 1x1 JPEG (red pixel) — createImageBitmap can decode it in jsdom? jsdom
@@ -76,5 +81,25 @@ describe('Profile (avatar upload)', () => {
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/row-level security/);
     expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  test('shows the player name as a prominent heading', () => {
+    // note: a test body whose ONLY statement is this render expression trips a
+    // vite:oxc .tsx parse bug (">()" misread as a generic call) — keep another
+    // statement in the body, or brace the render call
+    render(<MemoryRouter><Profile /></MemoryRouter>);
+    expect(screen.getByRole('heading', { name: 'tester' })).toBeInTheDocument();
+  });
+
+  test('shows the player flag derived from the id', () => {
+    render(<MemoryRouter><Profile /></MemoryRouter>);
+    expect(screen.getByTestId('player-flag')).toBeInTheDocument();
+  });
+
+  test('shows the persisted avatar image when the player row has one', async () => {
+    mocks.single.mockResolvedValue({ data: { avatar_url: 'https://cdn.example/existing.jpg' } });
+    render(<MemoryRouter><Profile /></MemoryRouter>);
+    expect(await screen.findByAltText('your avatar')).toHaveAttribute('src', 'https://cdn.example/existing.jpg');
+    expect(screen.queryByTestId('player-flag')).not.toBeInTheDocument();
   });
 });

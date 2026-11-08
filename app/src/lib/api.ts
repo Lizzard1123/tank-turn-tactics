@@ -20,6 +20,7 @@ export interface GameSummary {
   status: 'lobby' | 'active' | 'finished';
   playerCount: number;
   created_at: string;
+  createdBy: string;
 }
 
 export interface GameConfigPayload {
@@ -101,6 +102,10 @@ export function gameGet(token: string, gameId: string): Promise<GameDetail> {
 
 export function gameStart(token: string, gameId: string): Promise<{ ok: true }> {
   return fn<{ ok: true }>('game-start', { gameId }, token);
+}
+
+export function gameDelete(token: string, gameId: string): Promise<{ ok: true }> {
+  return fn<{ ok: true }>('game-delete', { gameId }, token, 'DELETE');
 }
 
 export function gameUpdate(

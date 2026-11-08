@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabaseClient';
+import { flagForPlayerId } from '../lib/flags';
 
 const MAX_DIM = 256; // downscale target: board circles are tiny; 256px is plenty
 
@@ -13,6 +14,9 @@ export default function Profile() {
   const { player, token } = useAuth();
   const fileInput = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
+  // the avatar persisted on the players row — the big identity display shows
+  // it if the player has one, otherwise their generated world flag
+  const [savedAvatar, setSavedAvatar] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
@@ -60,10 +64,44 @@ export default function Profile() {
     }
   }
 
+  // page-level fetch (auth's PlayerInfo carries only id+name); the
+  // players_select_own policy lets a player read their own row
+  useEffect(() => {
+    if (!player) return;
+    let cancelled = false;
+    void supabase
+      .from('players')
+      .select('avatar_url')
+      .eq('id', player.id)
+      .single()
+      .then(({ data }: { data: { avatar_url: string | null } | null }) => {
+        if (!cancelled) setSavedAvatar(data?.avatar_url ?? null);
+      });
+    return () => { cancelled = true; };
+  }, [player?.id]);
+
+  const identityImage = preview ?? savedAvatar;
+
   return (
     <main className="page profile">
-      <h1>Profile</h1>
-      <p>{player?.name}</p>
+      <h1>{player?.name ?? 'Profile'}</h1>
+      {/* your identity — the marker opponents see on the board: the uploaded
+          picture when there is one, otherwise your generated world flag */}
+      <div className="flag-badge">
+        {identityImage
+          ? <img src={identityImage} alt="your avatar" width={96} height={96} className="avatar-preview" />
+          : (
+            <div
+              className="flag"
+              style={{
+                backgroundImage: `url("data:image/svg+xml;utf8,${encodeURIComponent(flagForPlayerId(player?.id ?? ''))}")`,
+              }}
+              aria-hidden
+              data-testid="player-flag"
+            />
+          )}
+        <span className="flag-hint">{identityImage ? 'Your picture' : 'Your flag'}</span>
+      </div>
       {/* the tank marker your opponents see on the board */}
       <button
         type="button"

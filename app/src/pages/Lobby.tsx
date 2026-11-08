@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { gameGet, gameStart, gameUpdate, type GameDetail } from '../lib/api';
+import { Icon, robotSvg } from '../lib/icons';
 
 const BOT_DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
 
@@ -16,7 +17,7 @@ export default function Lobby() {
   // editable knobs (test-mode lobby only)
   const [board, setBoard] = useState(8);
   const [startingHp, setStartingHp] = useState(3);
-  const [startingAp, setStartingAp] = useState(0);
+  const [startingAp, setStartingAp] = useState(4);
   const [baseRange, setBaseRange] = useState(2);
   const [apPerDay, setApPerDay] = useState(1);
   const [upgradeCost, setUpgradeCost] = useState(2);
@@ -109,7 +110,7 @@ export default function Lobby() {
         <ul>
           {detail.members.map((m) => (
             <li key={m.player_id}>
-              {m.is_bot ? `🤖 ${m.bot_difficulty} bot (${m.player_id})` : m.player_id === detail.me ? `${player?.name} (you)` : m.player_id}
+              {m.is_bot ? <><Icon html={robotSvg} width={14} height={14} className="stat-icon" />{' '}{m.bot_difficulty} bot ({m.player_id})</> : m.player_id === detail.me ? `${player?.name} (you)` : m.player_id}
             </li>
           ))}
         </ul>

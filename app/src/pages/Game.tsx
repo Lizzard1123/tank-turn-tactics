@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   applyEvent, createInitialState, manhattan,
   type ActionType, type GameEvent, type GameState, type PlayerSpec,
@@ -9,7 +9,9 @@ import ActionBar from '../components/ActionBar';
 import TankCard from '../components/TankCard';
 import EventFeed from '../components/EventFeed';
 import HistoryScrubber from '../components/HistoryScrubber';
+import { Icon, trophySvg } from '../lib/icons';
 import { useGameEvents } from '../lib/useGameEvents';
+import { useLocalGame, useLocalGameState } from '../lib/localGameContext';
 import { action } from '../lib/api';
 
 const BOT_NAMES: Record<string, string> = { easy: 'Easy Bot', medium: 'Medium Bot', hard: 'Hard Bot' };
@@ -28,8 +30,128 @@ function specsFromDetail(state: GameState): PlayerSpec[] {
   }));
 }
 
-export default function Game() {
-  const { gameId } = useParams<{ gameId: string }>();
+// ---------------------------------------------------------------------------
+// Local (test) mode: in-memory engine game, no database, no cron.
+// ---------------------------------------------------------------------------
+
+function LocalGameView() {
+  const { game } = useLocalGame();
+  const state = useLocalGameState();
+  const [mode, setMode] = useState<BoardMode>('none');
+  const [toast, setToast] = useState<string | null>(null);
+
+  // AP countdown: the local drip runs every 30s (started at test-mode mount).
+  const [apRemaining, setApRemaining] = useState(30);
+  useEffect(() => {
+    const id = setInterval(() => setApRemaining((t) => (t <= 1 ? 30 : t - 1)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  if (!game || !state) {
+    return <main className="page"><p>Local test game not initialized.</p></main>;
+  }
+
+  const me = 'me';
+  const mine = state.players[me];
+  const inRangePlayers = Object.values(state.players).filter(
+    (p) => p.id !== me && mine && mine.hp > 0 && manhattan(mine.pos, p.pos) <= mine.range,
+  );
+
+  const doAction = useCallback((type: ActionType, payload: Record<string, unknown>) => {
+    if (!mine || mine.hp <= 0) return;
+    try {
+      game.apply(type, payload);
+    } catch (e) {
+      setToast(e instanceof Error ? e.message : 'action failed');
+      setTimeout(() => setToast(null), 4000);
+      return;
+    }
+    setMode('none');
+  }, [game, mine]);
+
+  return (
+    <main className="page game-page">
+      <header className="game-status">
+        <span>Day {state.day}</span>
+        <span className="mode-badge">TEST</span>
+        <span className="timer" data-testid="ap-timer">Next AP in {apRemaining}s</span>
+        <Link to="/dashboard" className="link-button">Exit</Link>
+      </header>
+
+      {state.winner && (
+        <div className="banner" data-testid="winner-banner">
+          <Icon html={trophySvg} className="winner-icon" width={16} height={16} />{' '}
+          {state.players[state.winner]?.name ?? state.winner} wins!{' '}
+          <Link to="/dashboard">Back to dashboard</Link>
+        </div>
+      )}
+
+      {toast && <p className="error" role="alert">{toast}</p>}
+
+      {!state.winner && mine && mine.hp > 0 && (
+        <ActionBar state={state} me={me} mode={mode} onAction={doAction} onModeChange={setMode} />
+      )}
+
+      <Board
+        state={state}
+        selectedMode={mode}
+        me={me}
+        avatars={{}}
+        onCellTap={(pos) => {
+          if (mode === 'none') return;
+          const occId = Object.entries(state.players).find(
+            ([, p]) => p.pos.x === pos.x && p.pos.y === pos.y,
+          )?.[0];
+          if (mode === 'move' && !occId) {
+            void doAction('move', { to: pos });
+          } else if ((mode === 'attack' || mode === 'give_ap') && occId && occId !== me) {
+            void doAction(mode === 'attack' ? 'attack' : 'give_ap', {
+              targetId: occId,
+              ...(mode === 'give_ap' ? { amount: 1 } : {}),
+            });
+          }
+        }}
+      />
+
+      {!state.winner && mine && mine.hp > 0 && (
+        <section className="card" aria-label="Your tank">
+          <h2>Your tank</h2>
+          <TankCard player={mine} isMe />
+        </section>
+      )}
+
+      {!state.winner && inRangePlayers.length > 0 && mine && mine.hp > 0 && (
+        <section className="card" aria-label="In range">
+          <h2>In range</h2>
+          {inRangePlayers.map((p) => (
+            <TankCard
+              key={p.id}
+              player={p}
+              isMe={false}
+              onTap={() => {
+                if (mode === 'attack') void doAction('attack', { targetId: p.id });
+                else if (mode === 'give_ap') void doAction('give_ap', { targetId: p.id, amount: 1 });
+              }}
+            />
+          ))}
+        </section>
+      )}
+
+      <section className="card" aria-label="Events">
+        <h2>Events</h2>
+        <EventFeed log={state.log} />
+      </section>
+    </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Database-backed game mode (existing behaviour, unchanged).
+// ---------------------------------------------------------------------------
+
+interface DbGameViewProps { gameId: string }
+
+function DbGameView({ gameId }: DbGameViewProps) {
   const { state, history, me, detail, avatars, loading, error, refresh } = useGameEvents(gameId);
   const navigate = useNavigate();
   const [mode, setMode] = useState<BoardMode>('none');
@@ -37,10 +159,6 @@ export default function Game() {
   const [scrubIdx, setScrubIdx] = useState<number | null>(null);
 
   // --- history scrubbing (test mode) ---
-  // Reconstruct the initial state deterministically from config.seed, then
-  // replay the first N events of the current generation. The slider index is
-  // a position in the current generation's event list; rewind forks at the
-  // seq of the last included event.
   const currentGenEvents: Array<GameEvent & { generation?: number }> = useMemo(
     () => history.filter((e) => e.generation === undefined || e.generation === detail?.generation),
     [history, detail],
@@ -57,6 +175,28 @@ export default function Game() {
 
   const displayState: GameState | null = scrubbedState ?? state;
   const scrubbing = scrubIdx !== null;
+
+  // AP countdown: seconds until the next AP point. Only shown for games with
+  // a client-known interval (apIntervalMinutes > 0). Daily server-managed AP
+  // (0) has no client-visible schedule, so the timer hides.
+  const [apRemaining, setApRemaining] = useState<number | null>(null);
+  useEffect(() => {
+    if (!displayState) return;
+    const intervalMinutes = displayState.config.apIntervalMinutes;
+    if (!intervalMinutes || intervalMinutes <= 0) {
+      setApRemaining(null);
+      return;
+    }
+    const intervalSeconds = intervalMinutes * 60;
+    const elapsedSeconds = (displayState.tickClockMinutes ?? 0) * 60;
+    let remaining = intervalSeconds - (elapsedSeconds % intervalSeconds);
+    if (remaining <= 0) remaining = intervalSeconds;
+    setApRemaining(remaining);
+    const id = setInterval(() => {
+      setApRemaining((t) => (t == null || t <= 1 ? intervalSeconds : t - 1));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [displayState]);
 
   // dead player goes to the jury screen
   useEffect(() => {
@@ -127,12 +267,18 @@ export default function Game() {
         <span className="mode-badge">
           {detail?.mode === 'test' ? 'TEST' : 'PLAY'}{scrubbing ? ' · HISTORY' : ''}
         </span>
+        {apRemaining != null && (
+          <span className="timer" data-testid="ap-timer">
+            Next AP in {apRemaining}s
+          </span>
+        )}
         <Link to="/dashboard" className="link-button">Exit</Link>
       </header>
 
       {displayState.winner && !scrubbing && (
         <div className="banner" data-testid="winner-banner">
-          🏆 {displayState.players[displayState.winner]?.name ?? displayState.winner} wins!{' '}
+          <Icon html={trophySvg} className="winner-icon" width={16} height={16} />{' '}
+          {displayState.players[displayState.winner]?.name ?? displayState.winner} wins!{' '}
           <Link to="/dashboard">Back to dashboard</Link>
         </div>
       )}
@@ -212,4 +358,14 @@ export default function Game() {
       </section>
     </main>
   );
+}
+
+// Wired by TestMode so LocalGameView can drive actions against the live game.
+
+export default function Game() {
+  const { gameId } = useParams<{ gameId: string }>();
+  const [searchParams] = useSearchParams();
+  if (gameId === 'local' || searchParams.get('local') === '1') return <LocalGameView />;
+  if (!gameId) return <main className="page"><p>No game specified.</p></main>;
+  return <DbGameView gameId={gameId} />;
 }

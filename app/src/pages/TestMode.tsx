@@ -1,40 +1,36 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { gameCreate } from '../lib/api';
+import { createLocalGame } from '../lib/localGame';
+import { useLocalGame } from '../lib/localGameContext';
 
-// Test Mode entry: ensures a guest session, creates a private test game
-// with default knobs (full config editing happens in the lobby), and
-// routes to its lobby.
+// Test Mode: guest sign-in only, no database game, no cron.
+// Builds a local in-memory engine game (starting AP = 4), starts a client-side
+// 30s AP drip, and routes to /game/local.
 export default function TestMode() {
-  const { token, guestSignin } = useAuth();
+  const { guestSignin } = useAuth();
+  const { setGame } = useLocalGame();
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
-  const startedRef = useRef(false);
+  const started = useRef(false);
 
   useEffect(() => {
-    if (startedRef.current) return;
-    startedRef.current = true;
+    if (started.current) return;
+    started.current = true;
     (async () => {
       try {
-        const t = token ?? (await guestSignin());
-        if (!t) throw new Error('no session');
-        const r = await gameCreate(t, {
-          name: `Test game ${new Date().toLocaleString()}`,
-          mode: 'test',
-          config: {
-            board: 8, startingHp: 3, startingAp: 0, baseRange: 2,
-            apPerDay: 1, upgradeCost: 2, apIntervalMinutes: 2,
-            bots: [{ difficulty: 'easy' }, { difficulty: 'easy' }, { difficulty: 'easy' }],
-          },
-        });
-        navigate(`/lobby/${r.gameId}`, { replace: true });
+        const token = await guestSignin();
+        if (!token) throw new Error('no session');
+        const game = createLocalGame({ startingAp: 4 });
+        game.startApDrip(30_000);
+        setGame(game);
+        navigate('/game/local', { replace: true });
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'failed to create test game');
+        setError(e instanceof Error ? e.message : 'failed to start test game');
       }
     })();
-  }, [token, guestSignin, navigate]);
+  }, [guestSignin, setGame, navigate]);
 
   if (error) return <main className="page"><p className="error" role="alert">{error}</p></main>;
-  return <main className="page"><p>Setting up your test game…</p></main>;
+  return <main className="page"><p>Setting up your local test game…</p></main>;
 }

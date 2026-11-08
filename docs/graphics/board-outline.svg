@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="260" height="260" viewBox="0 0 260 260" role="img" aria-label="8x8 tactical board outline">
+  <!-- tactical map stock: khaki fill, olive grid, ink border -->
+  <rect width="260" height="260" fill="#e9e2cf" />
+  <defs>
+    <pattern id="grid" width="32.5" height="32.5" patternUnits="userSpaceOnUse">
+      <path d="M 32.5 0 L 32.5 260 M 0 32.5 L 260 32.5" stroke="#6b6a4f" stroke-width="1" />
+    </pattern>
+  </defs>
+  <rect width="260" height="260" fill="url(#grid)" fill-opacity="1" />
+  <rect width="260" height="260" fill="none" stroke="#26251d" stroke-width="3" />
+  <text x="130" y="250" text-anchor="middle" fill="#26251d" font-family="IBM Plex Mono, monospace" font-size="12" font-weight="700">8 &times; 8 cells &mdash; square tactical map</text>
+</svg>

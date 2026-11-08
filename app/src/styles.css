@@ -242,6 +242,7 @@ input[type='radio'] {
 
 .game-status {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
@@ -327,11 +328,19 @@ input[type='radio'] {
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   background: var(--paper-raised);
-  margin-bottom: 16px;
+  margin: 0 auto 16px;
   /* map margin inside the frame */
   padding: 6px;
+  /* keep cells square: a true square container means no black box / letterbox */
+  width: 100%;
+  max-width: 360px;
+  aspect-ratio: 1;
 }
-.board svg { display: block; max-width: 100%; height: auto; }
+.board svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 
 .cell {
   fill: var(--paper-raised);
@@ -350,22 +359,28 @@ input[type='radio'] {
 }
 .cell { cursor: pointer; }
 
-.tank-body {
-  stroke: var(--ink);
-  stroke-width: 2;
-}
-.own .tank-body { fill: var(--signal); }
-.enemy .tank-body { fill: var(--olive); }
-
-.tank-letter {
-  font-family: var(--font-display);
-  font-size: 14px;
+.tank-image {
   pointer-events: none;
 }
-.own .tank-letter { fill: var(--paper-raised); }
-.enemy .tank-letter { fill: var(--paper-raised); }
 
-.hp-pip { fill: var(--ink); stroke: none; }
+/* red life bars: one vertical bar per HP, at the bottom of the cell */
+.life-bar {
+  fill: var(--rust);
+  stroke: var(--ink);
+  stroke-width: 1;
+}
+
+/* AP countdown timer (game header) */
+.timer {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  color: var(--ink);
+}
 
 /* ---------- tank cards & stats ---------- */
 
@@ -394,6 +409,13 @@ input[type='radio'] {
   font-size: 0.8rem;
   color: var(--olive);
   white-space: nowrap;
+}
+
+/* small inline stat icons: vertically centered with text */
+.stat-icon {
+  vertical-align: -0.1em;
+  margin-right: 4px;
+  display: inline-block;
 }
 
 /* ---------- the war diary (event feed) ---------- */
@@ -524,6 +546,32 @@ input[type='radio'] {
   color: var(--olive);
 }
 
+.flag-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0;
+}
+
+.flag {
+  width: 96px;
+  height: 56px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  border: 2px solid var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.flag-hint {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--olive);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -534,6 +582,46 @@ input[type='radio'] {
 }
 
 .page { max-width: 480px; margin: 0 auto; }
+
+/* ---------- instructions page: graphics next to text ---------- */
+
+.instructions .graphic {
+  margin: 12px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.instructions .graphic svg {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+.instructions .graphic-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin: 12px 0;
+}
+
+@media (min-width: 768px) {
+  .instructions .panel {
+    display: flex;
+    gap: 16px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .instructions .panel-body {
+    flex: 1 1 180px;
+    min-width: 0;
+  }
+  .instructions .graphic,
+  .instructions .graphic-row {
+    flex: 0 0 auto;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }

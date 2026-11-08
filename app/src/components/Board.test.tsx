@@ -57,7 +57,7 @@ describe('Board', () => {
     expect(onTap).toHaveBeenCalledWith({ x: 2, y: 1 });
   });
 
-  test('renders avatar image for players with one, initial for others', () => {
+  test('renders avatar image for players with one, generated flag for others', () => {
     render(
       <Board
         state={state()} selectedMode="none" me="p1"
@@ -65,9 +65,20 @@ describe('Board', () => {
         onCellTap={() => {}}
       />,
     );
-    expect(screen.getByTestId('tank-avatar-p1')).toHaveAttribute('href', 'https://example.com/a.jpg');
-    // p2 has no avatar: falls back to the initial letter
+    // p1 has an avatar: full-square image
+    expect(screen.getByTestId('tank-image-p1')).toHaveAttribute('href', 'https://example.com/a.jpg');
+    // p2 has no avatar: falls back to a generated flag image (not a letter)
+    expect(screen.getByTestId('tank-image-p2')).toBeInTheDocument();
     expect(screen.queryByTestId('tank-avatar-p2')).not.toBeInTheDocument();
-    expect(screen.getByText('F')).toBeInTheDocument();
+    expect(screen.queryByText('F')).not.toBeInTheDocument();
+  });
+
+  test('renders life bars at the bottom of occupied squares (one per HP)', () => {
+    render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    // p1 and p2 both have hp 3 -> 3 life bars each
+    const bars = screen.getAllByTestId((id) =>
+      typeof id === 'string' && id.startsWith('life-bar-'),
+    );
+    expect(bars).toHaveLength(6);
   });
 });

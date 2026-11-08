@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="160" height="160" viewBox="0 0 160 160" role="img" aria-label="Tank icon">
+  <!-- tank body: signal-orange on khaki stock, ink outline -->
+  <circle cx="80" cy="78" r="34" fill="#c8471f" stroke="#26251d" stroke-width="3" />
+  <!-- turret -->
+  <rect x="68" y="56" width="24" height="22" fill="#c8471f" stroke="#26251d" stroke-width="2" rx="2" />
+  <!-- treads -->
+  <rect x="46" y="100" width="68" height="14" fill="none" stroke="#26251d" stroke-width="2" />
+  <rect x="46" y="100" width="12" height="14" fill="#6b6a4f" />
+  <rect x="102" y="100" width="12" height="14" fill="#6b6a4f" />
+  <!-- crew letter -->
+  <text x="80" y="86" text-anchor="middle" fill="#e9e2cf" font-family="Black Ops One, sans-serif" font-size="26" font-weight="700">T</text>
+  <text x="80" y="146" text-anchor="middle" fill="#26251d" font-family="IBM Plex Mono, monospace" font-size="11" font-weight="700">Tank &mdash; 1 square per AP</text>
+</svg>
