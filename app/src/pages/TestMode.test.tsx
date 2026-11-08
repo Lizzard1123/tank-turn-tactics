@@ -102,19 +102,19 @@ test('event feed View scrubs the board and Replay animates back to live', async 
   expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
 
   // clicking View on that event enters scrub mode: ActionBar hidden,
-  // scrubber visible at position 1
+  // replay progress shows in the feed
   fireEvent.click(screen.getByRole('button', { name: /view state after event 1/i }));
-  expect(screen.getByTestId('history-scrubber')).toBeInTheDocument();
   expect(screen.queryByTestId('action-bar')).not.toBeInTheDocument();
+  expect(screen.getByTestId('back-to-live')).toBeInTheDocument();
 
   // "Replay from here" animates: one 1s step replays the remaining event
-  // and exits scrub back to live (scrubber stays, position at the end)
+  // and exits scrub back to live
   fireEvent.click(screen.getByTestId('replay-btn'));
+  expect(screen.getByTestId('stop-replay-btn')).toBeInTheDocument();
   await act(async () => {
     vi.advanceTimersByTime(1000);
   });
-  expect(screen.getByTestId('history-scrubber')).toBeInTheDocument();
-  expect(screen.getByText(/replaying event 1 of 1/i)).toBeInTheDocument();
+  expect(screen.queryByTestId('stop-replay-btn')).not.toBeInTheDocument();
   expect(screen.getByTestId('action-bar')).toBeInTheDocument();
   expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
 });

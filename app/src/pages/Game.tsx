@@ -7,14 +7,40 @@ import {
 import Board, { type BoardMode } from '../components/Board';
 import ActionBar from '../components/ActionBar';
 import TankCard from '../components/TankCard';
-import EventFeed from '../components/EventFeed';
-import HistoryScrubber from '../components/HistoryScrubber';
+import EventFeed, { type FeedEntry } from '../components/EventFeed';
 import { Icon, trophySvg } from '../lib/icons';
 import { useGameEvents } from '../lib/useGameEvents';
 import { useLocalGame, useLocalGameState } from '../lib/localGameContext';
 import { action } from '../lib/api';
 
 const BOT_NAMES: Record<string, string> = { easy: 'Easy Bot', medium: 'Medium Bot', hard: 'Hard Bot' };
+
+// readable fallback for events without a log line (log lines win when present)
+const EVENT_FALLBACK_TEXT: Record<string, string> = {
+  move: 'moved',
+  attack: 'attacked',
+  give_ap: 'gave AP',
+  upgrade_range: 'upgraded range',
+  daily_tick: 'day tick',
+  bot_action: 'bot acted',
+  jury_vote: 'jury vote',
+  fork: 'forked the timeline',
+};
+
+// Feed entries from the CANONICAL history (never the scrubbed log, which
+// would drop the events that come after the viewed point). Text comes from
+// the live log when it has a line for the seq, else a per-type fallback.
+function feedEntries(events: GameEvent[], live: GameState | null): FeedEntry[] {
+  const textBySeq = new Map<number, string>();
+  for (const l of live?.log ?? []) textBySeq.set(l.seq, l.text);
+  return events.map((e) => ({
+    seq: e.seq,
+    type: e.type,
+    actorId: e.actorId,
+    createdAt: e.createdAt,
+    text: textBySeq.get(e.seq) ?? (EVENT_FALLBACK_TEXT[e.type] ?? e.type),
+  }));
+}
 
 // PlayerSpecs for createInitialState, from the live state's player list
 // (same ids every generation; names only affect log cosmetics in scrubbed
@@ -169,23 +195,17 @@ function LocalGameView() {
         </section>
       )}
 
-      {game.history.length > 0 && (
-        <HistoryScrubber
-          events={game.history}
-          canFork={false}
-          onFork={() => {}}
-          onExit={exitScrub}
-          onScrub={(idx) => { setReplaying(false); setScrubIdx(idx === game.history.length ? null : idx); }}
-          position={scrubIdx ?? game.history.length}
-          onReplay={() => { if (!scrubbing) setScrubIdx(0); setReplaying(true); }}
-          replaying={replaying}
-          onStop={exitScrub}
-        />
-      )}
-
       <section className="card" aria-label="Events">
         <h2>Events</h2>
-        <EventFeed log={displayState.log} onView={viewEvent} />
+        <EventFeed
+          entries={feedEntries(game.history, state)}
+          activeSeq={scrubIdx === null ? null : game.history[Math.min(scrubIdx, game.history.length) - 1]?.seq ?? null}
+          live={!scrubbing}
+          onView={viewEvent}
+          onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
+          onStop={exitScrub}
+          replaying={replaying}
+        />
       </section>
     </main>
   );
@@ -338,7 +358,7 @@ function DbGameView({ gameId }: DbGameProps) {
     if (!token) return;
     try {
       await action(token, gameId, 'fork', { toSeq: seq });
-      setScrubIdx(null);
+      exitScrub();
       await refresh();
     } catch (e) {
       setToast(e instanceof Error ? e.message : 'rewind failed');
@@ -439,23 +459,19 @@ function DbGameView({ gameId }: DbGameProps) {
         </section>
       )}
 
-      {history.length > 0 && (detail?.mode === 'test' || scrubbing || replaying) && (
-        <HistoryScrubber
-          events={history}
-          canFork={canFork}
-          onFork={(seq) => void forkTo(seq)}
-          onExit={exitScrub}
-          onScrub={(idx) => { setReplaying(false); setScrubIdx(idx === history.length ? null : idx); }}
-          position={scrubIdx ?? history.length}
-          onReplay={() => { if (!scrubbing) setScrubIdx(0); setReplaying(true); }}
-          replaying={replaying}
-          onStop={exitScrub}
-        />
-      )}
-
       <section className="card" aria-label="Events">
         <h2>Events</h2>
-        <EventFeed log={displayState.log} onView={viewEvent} />
+        <EventFeed
+          entries={feedEntries(history, state)}
+          activeSeq={scrubIdx === null ? null : history[Math.min(scrubIdx, history.length) - 1]?.seq ?? null}
+          live={!scrubbing}
+          onView={viewEvent}
+          onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
+          onStop={exitScrub}
+          replaying={replaying}
+          canFork={canFork}
+          onFork={(seq) => void forkTo(seq)}
+        />
       </section>
     </main>
   );

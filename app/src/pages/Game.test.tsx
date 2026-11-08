@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Game from './Game';
 import * as api from '../lib/api';
@@ -143,7 +143,7 @@ describe('Game page', () => {
     expect(screen.getByText('JURY PAGE')).toBeInTheDocument();
   });
 
-  test('history scrubber renders in test mode and rewind posts fork', async () => {
+  test('event feed shows the full history and Rewind lives in the entry details (host test game)', async () => {
     vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4, state: STATE });
     const refresh = vi.fn();
     setup({
@@ -153,24 +153,45 @@ describe('Game page', () => {
       ],
       refresh,
     });
-    expect(screen.getByTestId('history-scrubber')).toBeInTheDocument();
-    const slider = screen.getByRole('slider');
-    fireEvent.change(slider, { target: { value: '1' } });
-    fireEvent.click(screen.getByRole('button', { name: /rewind/i }));
+    // both events visible in the feed, newest first
+    const texts = screen.getAllByRole('listitem').map((li) => li.querySelector('.feed-text')?.textContent);
+    expect(texts.length).toBe(2);
+    // rewind to the first event from its Details dropdown
+    const firstRow = screen.getAllByRole('listitem')[1]; // seq 1 is the second (oldest) row
+    fireEvent.click(within(firstRow).getByText(/details/i));
+    fireEvent.click(within(firstRow).getByRole('button', { name: /rewind game to here/i }));
     await waitFor(() =>
       expect(vi.mocked(api.action)).toHaveBeenCalledWith('tok-1', 'g1', 'fork', { toSeq: 1 }),
     );
     expect(refresh).toHaveBeenCalled();
   });
 
-  test('no rewind button for non-creators', () => {
+  test('no rewind control for non-creators', () => {
     setup({
       detail: { id: 'g1', name: 'g', mode: 'test', status: 'active', config: STATE.config, createdBy: 'other', inviteCode: 'i', generation: 1, forkSeq: null },
       history: [
         { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
       ],
     });
-    expect(screen.getByTestId('history-scrubber')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /rewind/i })).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: /rewind/i })).toHaveLength(0);
+  });
+
+  test('View scrubs while keeping later entries visible, Back to live exits', async () => {
+    setup({
+      history: [
+        { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
+        { seq: 2, type: 'move', actorId: 'p2', createdAt: 't', payload: { to: { x: 4, y: 4 } }, generation: 1 },
+      ],
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: /view state after event 1/i })[0]);
+    expect(screen.queryByTestId('action-bar')).not.toBeInTheDocument();
+    // BOTH entries still visible; the later one (seq 2) dimmed as future
+    const items = screen.getAllByRole('listitem');
+    expect(items.length).toBe(2);
+    expect(items[0].className).toContain('future');
+    expect(items[1].className).toContain('active');
+    expect(screen.getByTestId('back-to-live')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('back-to-live'));
+    expect(screen.getByTestId('action-bar')).toBeInTheDocument();
   });
 });
