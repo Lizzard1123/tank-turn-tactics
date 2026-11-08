@@ -12,10 +12,7 @@ export default function Landing() {
         <Link className="menu-item" data-testid="btn-instructions" to="/instructions">Instructions</Link>
         <Link className="menu-item" data-testid="btn-test" to="/test">Test Mode</Link>
         {player && (
-          <>
-            <Link className="menu-item" data-testid="btn-dashboard" to="/dashboard">Dashboard</Link>
-            <Link className="menu-item" data-testid="btn-profile" to="/profile">Profile</Link>
-          </>
+          <Link className="menu-item" data-testid="btn-profile" to="/profile">Profile</Link>
         )}
       </nav>
     </main>

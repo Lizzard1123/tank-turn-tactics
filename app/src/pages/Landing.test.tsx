@@ -20,12 +20,22 @@ test('renders the core menu items for signed-out visitors', () => {
   expect(screen.queryByTestId('btn-profile')).not.toBeInTheDocument();
 });
 
-test('signed-in visitors also get Dashboard and Profile', () => {
+test('signed-in visitors also get Profile (no Dashboard button)', () => {
   vi.mocked(useAuth).mockReturnValue({
     player: { id: 'p1', name: 'tester' }, token: 't', isGuest: false,
     signin: vi.fn(), register: vi.fn(), guestSignin: vi.fn(), signout: vi.fn(),
   });
   render(<MemoryRouter><Landing /></MemoryRouter>);
-  expect(screen.getByTestId('btn-dashboard')).toBeInTheDocument();
+  expect(screen.queryByTestId('btn-dashboard')).not.toBeInTheDocument();
   expect(screen.getByTestId('btn-profile')).toBeInTheDocument();
+});
+
+test('main menu has no Dashboard button (Play is the way in)', () => {
+  vi.mocked(useAuth).mockReturnValue({
+    player: { id: 'p1', name: 'tester' }, token: 't', isGuest: false,
+    signin: vi.fn(), register: vi.fn(), guestSignin: vi.fn(), signout: vi.fn(),
+  });
+  render(<MemoryRouter><Landing /></MemoryRouter>);
+  expect(screen.queryByTestId('btn-dashboard')).not.toBeInTheDocument();
+  expect(screen.getByTestId('btn-play')).toBeInTheDocument();
 });

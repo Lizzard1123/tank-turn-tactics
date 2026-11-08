@@ -5,7 +5,7 @@ import { useAuth } from '../lib/auth';
 
 // /play — the canonical-game entry point. Joins the configured canonical
 // game (VITE_CANONICAL_INVITE_CODE) and routes to it; without a configured
-// code it falls back to the dashboard.
+// code it falls back to the games page.
 export default function Play() {
   const { token } = useAuth();
   const navigate = useNavigate();
@@ -17,7 +17,7 @@ export default function Play() {
     started.current = true;
     const code = import.meta.env.VITE_CANONICAL_INVITE_CODE as string | undefined;
     if (!code) {
-      navigate('/dashboard', { replace: true });
+      navigate('/games', { replace: true });
       return;
     }
     (async () => {
@@ -37,7 +37,7 @@ export default function Play() {
     return (
       <main className="page">
         <p className="error" role="alert">{error}</p>
-        <button type="button" onClick={() => navigate('/dashboard')}>Go to dashboard</button>
+        <button type="button" onClick={() => navigate('/games')}>Go to dashboard</button>
       </main>
     );
   }

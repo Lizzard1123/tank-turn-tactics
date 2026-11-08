@@ -96,7 +96,7 @@ export default function Dashboard() {
         <Link to="/" className="link-button">← Home</Link>
         <Link to="/profile" className="link-button">Profile</Link>
       </p>
-      <h1>Dashboard</h1>
+      <h1>Games</h1>
       <p className="subtitle">Hi {player?.name} — start or join a game.</p>
       {isGuest && (
         <p className="muted guest-hint">

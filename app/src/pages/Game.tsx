@@ -132,14 +132,14 @@ function LocalGameView() {
         <span>Day {displayState.day}</span>
         <span className="mode-badge">TEST{scrubbing ? ' · HISTORY' : ''}</span>
         <span className="timer" data-testid="ap-timer">Next AP in {apRemaining}s</span>
-        <Link to="/dashboard" className="link-button">Exit</Link>
+        <Link to="/games" className="link-button">Exit</Link>
       </header>
 
       {displayState.winner && !scrubbing && (
         <div className="banner" data-testid="winner-banner">
           <Icon html={trophySvg} className="winner-icon" width={16} height={16} />{' '}
           {displayState.players[displayState.winner]?.name ?? displayState.winner} wins!{' '}
-          <Link to="/dashboard">Back to dashboard</Link>
+          <Link to="/games">Back to games</Link>
         </div>
       )}
 
@@ -389,14 +389,14 @@ function DbGameView({ gameId }: DbGameProps) {
             Next AP in {apRemaining}s
           </span>
         )}
-        <Link to="/dashboard" className="link-button">Exit</Link>
+        <Link to="/games" className="link-button">Exit</Link>
       </header>
 
       {displayState.winner && !scrubbing && (
         <div className="banner" data-testid="winner-banner">
           <Icon html={trophySvg} className="winner-icon" width={16} height={16} />{' '}
           {displayState.players[displayState.winner]?.name ?? displayState.winner} wins!{' '}
-          <Link to="/dashboard">Back to dashboard</Link>
+          <Link to="/games">Back to games</Link>
         </div>
       )}
 

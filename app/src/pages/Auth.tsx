@@ -20,7 +20,7 @@ export default function Auth() {
     try {
       if (mode === 'signin') await signin(name, password);
       else await register(name, password);
-      navigate('/dashboard');
+      navigate('/games');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'something went wrong');
     } finally {

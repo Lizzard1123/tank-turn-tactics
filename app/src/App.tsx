@@ -31,6 +31,7 @@ export default function App() {
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
             <Route path="/instructions" element={<Instructions />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/games" element={<RequireAuth><Dashboard /></RequireAuth>} />
             <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
             <Route path="/test" element={<TestMode />} />
             <Route path="/lobby/:gameId" element={<RequireAuth><Lobby /></RequireAuth>} />

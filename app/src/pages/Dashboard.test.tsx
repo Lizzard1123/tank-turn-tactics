@@ -96,7 +96,8 @@ describe('Dashboard', () => {
   test('offers a Profile link', async () => {
     vi.mocked(api.gameList).mockResolvedValue({ games: [] });
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
-    await screen.findByRole('heading', { name: /dashboard/i });
+    await screen.findByRole('heading', { level: 1, name: /games/i });
+    expect(screen.queryByRole('heading', { name: /dashboard/i })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: /profile/i })).toHaveAttribute('href', '/profile');
   });
 

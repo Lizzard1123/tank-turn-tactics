@@ -38,7 +38,7 @@ function renderAt() {
     <MemoryRouter initialEntries={['/play']}>
       <Routes>
         <Route path="/play" element={<Play />} />
-        <Route path="/dashboard" element={<div>DASHBOARD</div>} />
+        <Route path="/games" element={<div>GAMES PAGE</div>} />
         <Route path="/game/:gameId" element={<div>GAME</div>} />
         <Route path="/lobby/:gameId" element={<div>LOBBY</div>} />
       </Routes>
@@ -62,10 +62,10 @@ describe('Play (canonical game entry)', () => {
     expect(await screen.findByText('LOBBY')).toBeInTheDocument();
   });
 
-  test('without a configured code, falls back to the dashboard', async () => {
+  test('without a configured code, falls back to the games page', async () => {
     vi.stubEnv('VITE_CANONICAL_INVITE_CODE', '');
     renderAt();
-    expect(await screen.findByText('DASHBOARD')).toBeInTheDocument();
+    expect(await screen.findByText('GAMES PAGE')).toBeInTheDocument();
     expect(api.gameJoin).not.toHaveBeenCalled();
   });
 

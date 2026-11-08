@@ -49,7 +49,7 @@ function setup(hookOverride?: Record<string, unknown>) {
       <Routes>
         <Route path="/game/:gameId" element={<Game />} />
         <Route path="/game/:gameId/jury" element={<div>JURY PAGE</div>} />
-        <Route path="/dashboard" element={<div>DASHBOARD</div>} />
+        <Route path="/games" element={<div>GAMES PAGE</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -128,12 +128,12 @@ describe('Game page', () => {
     }
   });
 
-  test('finished game shows winner banner and dashboard link', () => {
+  test('finished game shows winner banner and games link', () => {
     setup({
       state: { ...STATE, winner: 'p1' },
     });
     expect(screen.getByTestId('winner-banner')).toBeInTheDocument();
-    expect(screen.getByText(/back to dashboard/i)).toBeInTheDocument();
+    expect(screen.getByText(/back to games/i)).toBeInTheDocument();
   });
 
   test('dead player routes to jury screen', () => {

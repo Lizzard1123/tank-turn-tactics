@@ -125,7 +125,7 @@ export default function Profile() {
       />
       {done && <p role="status">Picture saved.</p>}
       {error && <p className="error" role="alert">{error}</p>}
-      <p><Link to="/dashboard">Back to dashboard</Link></p>
+      <p><Link to="/games">Back to games</Link></p>
     </main>
   );
 }
