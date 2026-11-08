@@ -96,6 +96,27 @@ describe('Lobby (test mode)', () => {
     expect(await screen.findByText('GAME PAGE')).toBeInTheDocument();
   });
 
+  test('bots from the create flow are preserved on start (not wiped to [])', async () => {
+    // regression: knobs initialized from server config must include bots —
+    // wiping them made game-start reject with "need at least 2 players"
+    const withBots: GameDetail = {
+      ...LOBBY_GAME,
+      game: { ...LOBBY_GAME.game, config: { ...LOBBY_GAME.game.config, bots: [{ difficulty: 'easy' }, { difficulty: 'medium' }] } },
+    };
+    vi.mocked(api.gameGet)
+      .mockResolvedValueOnce(withBots)
+      .mockResolvedValue({ ...withBots, game: { ...withBots.game, status: 'active' } });
+    vi.mocked(api.gameUpdate).mockResolvedValue({ ok: true, config: withBots.game.config });
+    vi.mocked(api.gameStart).mockResolvedValue({ ok: true });
+    renderAt();
+    await screen.findByRole('heading', { name: /lobby/i });
+    expect(screen.getAllByLabelText(/bot difficulty/i)).toHaveLength(2);
+    await userEvent.setup().click(screen.getByRole('button', { name: /start game/i }));
+    expect(api.gameUpdate).toHaveBeenCalledWith('tok-1', 'g1', expect.objectContaining({
+      bots: [{ difficulty: 'easy' }, { difficulty: 'medium' }],
+    }));
+  });
+
   test('active game navigates straight to the game page', async () => {
     vi.mocked(api.gameGet).mockResolvedValue({
       ...LOBBY_GAME,

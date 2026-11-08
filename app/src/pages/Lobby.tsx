@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { gameGet, gameStart, gameUpdate, type GameDetail } from '../lib/api';
@@ -25,12 +25,19 @@ export default function Lobby() {
 
   const isHost = detail?.game.createdBy === player?.id;
 
+  // knobs sync from the server config ONCE — the 4s lobby poll re-runs load()
+  // and must not clobber unsaved host edits (bots included: wiping the bots
+  // the create flow added makes game-start reject with "need at least 2
+  // players").
+  const knobsLoaded = useRef(false);
+
   const load = useCallback(async () => {
     if (!token || !gameId) return;
     try {
       const d = await gameGet(token, gameId);
       setDetail(d);
-      if (d.game.status === 'lobby' && d.game.createdBy === player?.id) {
+      if (!knobsLoaded.current && d.game.status === 'lobby' && d.game.createdBy === player?.id) {
+        knobsLoaded.current = true;
         const c = d.game.config;
         setBoard(c.board);
         setStartingHp(c.startingHp);
@@ -39,6 +46,7 @@ export default function Lobby() {
         setApPerDay(c.apPerDay);
         setUpgradeCost(c.upgradeCost);
         setApIntervalMinutes(c.apIntervalMinutes ?? 5);
+        setBots(c.bots ?? []);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'failed to load game');
