@@ -90,6 +90,24 @@ describe('Game page', () => {
     expect(refresh).toHaveBeenCalled();
   });
 
+  test('optimistic: board state updates immediately while the request is in flight', async () => {
+    // never resolves: the only way AP can drop is the optimistic local apply
+    vi.mocked(api.action).mockImplementation(() => new Promise(() => {}));
+    setup();
+    fireEvent.click(screen.getByTestId('btn-move'));
+    fireEvent.click(screen.getByTestId('tap-legal'));
+    expect(screen.getByTestId('ap-counter')).toHaveTextContent('0 AP');
+  });
+
+  test('optimistic rollback: rejected action returns AP to the authoritative value', async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    vi.mocked(api.action).mockRejectedValue(new Error('nope'));
+    setup({ refresh });
+    fireEvent.click(screen.getByTestId('btn-move'));
+    fireEvent.click(screen.getByTestId('tap-legal'));
+    await waitFor(() => expect(screen.getByTestId('ap-counter')).toHaveTextContent('1 AP'));
+  });
+
   test('finished game shows winner banner and dashboard link', () => {
     setup({
       state: { ...STATE, winner: 'p1' },

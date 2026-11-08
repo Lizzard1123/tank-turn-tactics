@@ -195,14 +195,36 @@ function LocalGameView() {
 // Database-backed game mode (existing behaviour, unchanged).
 // ---------------------------------------------------------------------------
 
-interface DbGameViewProps { gameId: string }
+interface DbGameProps { gameId: string }
 
-function DbGameView({ gameId }: DbGameViewProps) {
-  const { state, history, me, detail, avatars, loading, error, refresh } = useGameEvents(gameId);
+function DbGameView({ gameId }: DbGameProps) {
+  const { state: authState, history: baseHistory, me, detail, avatars, loading, error, refresh } = useGameEvents(gameId);
   const navigate = useNavigate();
   const [mode, setMode] = useState<BoardMode>('none');
   const [toast, setToast] = useState<string | null>(null);
   const [scrubIdx, setScrubIdx] = useState<number | null>(null);
+
+  // Optimistic actions: events posted but not yet confirmed by a refetch.
+  // Applied on top of the authoritative state so the board reacts instantly;
+  // the next authoritative snapshot (seq >= event.seq) drops them naturally.
+  const [pending, setPending] = useState<GameEvent[]>([]);
+  useEffect(() => {
+    if (!authState) return;
+    setPending((prev) => prev.filter((e) => e.seq > authState.seq));
+  }, [authState]);
+
+  const state = useMemo(() => {
+    if (!authState || pending.length === 0) return authState;
+    let s = authState;
+    for (const e of pending) {
+      try { s = applyEvent(s, e); } catch { break; }
+    }
+    return s;
+  }, [authState, pending]);
+  const history = useMemo(
+    () => (pending.length ? [...baseHistory, ...pending] : baseHistory),
+    [baseHistory, pending],
+  );
 
   // --- history scrubbing / recap (any mode; test mode also forks) ---
   // Scrub position counts events from the very start of the game. Event seqs
@@ -282,7 +304,8 @@ function DbGameView({ gameId }: DbGameViewProps) {
     const token = localStorage.getItem('ttt_token');
     if (!token) return;
 
-    // optimistic: apply locally first to confirm validity
+    // optimistic: validate against authoritative state, then commit locally so
+    // the board updates before the network round-trip completes
     const optimisticEvent: GameEvent = {
       seq: state.seq + 1, type, actorId: me, createdAt: new Date().toISOString(), payload,
     };
@@ -293,14 +316,15 @@ function DbGameView({ gameId }: DbGameViewProps) {
       // invalid locally — engine buttons should have prevented this
       return;
     }
+    setPending((prev) => [...prev, optimisticEvent]);
 
     try {
       await action(token, gameId, type, payload);
       // authoritative response: realtime/refetch reconciles with the server
-      setMode('none');
       void refresh();
     } catch (e) {
-      // roll back by refetching authoritative state
+      // roll back the optimistic apply and refetch authoritative state
+      setPending([]);
       void refresh();
       setToast(e instanceof Error ? e.message : 'action failed');
       setTimeout(() => setToast(null), 4000);
