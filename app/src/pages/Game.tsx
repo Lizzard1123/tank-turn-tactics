@@ -153,6 +153,7 @@ export default function Game() {
         state={displayState}
         selectedMode={scrubbing ? 'none' : mode}
         me={me}
+        avatars={detail?.avatars}
         onCellTap={(pos) => {
           // tap semantics: in move mode a legal cell commits; in attack/give
           // mode an enemy in range commits; otherwise nothing

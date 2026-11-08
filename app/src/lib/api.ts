@@ -100,6 +100,7 @@ export interface GameDetail {
   events: unknown[];
   history: unknown[];
   members: GameMember[];
+  avatars?: Record<string, string>;
   me: string;
 }
 

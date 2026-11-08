@@ -56,4 +56,18 @@ describe('Board', () => {
     fireEvent.click(screen.getByTestId('cell-2-1'));
     expect(onTap).toHaveBeenCalledWith({ x: 2, y: 1 });
   });
+
+  test('renders avatar image for players with one, initial for others', () => {
+    render(
+      <Board
+        state={state()} selectedMode="none" me="p1"
+        avatars={{ p1: 'https://example.com/a.jpg' }}
+        onCellTap={() => {}}
+      />,
+    );
+    expect(screen.getByTestId('tank-avatar-p1')).toHaveAttribute('href', 'https://example.com/a.jpg');
+    // p2 has no avatar: falls back to the initial letter
+    expect(screen.queryByTestId('tank-avatar-p2')).not.toBeInTheDocument();
+    expect(screen.getByText('F')).toBeInTheDocument();
+  });
 });

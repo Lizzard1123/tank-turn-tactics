@@ -6,6 +6,7 @@ import Instructions from './pages/Instructions';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Play from './pages/Play';
+import Profile from './pages/Profile';
 import Lobby from './pages/Lobby';
 import TestMode from './pages/TestMode';
 import Game from './pages/Game';
@@ -25,6 +26,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/play" element={<RequireAuth><Play /></RequireAuth>} />
+          <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
           <Route path="/instructions" element={<Instructions />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />

@@ -7,6 +7,7 @@ interface BoardProps {
   state: GameState;
   selectedMode: BoardMode;
   me: string | null;
+  avatars?: Record<string, string>;
   onCellTap: (pos: Vec) => void;
 }
 
@@ -14,7 +15,7 @@ const CELL = 40; // px per cell; container scrolls for large boards
 
 // SVG grid: cells, range overlay, legal-target highlights, tanks.
 // The .board wrapper scrolls horizontally for boards wider than the viewport.
-export default function Board({ state, selectedMode, me, onCellTap }: BoardProps) {
+export default function Board({ state, selectedMode, me, avatars, onCellTap }: BoardProps) {
   const n = state.config.board;
   const own = me ? state.players[me] : null;
   const size = n * CELL;
@@ -76,9 +77,25 @@ export default function Board({ state, selectedMode, me, onCellTap }: BoardProps
                   onClick={() => onCellTap(pos)}
                 >
                   <circle cx={cx} cy={cy} r={CELL * 0.3} className="tank-body" />
-                  <text x={cx} y={cy + 5} textAnchor="middle" className="tank-letter">
-                    {occ.name.slice(0, 1).toUpperCase()}
-                  </text>
+                  {avatars?.[occ.id] ? (
+                    <>
+                      <clipPath id={`tank-clip-${occ.id}`}>
+                        <circle cx={cx} cy={cy} r={CELL * 0.3} />
+                      </clipPath>
+                      <image
+                        href={avatars[occ.id]}
+                        x={cx - CELL * 0.3} y={cy - CELL * 0.3}
+                        width={CELL * 0.6} height={CELL * 0.6}
+                        clipPath={`url(#tank-clip-${occ.id})`}
+                        preserveAspectRatio="xMidYMid slice"
+                        data-testid={`tank-avatar-${occ.id}`}
+                      />
+                    </>
+                  ) : (
+                    <text x={cx} y={cy + 5} textAnchor="middle" className="tank-letter">
+                      {occ.name.slice(0, 1).toUpperCase()}
+                    </text>
+                  )}
                   {/* HP pips */}
                   {Array.from({ length: occ.hp }, (_, h) => (
                     <circle key={h} cx={cx - CELL * 0.25 + h * 8} cy={cy - CELL * 0.3} r={2.5} className="hp-pip" />

@@ -26,6 +26,19 @@ Deno.serve(async (req) => {
       .select('player_id, is_bot, bot_difficulty, joined_at').eq('game_id', gameId)
       .order('joined_at');
 
+    // avatars ride alongside engine state (engine stays avatar-free):
+    // map of playerId -> public avatar url, from the players table.
+    // Only real players (uuid ids) — bot ids like 'bot-1' would fail the
+    // uuid cast on .in().
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const memberIds = (members ?? []).map(m => m.player_id).filter(id => UUID_RE.test(id));
+    const { data: avatarRows } = await a.from('players')
+      .select('id, avatar_url').in('id', memberIds);
+    const avatars: Record<string, string> = {};
+    for (const row of avatarRows ?? []) {
+      if (row.avatar_url) avatars[row.id] = row.avatar_url;
+    }
+
     const { data: snap } = await a.from('game_state').select('seq, state').eq('game_id', gameId).single();
 
     // current-generation events after the snapshot, truncated at fork_seq
@@ -73,6 +86,7 @@ Deno.serve(async (req) => {
         events: tail,       // authoritative tail (applied)
         history,            // full event record for the scrubber
         members,
+        avatars,
         me: me.id,
       });
     }
@@ -85,7 +99,7 @@ Deno.serve(async (req) => {
         inviteCode: game.invite_code, generation: game.cur_generation,
         forkSeq: game.fork_seq,
       },
-      state: null, events: [], history: [], members, me: me.id,
+      state: null, events: [], history: [], members, avatars, me: me.id,
     });
   } catch (e) {
     return json({ error: `bad request: ${e instanceof Error ? e.message : 'unknown'}` }, 400);
