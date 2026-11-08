@@ -110,9 +110,9 @@ function LocalGameView() {
   const scrubbing = scrubIdx !== null;
   const displayState = scrubbing ? game.replayTo(scrubIdx) : state;
   const exitScrub = () => { setReplaying(false); setMode('none'); setScrubIdx(null); };
-  const viewEvent = (seq: number) => {
-    const idx = game.history.findIndex((e) => e.seq === seq);
-    if (idx < 0) return;
+  // Feed rows are addressed by their chronological index — no seq lookup, so
+  // duplicate seqs can never highlight/scrub the wrong row.
+  const viewEvent = (idx: number) => {
     setReplaying(false);
     setMode('none');
     setScrubIdx(idx + 1);
@@ -209,7 +209,7 @@ function LocalGameView() {
         <h2>Events</h2>
         <EventFeed
           entries={feedEntries(game.history, state)}
-          activeSeq={scrubIdx === null ? null : game.history[Math.min(scrubIdx, game.history.length) - 1]?.seq ?? null}
+          activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, game.history.length) - 1}
           live={!scrubbing}
           onView={viewEvent}
           onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
@@ -292,9 +292,9 @@ function DbGameView({ gameId }: DbGameProps) {
   }, [replaying, history]);
 
   const exitScrub = () => { setReplaying(false); setMode('none'); setScrubIdx(null); };
-  const viewEvent = (seq: number) => {
-    const idx = history.findIndex((e) => e.seq === seq);
-    if (idx < 0) return;
+  // Feed rows are addressed by their chronological index — no seq lookup, so
+  // duplicate seqs can never highlight/scrub the wrong row.
+  const viewEvent = (idx: number) => {
     setReplaying(false);
     setMode('none');
     setScrubIdx(idx + 1);
@@ -480,14 +480,17 @@ function DbGameView({ gameId }: DbGameProps) {
         <h2>Events</h2>
         <EventFeed
           entries={feedEntries(history, state)}
-          activeSeq={scrubIdx === null ? null : history[Math.min(scrubIdx, history.length) - 1]?.seq ?? null}
+          activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, history.length) - 1}
           live={!scrubbing}
           onView={viewEvent}
           onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
           onStop={exitScrub}
           replaying={replaying}
           canFork={canFork}
-          onFork={(seq) => void forkTo(seq)}
+          onFork={(idx) => {
+            const seq = history[idx]?.seq;
+            if (seq !== undefined) void forkTo(seq);
+          }}
         />
       </section>
     </main>

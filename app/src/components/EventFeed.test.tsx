@@ -11,7 +11,7 @@ const entries: FeedEntry[] = [
 
 function base(overrides: Partial<Parameters<typeof EventFeed>[0]> = {}) {
   return {
-    entries, activeSeq: null, live: true,
+    entries, activeIndex: null, live: true,
     onView: vi.fn(), onReplay: vi.fn(), onStop: vi.fn(), replaying: false,
     ...overrides,
   };
@@ -30,7 +30,7 @@ describe('EventFeed', () => {
   });
 
   test('while scrubbed the later events stay visible (dimmed) and the viewed event is highlighted', () => {
-    render(<EventFeed {...base({ activeSeq: 2, live: false })} />);
+    render(<EventFeed {...base({ activeIndex: 1, live: false })} />); // seq 2 = index 1
     const items = screen.getAllByRole('listitem').filter((li) => !li.className.includes('empty'));
     expect(items[0].className).toContain('future'); // seq 3 is after the viewed event
     expect(items[1].className).toContain('active'); // seq 2 is the viewed event
@@ -47,14 +47,14 @@ describe('EventFeed', () => {
     await user.click(screen.getByTestId('replay-btn'));
     expect(onReplay).toHaveBeenCalled();
 
-    rerender(<EventFeed {...base({ activeSeq: 1, live: false, onReplay, onStop })} />);
+    rerender(<EventFeed {...base({ activeIndex: 0, live: false, onReplay, onStop })} />);
     expect(screen.getByTestId('back-to-live')).toBeInTheDocument();
     await user.click(screen.getByTestId('back-to-live'));
     expect(onStop).toHaveBeenCalled();
   });
 
   test('while replaying, Stop replay replaces the replay button', () => {
-    render(<EventFeed {...base({ activeSeq: 0, live: false, replaying: true })} />);
+    render(<EventFeed {...base({ activeIndex: 0, live: false, replaying: true })} />);
     expect(screen.getByTestId('stop-replay-btn')).toBeInTheDocument();
     expect(screen.queryByTestId('replay-btn')).not.toBeInTheDocument();
   });
@@ -64,10 +64,10 @@ describe('EventFeed', () => {
     const onFork = vi.fn();
     render(<EventFeed {...base({ canFork: true, onFork })} />);
     const items = screen.getAllByRole('listitem').filter((li) => !li.className.includes('empty'));
-    // open the details of the newest event (seq 3)
+    // open the details of the newest event (seq 3, index 2)
     await user.click(within(items[0]).getByText(/details/i));
     await user.click(within(items[0]).getByRole('button', { name: /rewind game to here/i }));
-    expect(onFork).toHaveBeenCalledWith(3);
+    expect(onFork).toHaveBeenCalledWith(2);
   });
 
   test('no rewind control without canFork', () => {
@@ -75,13 +75,13 @@ describe('EventFeed', () => {
     expect(screen.queryAllByRole('button', { name: /rewind/i })).toHaveLength(0);
   });
 
-  test('view button per entry calls onView with its seq', async () => {
+  test('view button per entry calls onView with its index', async () => {
     const onView = vi.fn();
     const user = userEvent.setup();
     render(<EventFeed {...base({ onView })} />);
     const buttons = screen.getAllByRole('button', { name: /view state after event/i });
     expect(buttons.length).toBe(3);
-    await user.click(buttons[0]); // newest entry (seq 3)
-    expect(onView).toHaveBeenCalledWith(3);
+    await user.click(buttons[0]); // newest entry (seq 3, index 2)
+    expect(onView).toHaveBeenCalledWith(2);
   });
 });

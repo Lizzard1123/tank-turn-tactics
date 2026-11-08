@@ -9,17 +9,20 @@ export interface FeedEntry {
 
 interface EventFeedProps {
   entries: FeedEntry[];
-  /** seq of the event the board is scrubbed to, or null when live */
-  activeSeq: number | null;
+  /** INDEX (in `entries`, 0-based chronological) of the event the board is
+      scrubbed to, or null when live. Indices, not seqs: duplicate seqs must
+      still highlight exactly one row. */
+  activeIndex: number | null;
   live: boolean;
   replaying: boolean;
   /** interactive history controls (recap toolbar + View buttons); read-only
-      views (Jury) omit them */
-  onView?: (seq: number) => void;
+      views (Jury) omit them. Callbacks receive the row's INDEX in `entries`,
+      not the display (reversed) position and not the seq. */
+  onView?: (index: number) => void;
   onReplay?: () => void;
   onStop?: () => void;
   /** test-mode hosts can rewind the actual game to any event */
-  onFork?: (seq: number) => void;
+  onFork?: (index: number) => void;
   canFork?: boolean;
 }
 
@@ -33,12 +36,16 @@ function formatTime(iso: string): string {
 // after it stay visible but dimmed. Controls (replay / back to live) live in
 // the card header; per-event metadata lives in a Details dropdown.
 export default function EventFeed({
-  entries, activeSeq, live, replaying, onView, onReplay, onStop, onFork, canFork = false,
+  entries, activeIndex, live, replaying, onView, onReplay, onStop, onFork, canFork = false,
 }: EventFeedProps) {
   // The plan's contract: always the FULL list (this feed is the only history
-  // surface — there is no scrubber to reach older events through).
-  const visible = [...entries].reverse();
-  const activePos = activeSeq === null ? -1 : entries.findIndex((e) => e.seq === activeSeq);
+  // surface — there is no scrubber to reach older events through). Rows keep
+  // their chronological index so duplicate seqs stay individually
+  // addressable.
+  const visible = entries.map((e, i) => ({ e, i })).reverse();
+  // replaying implies a scrub position; null (unreachable here) falls back to
+  // 1 like the old Math.max floor did
+  const replayPosition = activeIndex === null ? 1 : activeIndex + 1;
   const interactive = !!(onView || onReplay || onStop);
   return (
     <>
@@ -51,7 +58,7 @@ export default function EventFeed({
           )}
           {replaying && (
             <>
-              <span className="feed-progress">Replaying event {Math.max(activePos + 1, 1)} of {entries.length}</span>
+              <span className="feed-progress">Replaying event {replayPosition} of {entries.length}</span>
               <button type="button" className="link-button" data-testid="stop-replay-btn" onClick={() => onStop?.()}>
                 Stop replay
               </button>
@@ -65,14 +72,14 @@ export default function EventFeed({
         </div>
       )}
       <ul className="event-feed" data-testid="event-feed">
-        {visible.map((e) => {
+        {visible.map(({ e, i }) => {
           const cls = [
             'feed-row',
-            e.seq === activeSeq ? 'active' : '',
-            !live && activeSeq !== null && e.seq > activeSeq ? 'future' : '',
+            i === activeIndex ? 'active' : '',
+            !live && activeIndex !== null && i > activeIndex ? 'future' : '',
           ].filter(Boolean).join(' ');
           return (
-            <li key={e.seq} className={cls}>
+            <li key={i} className={cls}>
               <div className="feed-main">
                 <span className="feed-text">{e.text}</span>
                 {onView && (
@@ -80,7 +87,7 @@ export default function EventFeed({
                     type="button"
                     className="link-button feed-view"
                     aria-label={`View state after event ${e.seq}`}
-                    onClick={() => onView(e.seq)}
+                    onClick={() => onView(i)}
                   >
                     View
                   </button>
@@ -105,7 +112,7 @@ export default function EventFeed({
                     <button
                       type="button"
                       className="danger"
-                      onClick={() => onFork(e.seq)}
+                      onClick={() => onFork(i)}
                     >
                       Rewind game to here
                     </button>

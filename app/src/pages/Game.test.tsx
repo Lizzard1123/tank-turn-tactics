@@ -204,4 +204,28 @@ describe('Game page', () => {
     fireEvent.click(screen.getByTestId('back-to-live'));
     expect(screen.getByTestId('action-bar')).toBeInTheDocument();
   });
+
+  test('View addresses rows by INDEX: with duplicate seqs the clicked (newer) row is highlighted, not its older twin', () => {
+    setup({
+      history: [
+        { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
+        { seq: 2, type: 'move', actorId: 'p2', createdAt: 't', payload: { to: { x: 4, y: 4 } }, generation: 1 },
+        { seq: 3, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 2, y: 0 } }, generation: 1 },
+        { seq: 3, type: 'move', actorId: 'p2', createdAt: 't', payload: { to: { x: 5, y: 5 } }, generation: 2 },
+      ],
+    });
+    const views = screen.getAllByRole('button', { name: /view state after event 3/i });
+    expect(views.length).toBe(2);
+    // Visible order is newest-first: i=3, i=2, i=1, i=0 — the FIRST "event 3"
+    // button belongs to the NEWER duplicate (gen 2, index 3).
+    fireEvent.click(views[0]);
+    // activeIndex is 3, so items[0] is active; NOTHING is 'future' (no index
+    // > 3); the older seq-3 twin (items[1], i=2) must NOT be active.
+    const items = screen.getAllByRole('listitem');
+    expect(items[0].className).toContain('active');
+    expect(items[1].className).not.toContain('active');
+    expect(items[1].className).not.toContain('future');
+    expect(items[2].className).not.toContain('active');
+    expect(items[3].className).not.toContain('active');
+  });
 });

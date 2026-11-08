@@ -69,7 +69,7 @@ export default function Jury() {
 
       <section className="card" aria-label="Events">
         <h2>Events</h2>
-        <EventFeed entries={state.log.map((l) => ({ seq: l.seq, text: l.text }))} activeSeq={null} live replaying={false} />
+        <EventFeed entries={state.log.map((l) => ({ seq: l.seq, text: l.text }))} activeIndex={null} live replaying={false} />
       </section>
     </main>
   );
