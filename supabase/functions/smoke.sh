@@ -79,10 +79,10 @@ assert d['state']['seq'] >= 1, 'no events after tick'
 print('PASS: after tick, human has AP and events exist')
 " && PASS=$((PASS+1)) || { FAIL=$((FAIL+1)); echo "FAIL: post-tick state"; }
 
-# RLS: anon direct insert into events must fail
+# RLS: no-client-writes policy + realtime members-read policy (0004)
 R=$(PGPASSWORD=postgres psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -t -c \
   "select count(*) from pg_policies where tablename='events';")
-check "events RLS policy exists" '1' "$(echo "$R" | tr -d ' ')"
+check "events RLS policies exist (2)" '2' "$(echo "$R" | tr -d ' ')"
 
 echo
 echo "RESULT: $PASS passed, $FAIL failed"

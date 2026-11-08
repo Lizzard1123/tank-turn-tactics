@@ -1,9 +1,15 @@
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string | undefined;
 const ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
 
-// Local dev fallback: the supabase CLI's local stack.
-const BASE = SUPABASE_URL ?? 'http://localhost:54321';
-const KEY = ANON_KEY ?? 'anon-placeholder-key-not-used-by-edge-functions';
+// Local dev fallback: the supabase CLI's local stack (127.0.0.1 — `localhost`
+// can resolve to ::1 in browsers and miss the local stack). The local
+// gateway rejects requests with an invalid apikey header BEFORE our function
+// runs, so the response carries no CORS headers — use the standard local
+// anon key (paired with the CLI's default demo JWT secret). Production
+// builds set VITE_SUPABASE_ANON_KEY via CI secrets.
+const BASE = SUPABASE_URL ?? 'http://127.0.0.1:54321';
+const KEY = ANON_KEY
+  ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
 export interface PlayerInfo { id: string; name: string }
 export interface AuthResponse { token: string; player: PlayerInfo }
@@ -42,7 +48,10 @@ async function fn<T>(path: string, body?: unknown, token?: string, method = 'POS
     headers: {
       'Content-Type': 'application/json',
       apikey: KEY,
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      // the gateway 401s requests without an Authorization header — and that
+      // response carries no CORS headers, so the browser reports a network
+      // error. Anonymous calls present the anon key.
+      Authorization: `Bearer ${token ?? KEY}`,
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
