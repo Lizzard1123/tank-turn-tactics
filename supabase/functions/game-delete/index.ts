@@ -19,10 +19,12 @@ Deno.serve(async (req) => {
       return json({ error: 'gameId required' }, 400);
 
     const { data: game } = await a.from('games')
-      .select('id, status, created_by').eq('id', gameId).single();
+      .select('id, mode, status, created_by').eq('id', gameId).single();
     if (!game) return json({ error: 'game not found' }, 404);
     if (game.created_by !== me.id) return json({ error: 'only the host can delete this game' }, 403);
-    if (game.status !== 'lobby') return json({ error: 'only lobby games can be deleted' }, 409);
+    // play games are protected once started; test games are disposable in any status
+    if (game.mode !== 'test' && game.status !== 'lobby')
+      return json({ error: 'only lobby play games (or any test game) can be deleted' }, 409);
 
     await a.from('games').update({ status: 'finished' }).eq('id', gameId);
     return json({ ok: true });
