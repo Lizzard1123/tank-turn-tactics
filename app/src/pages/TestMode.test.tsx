@@ -52,7 +52,7 @@ test('guest sign-in starts a local game (no DB game) and the 30s AP drip increme
       <MemoryRouter initialEntries={['/test']}>
         <Routes>
           <Route path="/test" element={<TestMode />} />
-          <Route path="/game/local" element={<Game />} />
+          <Route path="/game/:gameId" element={<Game />} />
         </Routes>
       </MemoryRouter>
     </LocalGameProvider>,

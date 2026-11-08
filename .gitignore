@@ -9,3 +9,4 @@ app/playwright-report/
 supabase/.env.local
 test-results/
 playwright-report/
+tsconfig.tsbuildinfo

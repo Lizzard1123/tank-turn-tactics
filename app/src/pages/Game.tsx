@@ -40,6 +40,13 @@ function LocalGameView() {
   const [mode, setMode] = useState<BoardMode>('none');
   const [toast, setToast] = useState<string | null>(null);
 
+  // AP countdown: the local drip runs every 30s (started at test-mode mount).
+  const [apRemaining, setApRemaining] = useState(30);
+  useEffect(() => {
+    const id = setInterval(() => setApRemaining((t) => (t <= 1 ? 30 : t - 1)), 1000);
+    return () => clearInterval(id);
+  }, []);
+
   if (!game || !state) {
     return <main className="page"><p>Local test game not initialized.</p></main>;
   }
@@ -67,12 +74,14 @@ function LocalGameView() {
       <header className="game-status">
         <span>Day {state.day}</span>
         <span className="mode-badge">TEST</span>
+        <span className="timer" data-testid="ap-timer">Next AP in {apRemaining}s</span>
         <Link to="/dashboard" className="link-button">Exit</Link>
       </header>
 
       {state.winner && (
         <div className="banner" data-testid="winner-banner">
-          🏆 {state.players[state.winner]?.name ?? state.winner} wins!{' '}
+          <Icon html={trophySvg} className="winner-icon" width={16} height={16} />{' '}
+          {state.players[state.winner]?.name ?? state.winner} wins!{' '}
           <Link to="/dashboard">Back to dashboard</Link>
         </div>
       )}
@@ -351,7 +360,7 @@ function DbGameView({ gameId }: DbGameViewProps) {
 export default function Game() {
   const { gameId } = useParams<{ gameId: string }>();
   const [searchParams] = useSearchParams();
-  const isLocal = gameId === 'local' || searchParams.get('local') === '1';
-  if (isLocal) return <LocalGameView />;
+  if (gameId === 'local' || searchParams.get('local') === '1') return <LocalGameView />;
+  if (!gameId) return <main className="page"><p>No game specified.</p></main>;
   return <DbGameView gameId={gameId} />;
 }
