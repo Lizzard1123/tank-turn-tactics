@@ -17,6 +17,7 @@ export default function Dashboard() {
   const [invite, setInvite] = useState('');
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [finishedOpen, setFinishedOpen] = useState(false);
 
   const loadGames = useCallback(async () => {
     if (!token) return;
@@ -90,6 +91,35 @@ export default function Dashboard() {
     }
   }
 
+  // Shared by the active list and the finished-games expander — the delete rule
+  // (host test games incl. finished ones, plus host lobby games) is identical.
+  function GameRow({ g }: { g: GameSummary }) {
+    return (
+      <>
+        <button
+          className="game-link"
+          onClick={() => navigate(g.status === 'lobby' ? `/lobby/${g.id}` : `/game/${g.id}`)}
+        >
+          <span className="game-name">{g.name}</span>
+          <span className="game-meta">{g.mode} · {g.status} · {g.playerCount} players</span>
+        </button>
+        {g.createdBy === player?.id && (g.mode === 'test' || g.status === 'lobby') && (
+          <button
+            className="game-delete"
+            onClick={() => handleDelete(g.id, g.name)}
+            disabled={deleting === g.id}
+            aria-label={`Delete ${g.name}`}
+          >
+            <Icon html={trashSvg} width={20} height={20} />
+          </button>
+        )}
+      </>
+    );
+  }
+
+  const activeGames = games?.filter((g) => g.status === 'lobby' || g.status === 'active') ?? null;
+  const finishedGames = games?.filter((g) => g.status !== 'lobby' && g.status !== 'active') ?? null;
+
   return (
     <main className="page">
       <p className="row" style={{ justifyContent: 'space-between' }}>
@@ -109,30 +139,35 @@ export default function Dashboard() {
         <h2>Your games</h2>
         {error && <p className="error" role="alert">{error}</p>}
         {games === null && <p>Loading…</p>}
-        {games !== null && games.length === 0 && <p>No games yet — create or join one below.</p>}
+        {activeGames?.length === 0 && !finishedGames?.length && (
+          <p>No games yet — create or join one below.</p>
+        )}
         <ul className="game-list">
-          {games?.map((g) => (
+          {activeGames?.map((g) => (
             <li key={g.id} className="game-row">
-              <button
-                className="game-link"
-                onClick={() => navigate(g.status === 'lobby' ? `/lobby/${g.id}` : `/game/${g.id}`)}
-              >
-                <span className="game-name">{g.name}</span>
-                <span className="game-meta">{g.mode} · {g.status} · {g.playerCount} players</span>
-              </button>
-              {g.createdBy === player?.id && (g.mode === 'test' || g.status === 'lobby') && (
-                <button
-                  className="game-delete"
-                  onClick={() => handleDelete(g.id, g.name)}
-                  disabled={deleting === g.id}
-                  aria-label={`Delete ${g.name}`}
-                >
-                  <Icon html={trashSvg} width={20} height={20} />
-                </button>
-              )}
+              <GameRow g={g} />
             </li>
           ))}
         </ul>
+        {finishedGames && finishedGames.length > 0 && (
+          <details className="finished-games" open={finishedOpen}>
+            <summary
+              data-testid="finished-games-toggle"
+              onClick={(e) => { e.preventDefault(); setFinishedOpen((v) => !v); }}
+            >
+              Finished games ({finishedGames.length})
+            </summary>
+            {finishedOpen && (
+              <ul className="game-list">
+                {finishedGames.map((g) => (
+                  <li key={g.id} className="game-row" data-testid={`finished-game-${g.id}`}>
+                    <GameRow g={g} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </details>
+        )}
       </section>
 
       <section className="card" aria-label="Create game">

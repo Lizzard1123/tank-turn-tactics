@@ -172,4 +172,43 @@ describe('Dashboard', () => {
     await screen.findByText('Real War');
     expect(screen.queryByRole('button', { name: /^delete/i })).not.toBeInTheDocument();
   });
+
+  test('finished games live under a collapsed expander, not the main list', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [
+        { id: 'g1', name: 'Office War', mode: 'play', status: 'active', playerCount: 4, created_at: '', createdBy: 'p2' },
+        { id: 'g2', name: 'Old War', mode: 'play', status: 'finished', playerCount: 4, created_at: '', createdBy: 'p1' },
+      ],
+    });
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    expect(await screen.findByText('Office War')).toBeInTheDocument();
+    expect(screen.queryByText('Old War')).not.toBeInTheDocument();
+    expect(screen.getByTestId('finished-games-toggle')).toHaveTextContent('Finished games (1)');
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('finished-games-toggle'));
+    expect(screen.getByTestId('finished-game-g2')).toHaveTextContent('Old War');
+  });
+
+  test('no finished-games expander when nothing is finished', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [{ id: 'g1', name: 'Office War', mode: 'play', status: 'active', playerCount: 4, created_at: '', createdBy: 'p2' }],
+    });
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByText('Office War');
+    expect(screen.queryByTestId('finished-games-toggle')).not.toBeInTheDocument();
+  });
+
+  test('host can delete a finished test game from inside the expander', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [{ id: 'g3', name: 'Done Test', mode: 'test', status: 'finished', playerCount: 4, created_at: '', createdBy: 'p1' }],
+    });
+    vi.mocked(api.gameDelete).mockResolvedValue({ ok: true });
+    vi.stubGlobal('confirm', () => true);
+    const user = userEvent.setup();
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByText('Finished games (1)');
+    await user.click(screen.getByTestId('finished-games-toggle'));
+    await user.click(screen.getByRole('button', { name: /^delete/i }));
+    expect(api.gameDelete).toHaveBeenCalledWith('tok-1', 'g3');
+  });
 });
