@@ -6,7 +6,7 @@
     "app"
   ],
   "scripts": {
-    "test": "vitest run"
+    "test": "npm test --workspaces --if-present"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^2.1.9",
