@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import { Icon, heartSvg, boltSvg, targetSvg } from '../lib/icons';
 
 export default function Instructions() {
   return (
@@ -15,11 +16,11 @@ export default function Instructions() {
 
       <div className="panel">
         <h2>Stats</h2>
-        <p><strong>❤️ Health (HP)</strong> — starts at 3. Never heals. At 0,
+        <p><Icon html={heartSvg} width={14} height={14} className="stat-icon" /> Health (HP) — starts at 3. Never heals. At 0,
         you die and join the Jury.</p>
-        <p><strong>⚡ Action Points (AP)</strong> — used for everything.
+        <p><Icon html={boltSvg} width={14} height={14} className="stat-icon" /> Action Points (AP) — used for everything.
         Everyone starts at 0 and gains AP every day.</p>
-        <p><strong>🎯 Range</strong> — the distance (in grid steps) at which
+        <p><Icon html={targetSvg} width={14} height={14} className="stat-icon" /> Range — the distance (in grid steps) at which
         you can interact with other players. Starts at 2.</p>
       </div>
 
