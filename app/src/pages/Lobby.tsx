@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { gameGet, gameStart, gameUpdate, type GameDetail, type GameConfigPayload } from '../lib/api';
+import { gameGet, gameStart, gameUpdate, type GameDetail } from '../lib/api';
 
 const BOT_DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
 

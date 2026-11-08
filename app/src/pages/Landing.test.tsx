@@ -1,5 +1,4 @@
-import { describe, test, expect } from 'vitest';
-import '@testing-library/jest-dom/vitest';
+import { test, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Landing from './Landing';

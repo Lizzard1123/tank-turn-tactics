@@ -1,6 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, act } from '@testing-library/react';
 import { AuthProvider, useAuth } from './auth';
 import * as api from './api';
 

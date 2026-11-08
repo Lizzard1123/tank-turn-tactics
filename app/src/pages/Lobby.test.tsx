@@ -23,7 +23,9 @@ vi.mock('../lib/auth', () => ({
 
 beforeEach(() => vi.clearAllMocks());
 
-const LOBBY_GAME = {
+import type { GameDetail } from '../lib/api';
+
+const LOBBY_GAME: GameDetail = {
   game: {
     id: 'g1', name: 'Bot Arena', mode: 'test', status: 'lobby',
     config: { board: 8, startingHp: 3, startingAp: 0, baseRange: 2, apPerDay: 1, upgradeCost: 2 },
