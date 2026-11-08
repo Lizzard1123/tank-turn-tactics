@@ -546,6 +546,32 @@ input[type='radio'] {
   color: var(--olive);
 }
 
+.flag-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  margin: 16px 0;
+}
+
+.flag {
+  width: 96px;
+  height: 56px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  border: 2px solid var(--ink);
+  box-shadow: var(--shadow);
+}
+
+.flag-hint {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--olive);
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;

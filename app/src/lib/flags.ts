@@ -1,6 +1,7 @@
 // Deterministic, emoji-free world flags generated from a player id.
 // Each flag is an inline SVG string (no external assets, no npm dependency).
 // Suitable for use as an <image href="data:image/svg+xml;utf8,…"> source.
+// The same id always yields the same flag, so opponents see a consistent marker.
 
 const PALETTE = [
   '#c8471f', // signal
@@ -77,4 +78,9 @@ export function flagSvg(playerId: string, size = 120): string {
   const body = layouts[Math.abs(h) % layouts.length];
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${hh}" viewBox="0 0 ${w} ${hh}">${body}</svg>`;
+}
+
+// Profile-page alias (E6 call sites): same deterministic flag at 96px.
+export function flagForPlayerId(playerId: string): string {
+  return flagSvg(playerId, 96);
 }
