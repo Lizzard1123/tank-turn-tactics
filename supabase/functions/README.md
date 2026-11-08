@@ -21,8 +21,8 @@ supabase start
 supabase functions serve --env-file ./supabase/.env.local
 ```
 
-`.env.local` needs `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — print
-them with `supabase status`.
+`.env.local` needs `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` — copy
+`supabase/.env.example` and print the values with `supabase status`.
 
 ## Deploy
 
