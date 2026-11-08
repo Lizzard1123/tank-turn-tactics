@@ -273,24 +273,25 @@ function DbGameView({ gameId }: DbGameProps) {
   // AP countdown: seconds until the next AP point. Only shown for games with
   // a client-known interval (apIntervalMinutes > 0). Daily server-managed AP
   // (0) has no client-visible schedule, so the timer hides.
+  // Derived from the LIVE state (never the scrubbed display state) so
+  // scrubbing through history does not reset the countdown.
+  const apIntervalMinutes = state?.config.apIntervalMinutes ?? 0;
+  const liveClockMinutes = state?.tickClockMinutes ?? 0;
   const [apRemaining, setApRemaining] = useState<number | null>(null);
   useEffect(() => {
-    if (!displayState) return;
-    const intervalMinutes = displayState.config.apIntervalMinutes;
-    if (!intervalMinutes || intervalMinutes <= 0) {
+    if (!apIntervalMinutes || apIntervalMinutes <= 0) {
       setApRemaining(null);
       return;
     }
-    const intervalSeconds = intervalMinutes * 60;
-    const elapsedSeconds = (displayState.tickClockMinutes ?? 0) * 60;
-    let remaining = intervalSeconds - (elapsedSeconds % intervalSeconds);
+    const intervalSeconds = apIntervalMinutes * 60;
+    let remaining = intervalSeconds - (liveClockMinutes * 60) % intervalSeconds;
     if (remaining <= 0) remaining = intervalSeconds;
     setApRemaining(remaining);
     const id = setInterval(() => {
       setApRemaining((t) => (t == null || t <= 1 ? intervalSeconds : t - 1));
     }, 1000);
     return () => clearInterval(id);
-  }, [displayState]);
+  }, [apIntervalMinutes, liveClockMinutes]);
 
   // dead player goes to the jury screen
   useEffect(() => {

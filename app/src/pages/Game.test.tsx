@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Game from './Game';
 import * as api from '../lib/api';
@@ -106,6 +106,26 @@ describe('Game page', () => {
     fireEvent.click(screen.getByTestId('btn-move'));
     fireEvent.click(screen.getByTestId('tap-legal'));
     await waitFor(() => expect(screen.getByTestId('ap-counter')).toHaveTextContent('1 AP'));
+  });
+
+  test('AP countdown keeps ticking through history scrubbing (does not reset)', async () => {
+    try {
+      vi.useFakeTimers();
+      setup({
+        history: [
+          { seq: 1, type: 'daily_tick', actorId: 'system', createdAt: 't', payload: { apGained: 1, elapsedMinutes: 1 }, generation: 1 },
+        ],
+      });
+      // live state: 2-minute interval → 120s countdown
+      expect(screen.getByTestId('ap-timer')).toHaveTextContent(/120/);
+      // scrub to the ticked state (its clock says 1 minute elapsed → a buggy
+      // displayState-derived countdown would reset to 60)
+      fireEvent.click(screen.getByRole('button', { name: /view state after event 1/i }));
+      act(() => { vi.advanceTimersByTime(10_000); });
+      expect(screen.getByTestId('ap-timer')).toHaveTextContent(/110/);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('finished game shows winner banner and dashboard link', () => {
