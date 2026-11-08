@@ -7,11 +7,18 @@ interface HistoryScrubberProps {
   onFork: (toSeq: number) => void;
   onExit: () => void;
   onScrub: (seq: number) => void;
+  // Recap replay: when provided, "Replay from here" animates the events
+  // after the current scrub position (the parent drives the timer).
+  onReplay?: () => void;
+  replaying?: boolean;
+  onStop?: () => void;
 }
 
 // Test-mode time machine: scrub through past event seqs; the creator can
-// fork the game to any past point.
-export default function HistoryScrubber({ events, canFork, onFork, onExit, onScrub }: HistoryScrubberProps) {
+// fork the game to any past point, and anyone can watch an animated replay.
+export default function HistoryScrubber({
+  events, canFork, onFork, onExit, onScrub, onReplay, replaying = false, onStop,
+}: HistoryScrubberProps) {
   const [seq, setSeq] = useState(0);
 
   function change(value: string) {
@@ -34,6 +41,12 @@ export default function HistoryScrubber({ events, canFork, onFork, onExit, onScr
       />
       <div className="scrubber-actions">
         <button onClick={onExit}>Back to live</button>
+        {onReplay && !replaying && (
+          <button onClick={onReplay} data-testid="replay-btn">Replay from here</button>
+        )}
+        {onReplay && replaying && (
+          <button className="danger" onClick={onStop} data-testid="stop-replay-btn">Stop replay</button>
+        )}
         {canFork && (
           <button className="danger" disabled={seq === events.length} onClick={() => onFork(seq)}>
             Rewind to here

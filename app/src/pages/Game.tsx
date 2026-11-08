@@ -39,6 +39,8 @@ function LocalGameView() {
   const state = useLocalGameState();
   const [mode, setMode] = useState<BoardMode>('none');
   const [toast, setToast] = useState<string | null>(null);
+  const [scrubIdx, setScrubIdx] = useState<number | null>(null);
+  const [replaying, setReplaying] = useState(false);
 
   // AP countdown: the local drip runs every 30s (started at test-mode mount).
   const [apRemaining, setApRemaining] = useState(30);
@@ -47,12 +49,38 @@ function LocalGameView() {
     return () => clearInterval(id);
   }, []);
 
+  // Recap replay: step the scrub position forward ~1 event/sec until live.
+  const replayLen = game?.history.length ?? 0;
+  useEffect(() => {
+    if (!replaying) return;
+    const id = setInterval(() => {
+      setScrubIdx((idx) => {
+        if (idx === null || idx >= replayLen) {
+          setReplaying(false);
+          return null;
+        }
+        return idx + 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [replaying, replayLen]);
+
   if (!game || !state) {
     return <main className="page"><p>Local test game not initialized.</p></main>;
   }
 
   const me = 'me';
   const mine = state.players[me];
+  const scrubbing = scrubIdx !== null;
+  const displayState = scrubbing ? game.replayTo(scrubIdx) : state;
+  const exitScrub = () => { setReplaying(false); setScrubIdx(null); };
+  const viewEvent = (seq: number) => {
+    const idx = game.history.findIndex((e) => e.seq === seq);
+    if (idx < 0) return;
+    setReplaying(false);
+    setScrubIdx(idx + 1);
+  };
+
   const inRangePlayers = Object.values(state.players).filter(
     (p) => p.id !== me && mine && mine.hp > 0 && manhattan(mine.pos, p.pos) <= mine.range,
   );
@@ -78,23 +106,23 @@ function LocalGameView() {
         <Link to="/dashboard" className="link-button">Exit</Link>
       </header>
 
-      {state.winner && (
+      {displayState.winner && !scrubbing && (
         <div className="banner" data-testid="winner-banner">
           <Icon html={trophySvg} className="winner-icon" width={16} height={16} />{' '}
-          {state.players[state.winner]?.name ?? state.winner} wins!{' '}
+          {displayState.players[displayState.winner]?.name ?? displayState.winner} wins!{' '}
           <Link to="/dashboard">Back to dashboard</Link>
         </div>
       )}
 
       {toast && <p className="error" role="alert">{toast}</p>}
 
-      {!state.winner && mine && mine.hp > 0 && (
+      {!scrubbing && !state.winner && mine && mine.hp > 0 && (
         <ActionBar state={state} me={me} mode={mode} onAction={doAction} onModeChange={setMode} />
       )}
 
       <Board
-        state={state}
-        selectedMode={mode}
+        state={displayState}
+        selectedMode={scrubbing ? 'none' : mode}
         me={me}
         avatars={{}}
         onCellTap={(pos) => {
@@ -113,14 +141,14 @@ function LocalGameView() {
         }}
       />
 
-      {!state.winner && mine && mine.hp > 0 && (
+      {!scrubbing && !state.winner && mine && mine.hp > 0 && (
         <section className="card" aria-label="Your tank">
           <h2>Your tank</h2>
           <TankCard player={mine} isMe />
         </section>
       )}
 
-      {!state.winner && inRangePlayers.length > 0 && mine && mine.hp > 0 && (
+      {!scrubbing && !state.winner && inRangePlayers.length > 0 && mine && mine.hp > 0 && (
         <section className="card" aria-label="In range">
           <h2>In range</h2>
           {inRangePlayers.map((p) => (
@@ -137,9 +165,22 @@ function LocalGameView() {
         </section>
       )}
 
+      {game.history.length > 0 && (
+        <HistoryScrubber
+          events={game.history}
+          canFork={false}
+          onFork={() => {}}
+          onExit={exitScrub}
+          onScrub={(idx) => setScrubIdx(idx === game.history.length ? null : idx)}
+          onReplay={() => { if (!scrubbing) setScrubIdx(0); setReplaying(true); }}
+          replaying={replaying}
+          onStop={exitScrub}
+        />
+      )}
+
       <section className="card" aria-label="Events">
         <h2>Events</h2>
-        <EventFeed log={state.log} />
+        <EventFeed log={displayState.log} onView={viewEvent} />
       </section>
     </main>
   );
@@ -175,6 +216,30 @@ function DbGameView({ gameId }: DbGameViewProps) {
 
   const displayState: GameState | null = scrubbedState ?? state;
   const scrubbing = scrubIdx !== null;
+
+  // Recap replay: step the scrub position forward ~1 event/sec until live.
+  const [replaying, setReplaying] = useState(false);
+  useEffect(() => {
+    if (!replaying) return;
+    const id = setInterval(() => {
+      setScrubIdx((idx) => {
+        if (idx === null || idx >= currentGenEvents.length) {
+          setReplaying(false);
+          return null;
+        }
+        return idx + 1;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [replaying, currentGenEvents]);
+
+  const exitScrub = () => { setReplaying(false); setScrubIdx(null); };
+  const viewEvent = (seq: number) => {
+    const idx = currentGenEvents.findIndex((e) => e.seq === seq);
+    if (idx < 0) return;
+    setReplaying(false);
+    setScrubIdx(idx + 1);
+  };
 
   // AP countdown: seconds until the next AP point. Only shown for games with
   // a client-known interval (apIntervalMinutes > 0). Daily server-managed AP
@@ -342,19 +407,22 @@ function DbGameView({ gameId }: DbGameViewProps) {
         </section>
       )}
 
-      {detail?.mode === 'test' && currentGenEvents.length > 0 && (
+      {currentGenEvents.length > 0 && (detail?.mode === 'test' || scrubbing || replaying) && (
         <HistoryScrubber
           events={currentGenEvents}
           canFork={canFork}
           onFork={(seq) => void forkTo(seq)}
-          onExit={() => setScrubIdx(null)}
+          onExit={exitScrub}
           onScrub={(idx) => setScrubIdx(idx === currentGenEvents.length ? null : idx)}
+          onReplay={() => { if (!scrubbing) setScrubIdx(0); setReplaying(true); }}
+          replaying={replaying}
+          onStop={exitScrub}
         />
       )}
 
       <section className="card" aria-label="Events">
         <h2>Events</h2>
-        <EventFeed log={displayState.log} />
+        <EventFeed log={displayState.log} onView={viewEvent} />
       </section>
     </main>
   );

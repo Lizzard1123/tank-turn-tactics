@@ -39,6 +39,8 @@ function defaultSpecs(): PlayerSpec[] {
 
 export interface LocalGame {
   state: () => GameState;
+  history: GameEvent[];
+  replayTo(count: number): GameState;
   subscribe(listener: () => void): () => void;
   startApDrip(intervalMs: number, onTick?: () => void): void;
   stopApDrip(): void;
@@ -58,36 +60,45 @@ export function createLocalGame(config?: LocalGameConfig): LocalGame {
   };
 
   let state = createInitialState(cfg, defaultSpecs());
+  const initialState = state;
+  const history: GameEvent[] = [];
   const listeners = new Set<() => void>();
   let timer: ReturnType<typeof setInterval> | null = null;
 
   const notify = () => { for (const listener of listeners) listener(); };
 
-  function apply(type: ActionType, payload: Record<string, unknown>) {
+  function applyEventLocal(type: ActionType, actorId: string, payload: Record<string, unknown>) {
     const event: GameEvent = {
       seq: state.seq + 1,
       type,
-      actorId: ME_ID,
+      actorId,
       createdAt: new Date().toISOString(),
       payload,
     };
     state = applyEvent(state, event);
+    history.push(event);
     notify();
+  }
+
+  function apply(type: ActionType, payload: Record<string, unknown>) {
+    applyEventLocal(type, ME_ID, payload);
+  }
+
+  // Rebuild the state after the first `count` events (0 = initial state).
+  // Used by the history scrubber / recap replay.
+  function replayTo(count: number): GameState {
+    let s = initialState;
+    for (const e of history.slice(0, Math.max(0, Math.min(count, history.length)))) {
+      s = applyEvent(s, e);
+    }
+    return s;
   }
 
   // Client-side AP drip: every intervalMs all alive players gain apPerDay AP.
   function startApDrip(intervalMs: number, onTick?: () => void) {
     stopApDrip();
     timer = setInterval(() => {
-      const event: GameEvent = {
-        seq: state.seq + 1,
-        type: 'daily_tick',
-        actorId: 'system',
-        createdAt: new Date().toISOString(),
-        payload: { apGained: cfg.apPerDay },
-      };
-      state = applyEvent(state, event);
-      notify();
+      applyEventLocal('daily_tick', 'system', { apGained: cfg.apPerDay });
       onTick?.();
     }, intervalMs);
   }
@@ -98,6 +109,8 @@ export function createLocalGame(config?: LocalGameConfig): LocalGame {
 
   return {
     state: () => state,
+    history,
+    replayTo,
     subscribe: (listener) => { listeners.add(listener); return () => listeners.delete(listener); },
     startApDrip,
     stopApDrip,
