@@ -37,7 +37,7 @@ export default function Play() {
     return (
       <main className="page">
         <p className="error" role="alert">{error}</p>
-        <button type="button" onClick={() => navigate('/games')}>Go to dashboard</button>
+        <button type="button" onClick={() => navigate('/games')}>Go to games</button>
       </main>
     );
   }

@@ -69,7 +69,7 @@ describe('Play (canonical game entry)', () => {
     expect(api.gameJoin).not.toHaveBeenCalled();
   });
 
-  test('join failure shows an error with a dashboard escape hatch', async () => {
+  test('join failure shows an error with a games escape hatch', async () => {
     vi.mocked(api.gameJoin).mockRejectedValue(new Error('game not found'));
     renderAt();
     const alert = await screen.findByRole('alert');
