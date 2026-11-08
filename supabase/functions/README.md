@@ -27,13 +27,20 @@ supabase functions serve --env-file ./supabase/.env.local
 ## Deploy
 
 ```bash
-supabase link --project-ref <project-ref>
+supabase link --project-ref sifbpmpxyiycbupntobl
 supabase db push
-supabase functions deploy register,signin,action,game-create,game-join,game-start,game-list,game-get,tick,bot-fill
+supabase functions deploy register,signin,action,game-create,game-join,game-start,game-list,game-get,game-update,tick,bot-fill
 supabase secrets set CRON_SECRET=<random>
 ```
 
-After linking, update the `<project-ref>` placeholder in
-`supabase/migrations/0003_cron.sql` to your real project ref and re-run
-`supabase db push` (or run the cron.schedule statement manually in the SQL
-editor).
+**GitHub integration:** this project is linked to the GitHub repo via the
+Supabase dashboard — pushes to `main` apply new migrations and deploy edge
+functions automatically. 0003's cron URL is already set to this project.
+
+The cron schedule in 0003 presents `CRON_SECRET` (set with
+`supabase secrets set`) as the bearer token; tick checks it against the
+`app.cron_secret` database setting:
+
+```sql
+alter database postgres set app.cron_secret = '<same value as CRON_SECRET>';
+```
