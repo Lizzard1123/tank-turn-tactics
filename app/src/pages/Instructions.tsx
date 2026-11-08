@@ -45,6 +45,24 @@ export default function Instructions() {
       </div>
 
       <div className="panel">
+        <h2>Bots</h2>
+        <p>Test-mode games fill empty seats with bots. Each living bot spends
+        its Action Points during the AP drip, using planBotAction:</p>
+        <p><strong>Easy:</strong> acts about 40% of the time. When it acts,
+        it attacks a random in-range target half the time, otherwise moves to
+        a random free square.</p>
+        <p><strong>Medium:</strong> acts about 80% of the time. Attacks a
+        random in-range target whenever one is present; otherwise sometimes
+        upgrades range (30% chance when AP allows), else moves randomly.</p>
+        <p><strong>Hard:</strong> acts about 95% of the time. Attacks the
+        lowest-HP player in range, gives AP to a target when flush, upgrades
+        range when AP allows, and otherwise moves toward the nearest player.</p>
+        <p><strong>Bot AI is a placeholder.</strong> Current behavior is a
+        simple deterministic stub — real bot AI will be designed later and is
+        not part of this plan.</p>
+      </div>
+
+      <div className="panel">
         <h2>Winning</h2>
         <p>Survive to the end and win. Alliances burn bright and betrayals
         burn deeper — trust carefully.</p>
