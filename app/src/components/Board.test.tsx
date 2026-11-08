@@ -10,7 +10,7 @@ const state = (overrides?: Partial<GameState>): GameState => ({
     p1: { id: 'p1', name: 'me', pos: { x: 0, y: 0 }, hp: 3, ap: 1, range: 2, isBot: false, botDifficulty: null },
     p2: { id: 'p2', name: 'foe', pos: { x: 2, y: 0 }, hp: 3, ap: 1, range: 2, isBot: false, botDifficulty: null },
   },
-  order: ['p1', 'p2'], pendingVotes: [], winner: null, log: [],
+  order: ['p1', 'p2'], pendingVotes: [], jury: [], winner: null, log: [],
   ...overrides,
 });
 

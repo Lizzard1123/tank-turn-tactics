@@ -40,7 +40,7 @@ const BASE_STATE = {
     p1: { id: 'p1', name: 'me', pos: { x: 0, y: 0 }, hp: 3, ap: 5, range: 2, isBot: false, botDifficulty: null },
     p2: { id: 'p2', name: 'foe', pos: { x: 3, y: 0 }, hp: 3, ap: 1, range: 2, isBot: false, botDifficulty: null },
   },
-  order: ['p1', 'p2'], pendingVotes: [], winner: null, log: [],
+  order: ['p1', 'p2'], pendingVotes: [], jury: [], winner: null, log: [],
 };
 
 function HookProbe() {
@@ -95,10 +95,9 @@ describe('useGameEvents', () => {
     expect(call).toBeTruthy();
     const cb = call![2] as (payload: unknown) => void;
 
-    let refreshed = false;
-    api.gameGet.mockImplementation(async () => { refreshed = true; return vi.mocked(api.gameGet).getMockImplementation()!.call(null); });
+    const callsBefore = vi.mocked(api.gameGet).mock.calls.length;
     act(() => cb({}));
     await act(async () => {});
-    expect(refreshed).toBe(true);
+    expect(vi.mocked(api.gameGet).mock.calls.length).toBeGreaterThan(callsBefore);
   });
 });
