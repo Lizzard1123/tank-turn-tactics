@@ -16,7 +16,7 @@ export default function Lobby() {
   // editable knobs (test-mode lobby only)
   const [board, setBoard] = useState(8);
   const [startingHp, setStartingHp] = useState(3);
-  const [startingAp, setStartingAp] = useState(0);
+  const [startingAp, setStartingAp] = useState(4);
   const [baseRange, setBaseRange] = useState(2);
   const [apPerDay, setApPerDay] = useState(1);
   const [upgradeCost, setUpgradeCost] = useState(2);
