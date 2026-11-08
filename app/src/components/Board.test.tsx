@@ -171,4 +171,25 @@ describe('Board', () => {
       lastEvent={{ seq: 5, type: 'attack', actorId: 'ghost', createdAt: 't', payload: { targetId: 'p2' } }} />);
     expect(screen.queryByTestId('fx-attack')).not.toBeInTheDocument();
   });
+
+  test('fx geometry: bullet layer translates to the actor cell center; delta lands on the target cell', () => {
+    const attack = render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}} lastEvent={attackEvent()} />);
+    const fx = screen.getByTestId('fx-attack');
+    // the translated bullet layer sits inside the fx layer, positioned at the
+    // actor cell CENTER: p1 at (0,0) → 0*40 + 40/2 = 20px
+    const bulletLayer = fx.querySelector('g');
+    expect(bulletLayer).not.toBeNull();
+    expect(bulletLayer!.getAttribute('style')).toContain('translate(20px, 20px)');
+    // bullet flies the (to − from) delta: p2 at (2,0) → +80px x, +0px y
+    const bullet = fx.querySelector('.fx-bullet') as SVGElement;
+    expect(bullet.style.getPropertyValue('--fx-dx')).toBe('80px');
+    expect(bullet.style.getPropertyValue('--fx-dy')).toBe('0px');
+    attack.unmount();
+
+    render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}}
+      lastEvent={{ seq: 7, type: 'give_ap', actorId: 'p1', createdAt: 't', payload: { targetId: 'p2', amount: 1 } }} />);
+    const giveFx = screen.getByTestId('fx-give_ap');
+    expect(giveFx.querySelector('g')!.getAttribute('style')).toContain('translate(20px, 20px)');
+    expect((giveFx.querySelector('.fx-bullet') as SVGElement).style.getPropertyValue('--fx-dx')).toBe('80px');
+  });
 });

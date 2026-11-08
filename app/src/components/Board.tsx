@@ -173,15 +173,25 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
           >
             {(fx.kind === 'attack' || fx.kind === 'give_ap') && (
               <>
-                <circle
-                  r={5}
-                  fill={fx.kind === 'attack' ? '#e33' : '#3c3'}
-                  className="fx-bullet"
+                {/* bullet layer is translated to the actor cell CENTER; the
+                    keyframe adds only the (to − from) delta via --fx-dx/dy */}
+                <g
                   style={{
-                    ['--fx-dx' as string]: `${(fx.to!.x - fx.from.x) * CELL}px`,
-                    ['--fx-dy' as string]: `${(fx.to!.y - fx.from.y) * CELL}px`,
+                    transform: `translate(${fx.from.x * CELL + CELL / 2}px, ${fx.from.y * CELL + CELL / 2}px)`,
                   }}
-                />
+                >
+                  <circle
+                    r={5}
+                    fill={fx.kind === 'attack' ? '#e33' : '#3c3'}
+                    className="fx-bullet"
+                    style={{
+                      ['--fx-dx' as string]: `${(fx.to!.x - fx.from.x) * CELL}px`,
+                      ['--fx-dy' as string]: `${(fx.to!.y - fx.from.y) * CELL}px`,
+                    }}
+                  />
+                </g>
+                {/* victim ring stays OUTSIDE the translated layer — absolute
+                    coordinates (the layer translate would displace it) */}
                 <circle
                   cx={fx.to!.x * CELL + CELL / 2}
                   cy={fx.to!.y * CELL + CELL / 2}
