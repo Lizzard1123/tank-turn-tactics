@@ -2,6 +2,16 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import { applyEvent, planBotAction, type GameEvent, type GameState } from '../_shared/engine.ts';
 
+// AP distribution flow (test mode):
+//   - game-start seeds last_tick_at = null, so the first tick invocation fires
+//     immediately (dueForTick returns true on a null last_tick_at).
+//   - thereafter a tick is due once ap_interval_minutes has elapsed.
+//   - each tick appends a daily_tick event that gives config.apPerDay AP to every
+//     alive player (engine reducer, daily_tick branch), then last_tick_at is
+//     persisted below after tickGame returns.
+// Note: AP only flows when this function is actually invoked on a schedule
+// (pg_cron / cron trigger); that wiring is out of scope here. With no scheduled
+// invocations, no AP distributes — that is an ops/configuration gap, not a code gap.
 function dueForTick(game: { mode: string; daily_ap_time: string; ap_interval_minutes: number | null; last_tick_at: string | null }): boolean {
   const now = new Date();
   if (game.mode === 'play') {

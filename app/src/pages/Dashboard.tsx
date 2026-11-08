@@ -45,8 +45,8 @@ export default function Dashboard() {
     setError(null);
     try {
       const config = mode === 'test'
-        ? { board: 8, startingHp: 3, startingAp: 0, baseRange: 2, apPerDay: 1, upgradeCost: 2, apIntervalMinutes: 5 }
-        : { board: 8, startingHp: 3, startingAp: 0, baseRange: 2, apPerDay: 1, upgradeCost: 2 };
+        ? { board: 8, startingHp: 3, startingAp: 4, baseRange: 2, apPerDay: 1, upgradeCost: 2, apIntervalMinutes: 5 }
+        : { board: 8, startingHp: 3, startingAp: 4, baseRange: 2, apPerDay: 1, upgradeCost: 2 };
       const r = await gameCreate(token, { name: name.trim(), mode, config });
       setCreated(r);
     } catch (err) {

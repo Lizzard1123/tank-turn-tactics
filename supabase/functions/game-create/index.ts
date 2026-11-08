@@ -3,7 +3,7 @@ import { admin } from '../_shared/client.ts';
 import { getPlayer } from '../_shared/auth.ts';
 
 const CONFIG_DEFAULTS = {
-  seed: 0, board: 8, startingHp: 3, startingAp: 0, baseRange: 2,
+  seed: 0, board: 8, startingHp: 3, startingAp: 4, baseRange: 2,
   apPerDay: 1, upgradeCost: 2, apIntervalMinutes: 0,
 };
 
