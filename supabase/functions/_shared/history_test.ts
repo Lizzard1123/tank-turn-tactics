@@ -164,3 +164,19 @@ Deno.test('effectiveForks: no heal without a fork_seq or below the first parent 
   assertEquals(effectiveForks([], 1, 5), []);
   assertEquals(effectiveForks([], 0, null), []);
 });
+
+Deno.test('canonicalHistory: a rewind below an earlier fork cut truncates every earlier generation (no duplicate seqs)', () => {
+  // gen1 ran 1..5; fork@5 → gen2 ran 6..8; then a rewind to seq 3 (a GEN-1
+  // event) → gen3 continues at 4. Cumulative cuts: gen1 must end at 3, so
+  // canonical history is 1,2,3 then gen3's 4,5 — seqs 4,5 must not appear twice.
+  const rows = [
+    row(1, 1, 'g1'), row(2, 1, 'g1'), row(3, 1, 'g1-cut'),
+    row(4, 1, 'DISCARDED'), row(5, 1, 'DISCARDED'),
+    row(6, 2, 'g2'), row(7, 2, 'g2'), row(8, 2, 'DISCARDED'),
+    row(4, 3, 'g3'), row(5, 3, 'g3'),
+  ];
+  const out = canonicalHistory(rows, [fork(1, 5), fork(2, 3)]);
+  const seqs = out.map((r) => r.seq);
+  assertEquals(new Set(seqs).size, seqs.length);
+  assertEquals(seqs, [1, 2, 3, 4, 5]);
+});

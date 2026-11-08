@@ -24,6 +24,16 @@ export interface ForkPoint {
 export function canonicalHistory<T extends HistoryRow>(rows: T[], forks: ForkPoint[]): T[] {
   const cutByGen = new Map<number, number>();
   for (const f of forks) cutByGen.set(f.parent_generation, f.to_seq);
+  // A later fork that rewinds BELOW an earlier fork's cut also truncates
+  // every EARLIER generation (the timeline flows through them). Propagate
+  // the minimum cut backwards so canonical history never emits duplicate
+  // seqs across generations.
+  const gens = [...cutByGen.keys()].sort((a, b) => a - b);
+  let running = Infinity;
+  for (let i = gens.length - 1; i >= 0; i--) {
+    running = Math.min(running, cutByGen.get(gens[i])!);
+    cutByGen.set(gens[i], running);
+  }
   return rows
     .filter((r) => {
       const cut = cutByGen.get(r.generation);
