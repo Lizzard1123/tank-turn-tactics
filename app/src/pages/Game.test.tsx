@@ -36,6 +36,7 @@ function setup(hookOverride?: Record<string, unknown>) {
   vi.mocked(useGameEvents).mockReturnValue({
     state: STATE,
     events: [],
+    history: [],
     me: 'p1',
     detail: { id: 'g1', name: 'g', mode: 'test', status: 'active', config: STATE.config, createdBy: 'p1', inviteCode: 'i', generation: 1, forkSeq: null },
     loading: false,
@@ -102,5 +103,33 @@ describe('Game page', () => {
       state: { ...STATE, players: { ...STATE.players, p1: { ...STATE.players.p1, hp: 0 } } },
     });
     expect(screen.getByText('JURY PAGE')).toBeInTheDocument();
+  });
+
+  test('history scrubber renders in test mode and rewind posts fork', async () => {
+    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4, state: STATE });
+    const refresh = vi.fn();
+    setup({
+      history: [
+        { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
+        { seq: 2, type: 'move', actorId: 'p2', createdAt: 't', payload: { to: { x: 4, y: 4 } }, generation: 1 },
+      ],
+      refresh,
+    });
+    expect(screen.getByTestId('history-scrubber')).toBeInTheDocument();
+    const slider = screen.getByRole('slider');
+    fireEvent.change(slider, { target: { value: '1' } });
+    fireEvent.click(screen.getByRole('button', { name: /rewind/i }));
+    await waitFor(() =>
+      expect(vi.mocked(api.action)).toHaveBeenCalledWith('tok-1', 'g1', 'fork', { toSeq: 1 }),
+    );
+    expect(refresh).toHaveBeenCalled();
+  });
+
+  test('no rewind button for non-creators', () => {
+    setup({
+      detail: { id: 'g1', name: 'g', mode: 'test', status: 'active', config: STATE.config, createdBy: 'other', inviteCode: 'i', generation: 1, forkSeq: null },
+    });
+    expect(screen.getByTestId('history-scrubber')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /rewind/i })).not.toBeInTheDocument();
   });
 });

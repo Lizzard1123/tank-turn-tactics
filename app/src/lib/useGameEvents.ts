@@ -5,7 +5,8 @@ import { supabase } from './supabaseClient';
 
 export interface UseGameEvents {
   state: GameState | null;
-  events: GameEvent[];
+  events: GameEvent[];                       // authoritative tail
+  history: Array<GameEvent & { generation?: number }>; // full record for the scrubber
   me: PlayerId | null;
   detail: GameDetail['game'] | null;
   loading: boolean;
@@ -19,6 +20,7 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
   const [detail, setDetail] = useState<GameDetail['game'] | null>(null);
   const [state, setState] = useState<GameState | null>(null);
   const [events, setEvents] = useState<GameEvent[]>([]);
+  const [history, setHistory] = useState<Array<GameEvent & { generation?: number }>>([]);
   const [me, setMe] = useState<PlayerId | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +40,7 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
       setDetail(d.game);
       setState(merged);
       setEvents(tail);
+      setHistory(d.history as Array<GameEvent & { generation?: number }>);
       setMe(d.me as PlayerId);
       setError(null);
     } catch (e) {
@@ -72,5 +75,5 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
     return () => { void supabase.removeChannel(channel); };
   }, [gameId, refresh]);
 
-  return { state, events, me, detail, loading, error, refresh };
+  return { state, events, history, me, detail, loading, error, refresh };
 }
