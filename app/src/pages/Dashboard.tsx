@@ -37,11 +37,16 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!token || !joinParam || joinParam === autoJoined) return;
+    // guests never join from the client — send them to register instead
+    if (isGuest) {
+      navigate('/auth', { replace: true });
+      return;
+    }
     setAutoJoined(joinParam);
     gameJoin(token, joinParam)
       .then((r) => navigate(`/game/${r.gameId}`, { replace: true }))
       .catch((e) => setError(e instanceof Error ? e.message : 'join failed'));
-  }, [token, joinParam, autoJoined, navigate]);
+  }, [token, isGuest, joinParam, autoJoined, navigate]);
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -186,11 +191,15 @@ export default function Dashboard() {
 
       <section className="card" aria-label="Join game">
         <h2>Join game</h2>
-        <form onSubmit={handleJoin}>
-          <label htmlFor="invite-code">Invite code</label>
-          <input id="invite-code" value={invite} onChange={(e) => setInvite(e.target.value)} required />
-          <button type="submit" disabled={busy}>Join</button>
-        </form>
+        {isGuest ? (
+          <p className="muted">Guests can't join shared games — <Link to="/auth">register</Link> first.</p>
+        ) : (
+          <form onSubmit={handleJoin}>
+            <label htmlFor="invite-code">Invite code</label>
+            <input id="invite-code" value={invite} onChange={(e) => setInvite(e.target.value)} required />
+            <button type="submit" disabled={busy}>Join</button>
+          </form>
+        )}
       </section>
     </main>
   );

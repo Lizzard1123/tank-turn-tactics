@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Dashboard from './Dashboard';
@@ -90,7 +90,35 @@ describe('Dashboard', () => {
     } as never);
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
     expect(await screen.findByText(/temporary guest/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /register/i })).toHaveAttribute('href', '/auth');
+    // the guest hint and the join-card hint both link to /auth
+    for (const link of screen.getAllByRole('link', { name: /register/i })) {
+      expect(link).toHaveAttribute('href', '/auth');
+    }
+  });
+
+  test('guests see no join form, just a register hint', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({ games: [] });
+    vi.mocked(useAuth).mockReturnValue({ player: { id: 'p9', name: 'guest-abc' }, token: 'tok-1', isGuest: true, signin: vi.fn(), register: vi.fn(), guestSignin: vi.fn(), signout: vi.fn() } as never);
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByRole('heading', { level: 1, name: /games/i });
+    expect(screen.queryByLabelText(/invite code/i)).not.toBeInTheDocument();
+    const joinHint = screen.getByText(/can't join shared games/i);
+    expect(joinHint).toBeInTheDocument();
+    expect(within(joinHint).getByRole('link', { name: /register/i })).toHaveAttribute('href', '/auth');
+  });
+
+  test('guest opening ?join=CODE is sent to register, join never attempted', async () => {
+    vi.mocked(useAuth).mockReturnValue({ player: { id: 'p9', name: 'guest-abc' }, token: 'tok-1', isGuest: true, signin: vi.fn(), register: vi.fn(), guestSignin: vi.fn(), signout: vi.fn() } as never);
+    render(
+      <MemoryRouter initialEntries={['/dashboard?join=CODE123']}>
+        <Routes>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/auth" element={<div>AUTH PAGE</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText('AUTH PAGE');
+    expect(api.gameJoin).not.toHaveBeenCalled();
   });
 
   test('offers a Profile link', async () => {

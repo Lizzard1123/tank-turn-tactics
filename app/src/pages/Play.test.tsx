@@ -10,13 +10,14 @@ vi.mock('../lib/api', () => ({
 }));
 
 vi.mock('../lib/auth', () => ({
-  useAuth: () => ({
+  useAuth: vi.fn(() => ({
     player: { id: 'p1', name: 'tester' },
     token: 'tok-1',
     isGuest: false,
     signin: vi.fn(), register: vi.fn(), guestSignin: vi.fn(), signout: vi.fn(),
-  }),
+  })),
 }));
+import { useAuth } from '../lib/auth';
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -74,5 +75,18 @@ describe('Play (canonical game entry)', () => {
     renderAt();
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/game not found/);
+  });
+
+  test('guest sees the register prompt instead of joining', async () => {
+    vi.mocked(useAuth).mockReturnValue({
+      player: { id: 'p9', name: 'guest-abc' },
+      token: 'tok-1',
+      isGuest: true,
+      signin: vi.fn(), register: vi.fn(), guestSignin: vi.fn(), signout: vi.fn(),
+    } as never);
+    renderAt();
+    expect(screen.getByText(/can't join shared games/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /register/i })).toHaveAttribute('href', '/auth');
+    expect(api.gameJoin).not.toHaveBeenCalled();
   });
 });
