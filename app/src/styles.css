@@ -146,6 +146,23 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 }
 .link-button:active { transform: none; }
 
+/* real-button look for top-nav links; composed with .link-button on those
+   spots (later block wins the shared properties), while in-feed controls
+   keep .link-button alone as quiet text links */
+.btn {
+  background: var(--paper-raised);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  padding: 0.45rem 0.9rem;
+  text-decoration: none;
+  display: inline-block;
+  min-height: 0;
+  border: none;
+}
+.btn:not(:active):hover { filter: brightness(1.06); }
+.btn:active { transform: translate(3px, 3px); box-shadow: none; }
+
 /* ---------- forms ---------- */
 
 form {

@@ -93,8 +93,8 @@ export default function Dashboard() {
   return (
     <main className="page">
       <p className="row" style={{ justifyContent: 'space-between' }}>
-        <Link to="/" className="link-button">← Home</Link>
-        <Link to="/profile" className="link-button">Profile</Link>
+        <Link to="/" className="link-button btn">← Home</Link>
+        <Link to="/profile" className="link-button btn">Profile</Link>
       </p>
       <h1>Games</h1>
       <p className="subtitle">Hi {player?.name} — start or join a game.</p>

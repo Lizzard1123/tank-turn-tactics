@@ -101,6 +101,14 @@ describe('Dashboard', () => {
     expect(screen.getByRole('link', { name: /profile/i })).toHaveAttribute('href', '/profile');
   });
 
+  test('top nav links render as buttons (.btn class), not underlined text links', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({ games: [] });
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    const home = await screen.findByRole('link', { name: /home/i });
+    expect(home.className).toContain('btn');
+    expect(screen.getByRole('link', { name: /profile/i }).className).toContain('btn');
+  });
+
   test('join with invite code calls api', async () => {
     vi.mocked(api.gameList).mockResolvedValue({ games: [] });
     vi.mocked(api.gameJoin).mockResolvedValue({ gameId: 'g5' });
