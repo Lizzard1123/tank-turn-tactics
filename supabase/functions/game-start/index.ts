@@ -65,7 +65,11 @@ Deno.serve(async (req) => {
     }
 
     const { error: statusErr } = await a.from('games')
-      .update({ status: 'active', last_tick_at: new Date().toISOString() }).eq('id', gameId);
+      .update({
+        status: 'active',
+        // play mode: day clock starts now; test mode: due for an immediate tick
+        last_tick_at: game.mode === 'play' ? new Date().toISOString() : null,
+      }).eq('id', gameId);
     if (statusErr) return json({ error: 'start failed' }, 500);
 
     return json({ ok: true });

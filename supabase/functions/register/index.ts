@@ -1,6 +1,7 @@
-import bcrypt from 'https://deno.land/x/bcrypt@v0.4.1/mod.ts';
+import { hashSync } from 'https://deno.land/x/bcrypt@v0.4.1/mod.ts';
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
+import { signSessionJwt } from '../_shared/jwt.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -13,13 +14,13 @@ Deno.serve(async (req) => {
       return json({ error: 'password must be 8+ chars' }, 400);
 
     const clean = name.trim();
-    const hash = await bcrypt.hash(password);
+    const hash = hashSync(password);
     const { data, error } = await admin()
       .from('players').insert({ name: clean, password_hash: hash })
       .select('id, name').single();
     if (error) return json({ error: 'name taken' }, 409);
 
-    const token = crypto.randomUUID() + crypto.randomUUID();
+    const token = await signSessionJwt(data.id);
     const { error: sessErr } = await admin().from('sessions').insert({
       token, player_id: data.id,
       expires_at: new Date(Date.now() + 30 * 864e5).toISOString(),

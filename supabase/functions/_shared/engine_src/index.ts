@@ -3,5 +3,5 @@ export * from './rng.ts';
 export * from './state.ts';
 export * from './reducer.ts';
 export * from './replay.ts';
-export * from './bots';
+export * from './bots.ts';
 export * from './errors.ts';
