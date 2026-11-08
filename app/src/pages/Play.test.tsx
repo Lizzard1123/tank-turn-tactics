@@ -23,7 +23,7 @@ beforeEach(() => {
   vi.stubEnv('VITE_CANONICAL_INVITE_CODE', 'canon12345');
 });
 
-const ACTIVE = {
+const ACTIVE: api.GameDetail = {
   game: {
     id: 'g1', name: 'Canonical', mode: 'play', status: 'active',
     config: { board: 8, startingHp: 3, startingAp: 0, baseRange: 2, apPerDay: 1, upgradeCost: 2, apIntervalMinutes: 0 },
@@ -31,7 +31,7 @@ const ACTIVE = {
   },
   state: {}, events: [], history: [], members: [], me: 'p1',
 };
-const LOBBY = { ...ACTIVE, game: { ...ACTIVE.game, status: 'lobby' } };
+const LOBBY: api.GameDetail = { ...ACTIVE, game: { ...ACTIVE.game, status: 'lobby' } };
 
 function renderAt() {
   return render(

@@ -30,7 +30,7 @@ function specsFromDetail(state: GameState): PlayerSpec[] {
 
 export default function Game() {
   const { gameId } = useParams<{ gameId: string }>();
-  const { state, history, me, detail, loading, error, refresh } = useGameEvents(gameId);
+  const { state, history, me, detail, avatars, loading, error, refresh } = useGameEvents(gameId);
   const navigate = useNavigate();
   const [mode, setMode] = useState<BoardMode>('none');
   const [toast, setToast] = useState<string | null>(null);
@@ -153,7 +153,7 @@ export default function Game() {
         state={displayState}
         selectedMode={scrubbing ? 'none' : mode}
         me={me}
-        avatars={detail?.avatars}
+        avatars={avatars}
         onCellTap={(pos) => {
           // tap semantics: in move mode a legal cell commits; in attack/give
           // mode an enemy in range commits; otherwise nothing

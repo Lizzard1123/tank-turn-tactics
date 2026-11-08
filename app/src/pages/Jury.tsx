@@ -8,7 +8,7 @@ import { action } from '../lib/api';
 // Screen for eliminated players: watch the board, vote on AP bonuses.
 export default function Jury() {
   const { gameId } = useParams<{ gameId: string }>();
-  const { state, me, detail, refresh } = useGameEvents(gameId);
+  const { state, me, avatars, refresh } = useGameEvents(gameId);
 
   if (!state || !me) {
     return <main className="page"><p>{state ? 'You are not on the jury.' : 'Loading…'}</p></main>;
@@ -64,7 +64,7 @@ export default function Jury() {
         ))}
       </section>
 
-      <Board state={state} selectedMode="none" me={me} avatars={detail?.avatars} onCellTap={() => {}} />
+      <Board state={state} selectedMode="none" me={me} avatars={avatars} onCellTap={() => {}} />
 
       <section className="card" aria-label="Events">
         <h2>Events</h2>

@@ -9,6 +9,7 @@ export interface UseGameEvents {
   history: Array<GameEvent & { generation?: number }>; // full record for the scrubber
   me: PlayerId | null;
   detail: GameDetail['game'] | null;
+  avatars?: Record<string, string>;
   loading: boolean;
   error: string | null;
   refresh: () => Promise<void>;
@@ -18,6 +19,7 @@ export interface UseGameEvents {
 // subscription on the events table that triggers a refetch.
 export function useGameEvents(gameId: string | undefined): UseGameEvents {
   const [detail, setDetail] = useState<GameDetail['game'] | null>(null);
+  const [avatars, setAvatars] = useState<Record<string, string> | undefined>(undefined);
   const [state, setState] = useState<GameState | null>(null);
   const [events, setEvents] = useState<GameEvent[]>([]);
   const [history, setHistory] = useState<Array<GameEvent & { generation?: number }>>([]);
@@ -38,6 +40,7 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
       const tail = d.events as GameEvent[];
       const merged = tail.length > 0 ? applyEvents({ ...base, seq: base.seq }, tail) : base;
       setDetail(d.game);
+      setAvatars(d.avatars);
       setState(merged);
       setEvents(tail);
       setHistory(d.history as Array<GameEvent & { generation?: number }>);
@@ -75,5 +78,5 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
     return () => { void supabase.removeChannel(channel); };
   }, [gameId, refresh]);
 
-  return { state, events, history, me, detail, loading, error, refresh };
+  return { state, events, history, me, detail, avatars, loading, error, refresh };
 }
