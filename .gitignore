@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.superpowers/
+.env
+.env.local
+supabase/.env.local
+test-results/
+playwright-report/
