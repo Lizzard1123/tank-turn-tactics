@@ -21,6 +21,9 @@ Deno.serve(async (req) => {
     if (!game) return json({ error: 'game not found' }, 404);
     if (game.mode === 'test') return json({ error: 'test games are private' }, 403);
 
+    // guests (anonymous sign-ins) must not enter shared invite-code games
+    if (me.isAnonymous) return json({ error: 'register to join shared games' }, 403);
+
     // already a member? return the game either way (Play is idempotent)
     const { data: membership } = await a.from('game_players')
       .select('player_id').eq('game_id', game.id).eq('player_id', me.id).maybeSingle();

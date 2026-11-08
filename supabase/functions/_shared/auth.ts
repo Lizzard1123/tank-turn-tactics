@@ -1,13 +1,15 @@
 import type { SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-export interface AuthedPlayer { id: string; name: string }
+export interface AuthedPlayer { id: string; name: string; isAnonymous: boolean }
 
 // --- GoTrue JWT verification against the injected SUPABASE_JWKS ---
 
-function b64urlDecode(s: string): Uint8Array {
+function b64urlDecode(s: string): Uint8Array<ArrayBuffer> {
   const pad = s.length % 4 === 0 ? '' : '='.repeat(4 - (s.length % 4));
   const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/') + pad);
-  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
 }
 
 interface Jwk { kty: string; alg?: string; kid?: string; crv?: string; x?: string; y?: string }
@@ -52,16 +54,19 @@ async function signingKeys(): Promise<Jwk[]> {
 
 /**
  * Verify a GoTrue access token (ES256) against the platform-injected
- * public key set. Returns the token's `sub` (the auth user id) or null.
+ * public key set. Returns the token's `sub` (the auth user id) plus
+ * whether the session is anonymous (`signInAnonymously`), or null.
  * Expiry is enforced here; revocation is GoTrue's concern.
  */
-export async function verifyGoTrueJwt(token: string): Promise<string | null> {
+export async function verifyGoTrueJwt(
+  token: string,
+): Promise<{ sub: string; isAnonymous: boolean } | null> {
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   const [h, p, s] = parts;
 
   let header: { alg?: string; kid?: string };
-  let payload: { sub?: string; exp?: number };
+  let payload: { sub?: string; exp?: number; is_anonymous?: boolean };
   try {
     header = JSON.parse(new TextDecoder().decode(b64urlDecode(h)));
     payload = JSON.parse(new TextDecoder().decode(b64urlDecode(p)));
@@ -79,13 +84,13 @@ export async function verifyGoTrueJwt(token: string): Promise<string | null> {
       b64urlDecode(s),
       new TextEncoder().encode(`${h}.${p}`),
     );
-    return ok && payload.sub ? payload.sub : null;
+    return ok && payload.sub ? { sub: payload.sub, isAnonymous: payload.is_anonymous === true } : null;
   }
 
   if (header.alg !== 'ES256' || !payload.sub) return null;
 
   const keys = await signingKeys();
-  const key = (header.kid && keys.find((k) => k.kid === header.kid))
+  const key = (header.kid ? keys.find((k) => k.kid === header.kid) : undefined)
     ?? keys.find((k) => k.kty === 'EC' && k.alg === 'ES256');
   if (!key?.x || !key?.y) return null;
 
@@ -103,7 +108,7 @@ export async function verifyGoTrueJwt(token: string): Promise<string | null> {
     b64urlDecode(s),
     new TextEncoder().encode(`${h}.${p}`),
   );
-  return ok ? payload.sub : null;
+  return ok ? { sub: payload.sub, isAnonymous: payload.is_anonymous === true } : null;
 }
 
 /**
@@ -113,10 +118,10 @@ export async function verifyGoTrueJwt(token: string): Promise<string | null> {
 export async function getPlayer(admin: SupabaseClient, req: Request): Promise<AuthedPlayer | null> {
   const token = req.headers.get('Authorization')?.replace('Bearer ', '');
   if (!token) return null;
-  const sub = await verifyGoTrueJwt(token);
-  if (!sub) return null;
+  const me = await verifyGoTrueJwt(token);
+  if (!me) return null;
 
   const { data: player } = await admin.from('players')
-    .select('id, name').eq('id', sub).single();
-  return player ?? null;
+    .select('id, name').eq('id', me.sub).single();
+  return player ? { id: me.sub, name: player.name, isAnonymous: me.isAnonymous } : null;
 }
