@@ -383,6 +383,12 @@ input[type='radio'] {
 }
 .cell { cursor: pointer; }
 
+/* tanks are a translated overlay layer: moving mutates the transform so CSS
+   slides the tank between cells instead of remounting it */
+.tank {
+  transition: transform 300ms ease;
+}
+
 .tank-image {
   pointer-events: none;
 }

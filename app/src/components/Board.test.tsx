@@ -89,6 +89,30 @@ describe('Board', () => {
     expect(Number(hurt.getAttribute('width'))).toBeCloseTo(Number(full.getAttribute('width')) / 3, 5);
   });
 
+  test('tank element PERSISTS across a move and its transform updates (slide, not remount)', () => {
+    const { container, rerender } = render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    const before = container.querySelector('[data-testid="tank-p1"]')!;
+    rerender(<Board state={state({ players: { ...state().players, p1: { ...state().players.p1, pos: { x: 1, y: 0 } } } })} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    const after = container.querySelector('[data-testid="tank-p1"]')!;
+    expect(after).toBe(before); // same DOM node — CSS transition can animate it
+    expect(after.getAttribute('style')).toContain('translate(40px');
+  });
+
+  test('dead tanks are not rendered (visual only — cells still behave)', () => {
+    const dead = state({ players: { ...state().players, p2: { ...state().players.p2, hp: 0 } } });
+    render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    expect(screen.queryByTestId('tank-p2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('tank-p1')).toBeInTheDocument();
+  });
+
+  test('tank transform reflects its position', () => {
+    render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    // jsdom normalizes "translate(0px, 0px)" to "translate(0px)", so assert
+    // on the x-offset prefix (holds verbatim in browsers too).
+    expect(screen.getByTestId('tank-p1').getAttribute('style')).toContain('translate(0px');
+    expect(screen.getByTestId('tank-p2').getAttribute('style')).toContain('translate(80px');
+  });
+
   test('no HP bar for zero-HP tanks', () => {
     const dead = state({
       players: {

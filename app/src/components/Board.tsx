@@ -97,44 +97,43 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap }: B
           const x = i % n;
           const y = Math.floor(i / n);
           const pos = { x, y };
-          const occId = occupantAt(state.players, pos);
-          const occ = occId ? state.players[occId] : null;
           return (
-            <g key={i}>
-              <rect
-                x={x * CELL} y={y * CELL} width={CELL} height={CELL}
-                className={cellClass(pos)}
-                data-testid={`cell-${x}-${y}`}
-                onClick={() => onCellTap(pos)}
-              />
-              {occ && (
-                <g
-                  data-testid={`tank-${occ.id}`}
-                  className={occ.id === me ? 'own' : 'enemy'}
-                  onClick={() => onCellTap(pos)}
-                >
-                  {/* tank fills the full square: avatar image or generated flag */}
-                  <image
-                    x={x * CELL} y={y * CELL} width={CELL} height={CELL}
-                    href={avatars?.[occ.id] ?? flagUrl(occ.id)}
-                    preserveAspectRatio="xMidYMid slice"
-                    className="tank-image"
-                    data-testid={`tank-image-${occ.id}`}
-                  />
-                  {/* ownership ring (signal = own, olive = enemy) */}
-                  <rect
-                    x={x * CELL} y={y * CELL} width={CELL} height={CELL}
-                    fill="none"
-                    stroke={occ.id === me ? 'var(--signal)' : 'var(--olive)'}
-                    strokeWidth="3"
-                    pointer-events="none"
-                  />
-                  {lifeBar(occ, x, y, state.config.startingHp)}
-                </g>
-              )}
-            </g>
+            <rect
+              key={i}
+              x={x * CELL} y={y * CELL} width={CELL} height={CELL}
+              className={cellClass(pos)}
+              data-testid={`cell-${x}-${y}`}
+              onClick={() => onCellTap(pos)}
+            />
           );
         })}
+        {/* tank layer: one keyed <g> per ALIVE player, translated by position.
+            Moves mutate the transform (CSS slides it); dead tanks aren't drawn
+            (but still block moves via occupantAt in legal()). */}
+        {Object.values(state.players).filter((p) => p.hp > 0).map((p) => (
+          <g key={p.id} data-testid={`tank-${p.id}`}
+             className={`tank ${p.id === me ? 'own' : 'enemy'}`}
+             style={{ transform: `translate(${p.pos.x * CELL}px, ${p.pos.y * CELL}px)` }}
+             onClick={() => onCellTap(p.pos)}>
+            {/* tank fills the full square: avatar image or generated flag */}
+            <image
+              x={0} y={0} width={CELL} height={CELL}
+              href={avatars?.[p.id] ?? flagUrl(p.id)}
+              preserveAspectRatio="xMidYMid slice"
+              className="tank-image"
+              data-testid={`tank-image-${p.id}`}
+            />
+            {/* ownership ring (signal = own, olive = enemy) */}
+            <rect
+              x={0} y={0} width={CELL} height={CELL}
+              fill="none"
+              stroke={p.id === me ? 'var(--signal)' : 'var(--olive)'}
+              strokeWidth="3"
+              pointer-events="none"
+            />
+            {lifeBar(p, 0, 0, state.config.startingHp)}
+          </g>
+        ))}
       </svg>
     </div>
   );
