@@ -2,6 +2,7 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import { getPlayer } from '../_shared/auth.ts';
 import { applyEvent, type GameEvent } from '../_shared/engine.ts';
+import { canonicalHistory, type ForkPoint } from '../_shared/history.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -58,23 +59,21 @@ Deno.serve(async (req) => {
       for (const e of tail) {
         try { state = applyEvent(state, e); } catch { break; }
       }
-      // full history for scrubbing (all generations up to current, in replay order)
+      // full history for scrubbing: the CANONICAL timeline across fork
+      // generations — each ancestor generation is cut at the fork that ended
+      // it (game_forks), so replaying from the initial state never walks a
+      // discarded branch.
       const { data: historyRows } = await a.from('events')
         .select('seq, type, actor_id, payload, created_at, generation')
         .eq('game_id', gameId)
-        .lte('generation', game.cur_generation)
-        .order('generation').order('seq');
-      const history: GameEvent[] = [];
-      for (const e of historyRows ?? []) {
-        if (e.generation < game.cur_generation) {
-          // older generations were truncated at the next fork_seq — approximate
-          // by keeping everything (scrubber shows complete record)
-        }
-        history.push({
+        .lte('generation', game.cur_generation);
+      const { data: forkRows } = await a.from('game_forks')
+        .select('parent_generation, to_seq').eq('game_id', gameId);
+      const history: GameEvent[] = canonicalHistory(historyRows ?? [], (forkRows ?? []) as ForkPoint[])
+        .map(e => ({
           seq: e.seq, type: e.type, actorId: e.actor_id,
           createdAt: e.created_at, payload: e.payload ?? {},
-        });
-      }
+        }));
       return json({
         game: {
           id: game.id, name: game.name, mode: game.mode, status: game.status,

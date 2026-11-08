@@ -70,6 +70,11 @@ Deno.serve(async (req) => {
       if (typeof toSeq !== 'number' || toSeq < 0 || toSeq > state.seq)
         return json({ error: 'invalid toSeq' }, 400);
       const gen = game.cur_generation + 1;
+      // record the parent generation's truncation point: canonical-history
+      // assembly needs every fork point, and games.fork_seq only keeps the latest
+      await a.from('game_forks').upsert({
+        game_id: gameId, parent_generation: game.cur_generation, to_seq: toSeq,
+      });
       await a.from('games').update({ cur_generation: gen, fork_seq: toSeq }).eq('id', gameId);
       // truncated state becomes the new snapshot; new events start at seq 1
       const truncated = await loadAuthoritativeState(gameId, { maxSeq: toSeq });
