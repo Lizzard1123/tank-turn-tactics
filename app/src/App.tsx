@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import Landing from './pages/Landing';
 import Instructions from './pages/Instructions';
 import Auth from './pages/Auth';
+import Dashboard from './pages/Dashboard';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { player } = useAuth();
@@ -20,7 +21,7 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/instructions" element={<Instructions />} />
           <Route path="/auth" element={<Auth />} />
-          <Route path="/dashboard" element={<RequireAuth><div>Dashboard (todo)</div></RequireAuth>} />
+          <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
           <Route path="/test" element={<div>Test mode (todo)</div>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
