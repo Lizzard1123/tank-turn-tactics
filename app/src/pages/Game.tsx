@@ -176,13 +176,18 @@ function DbGameView({ gameId }: DbGameViewProps) {
   const displayState: GameState | null = scrubbedState ?? state;
   const scrubbing = scrubIdx !== null;
 
-  // AP countdown: seconds until the next AP point. Based on tickClockMinutes
-  // + config.apIntervalMinutes, defaulting to a 30s local-test drip.
+  // AP countdown: seconds until the next AP point. Only shown for games with
+  // a client-known interval (apIntervalMinutes > 0). Daily server-managed AP
+  // (0) has no client-visible schedule, so the timer hides.
   const [apRemaining, setApRemaining] = useState<number | null>(null);
   useEffect(() => {
     if (!displayState) return;
     const intervalMinutes = displayState.config.apIntervalMinutes;
-    const intervalSeconds = intervalMinutes && intervalMinutes > 0 ? intervalMinutes * 60 : 30;
+    if (!intervalMinutes || intervalMinutes <= 0) {
+      setApRemaining(null);
+      return;
+    }
+    const intervalSeconds = intervalMinutes * 60;
     const elapsedSeconds = (displayState.tickClockMinutes ?? 0) * 60;
     let remaining = intervalSeconds - (elapsedSeconds % intervalSeconds);
     if (remaining <= 0) remaining = intervalSeconds;
