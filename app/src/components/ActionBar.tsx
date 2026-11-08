@@ -1,12 +1,12 @@
-import { type GameState } from '@ttt/engine';
-import { manhattan, inRange } from '@ttt/engine';
+import { type GameState, type ActionType } from '@ttt/engine';
+import { inRange } from '@ttt/engine';
 import type { BoardMode } from './Board';
 
 interface ActionBarProps {
   state: GameState;
   me: string;
   mode: BoardMode;
-  onAction: (type: string, payload: Record<string, unknown>) => void;
+  onAction: (type: ActionType, payload: Record<string, unknown>) => void;
   onModeChange: (mode: BoardMode) => void;
 }
 
@@ -80,5 +80,3 @@ export default function ActionBar({ state, me, mode, onAction, onModeChange }: A
   );
 }
 
-// Manhattan helper re-exported for consumers (kept local to avoid API drift)
-export { manhattan };

@@ -4,7 +4,7 @@ import EventFeed from './EventFeed';
 
 describe('EventFeed', () => {
   test('renders latest-first', () => {
-    render(<EventFeed log={['a moved', 'b attacked']} />);
+    render(<EventFeed log={[{ seq: 1, text: 'a moved' }, { seq: 2, text: 'b attacked' }]} />);
     const items = screen.getAllByRole('listitem');
     expect(items[0]).toHaveTextContent('b attacked');
     expect(items[1]).toHaveTextContent('a moved');

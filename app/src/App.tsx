@@ -7,6 +7,8 @@ import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Lobby from './pages/Lobby';
 import TestMode from './pages/TestMode';
+import Game from './pages/Game';
+import Jury from './pages/Jury';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { player } = useAuth();
@@ -26,6 +28,8 @@ export default function App() {
           <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
           <Route path="/test" element={<TestMode />} />
           <Route path="/lobby/:gameId" element={<RequireAuth><Lobby /></RequireAuth>} />
+          <Route path="/game/:gameId" element={<RequireAuth><Game /></RequireAuth>} />
+          <Route path="/game/:gameId/jury" element={<RequireAuth><Jury /></RequireAuth>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
