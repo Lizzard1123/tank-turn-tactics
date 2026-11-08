@@ -455,7 +455,7 @@ input[type='radio'] {
 .event-feed .feed-view {
   flex: none;
   font-size: 0.75rem;
-  min-height: 32px; /* compact but tappable */
+  min-height: 44px; /* global touch-target floor */
   padding: 2px 6px;
 }
 

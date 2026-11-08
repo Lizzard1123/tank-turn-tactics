@@ -15,6 +15,7 @@ function renderScrubber(overrides: Partial<Parameters<typeof HistoryScrubber>[0]
     onFork: vi.fn(),
     onExit: vi.fn(),
     onScrub: vi.fn(),
+    position: 0,
     ...overrides,
   };
   render(<HistoryScrubber {...props} />);
@@ -22,6 +23,13 @@ function renderScrubber(overrides: Partial<Parameters<typeof HistoryScrubber>[0]
 }
 
 describe('HistoryScrubber', () => {
+  test('slider position and readout follow the position prop (parent-controlled)', () => {
+    renderScrubber({ position: 1 });
+    const slider = screen.getByRole('slider', { name: /history position/i }) as HTMLInputElement;
+    expect(slider.value).toBe('1');
+    expect(screen.getByText(/replaying event 1 of 2/i)).toBeInTheDocument();
+  });
+
   test('renders replay button when onReplay given', async () => {
     const props = renderScrubber({ onReplay: vi.fn() });
     const user = userEvent.setup();

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
   applyEvent, createInitialState, manhattan,
@@ -51,16 +51,18 @@ function LocalGameView() {
 
   // Recap replay: step the scrub position forward ~1 event/sec until live.
   const replayLen = game?.history.length ?? 0;
+  const scrubIdxRef = useRef<number | null>(null);
+  scrubIdxRef.current = scrubIdx;
   useEffect(() => {
     if (!replaying) return;
     const id = setInterval(() => {
-      setScrubIdx((idx) => {
-        if (idx === null || idx >= replayLen) {
-          setReplaying(false);
-          return null;
-        }
-        return idx + 1;
-      });
+      const next = (scrubIdxRef.current ?? 0) + 1;
+      if (next >= replayLen) {
+        setScrubIdx(null); // board already equals live; exit immediately
+        setReplaying(false);
+      } else {
+        setScrubIdx(next);
+      }
     }, 1000);
     return () => clearInterval(id);
   }, [replaying, replayLen]);
@@ -73,11 +75,12 @@ function LocalGameView() {
   const mine = state.players[me];
   const scrubbing = scrubIdx !== null;
   const displayState = scrubbing ? game.replayTo(scrubIdx) : state;
-  const exitScrub = () => { setReplaying(false); setScrubIdx(null); };
+  const exitScrub = () => { setReplaying(false); setMode('none'); setScrubIdx(null); };
   const viewEvent = (seq: number) => {
     const idx = game.history.findIndex((e) => e.seq === seq);
     if (idx < 0) return;
     setReplaying(false);
+    setMode('none');
     setScrubIdx(idx + 1);
   };
 
@@ -100,8 +103,8 @@ function LocalGameView() {
   return (
     <main className="page game-page">
       <header className="game-status">
-        <span>Day {state.day}</span>
-        <span className="mode-badge">TEST</span>
+        <span>Day {displayState.day}</span>
+        <span className="mode-badge">TEST{scrubbing ? ' · HISTORY' : ''}</span>
         <span className="timer" data-testid="ap-timer">Next AP in {apRemaining}s</span>
         <Link to="/dashboard" className="link-button">Exit</Link>
       </header>
@@ -126,7 +129,8 @@ function LocalGameView() {
         me={me}
         avatars={{}}
         onCellTap={(pos) => {
-          if (mode === 'none') return;
+          // historical board taps are inspection only — never commit actions
+          if (scrubbing || mode === 'none') return;
           const occId = Object.entries(state.players).find(
             ([, p]) => p.pos.x === pos.x && p.pos.y === pos.y,
           )?.[0];
@@ -171,7 +175,8 @@ function LocalGameView() {
           canFork={false}
           onFork={() => {}}
           onExit={exitScrub}
-          onScrub={(idx) => setScrubIdx(idx === game.history.length ? null : idx)}
+          onScrub={(idx) => { setReplaying(false); setScrubIdx(idx === game.history.length ? null : idx); }}
+          position={scrubIdx ?? game.history.length}
           onReplay={() => { if (!scrubbing) setScrubIdx(0); setReplaying(true); }}
           replaying={replaying}
           onStop={exitScrub}
@@ -199,45 +204,47 @@ function DbGameView({ gameId }: DbGameViewProps) {
   const [toast, setToast] = useState<string | null>(null);
   const [scrubIdx, setScrubIdx] = useState<number | null>(null);
 
-  // --- history scrubbing (test mode) ---
-  const currentGenEvents: Array<GameEvent & { generation?: number }> = useMemo(
-    () => history.filter((e) => e.generation === undefined || e.generation === detail?.generation),
-    [history, detail],
-  );
-
+  // --- history scrubbing / recap (any mode; test mode also forks) ---
+  // Scrub position counts events from the very start of the game. Event seqs
+  // are contiguous across fork generations (a fork continues at toSeq+1), so
+  // replaying from the initial state over history[0..n] is always valid —
+  // filtering to the current generation would hit a seq gap after a fork.
   const scrubbedState: GameState | null = useMemo(() => {
     if (scrubIdx === null || !state || !detail) return null;
     let s = createInitialState(state.config, specsFromDetail(state));
-    for (const e of currentGenEvents.slice(0, scrubIdx)) {
+    for (const e of history.slice(0, scrubIdx)) {
       try { s = applyEvent(s, e); } catch { break; }
     }
     return s;
-  }, [scrubIdx, state, detail, currentGenEvents]);
+  }, [scrubIdx, state, detail, history]);
 
   const displayState: GameState | null = scrubbedState ?? state;
   const scrubbing = scrubIdx !== null;
 
   // Recap replay: step the scrub position forward ~1 event/sec until live.
   const [replaying, setReplaying] = useState(false);
+  const scrubIdxRef = useRef<number | null>(null);
+  scrubIdxRef.current = scrubIdx;
   useEffect(() => {
     if (!replaying) return;
     const id = setInterval(() => {
-      setScrubIdx((idx) => {
-        if (idx === null || idx >= currentGenEvents.length) {
-          setReplaying(false);
-          return null;
-        }
-        return idx + 1;
-      });
+      const next = (scrubIdxRef.current ?? 0) + 1;
+      if (next >= history.length) {
+        setScrubIdx(null); // board already equals live; exit immediately
+        setReplaying(false);
+      } else {
+        setScrubIdx(next);
+      }
     }, 1000);
     return () => clearInterval(id);
-  }, [replaying, currentGenEvents]);
+  }, [replaying, history]);
 
-  const exitScrub = () => { setReplaying(false); setScrubIdx(null); };
+  const exitScrub = () => { setReplaying(false); setMode('none'); setScrubIdx(null); };
   const viewEvent = (seq: number) => {
-    const idx = currentGenEvents.findIndex((e) => e.seq === seq);
+    const idx = history.findIndex((e) => e.seq === seq);
     if (idx < 0) return;
     setReplaying(false);
+    setMode('none');
     setScrubIdx(idx + 1);
   };
 
@@ -407,13 +414,14 @@ function DbGameView({ gameId }: DbGameViewProps) {
         </section>
       )}
 
-      {currentGenEvents.length > 0 && (detail?.mode === 'test' || scrubbing || replaying) && (
+      {history.length > 0 && (detail?.mode === 'test' || scrubbing || replaying) && (
         <HistoryScrubber
-          events={currentGenEvents}
+          events={history}
           canFork={canFork}
           onFork={(seq) => void forkTo(seq)}
           onExit={exitScrub}
-          onScrub={(idx) => setScrubIdx(idx === currentGenEvents.length ? null : idx)}
+          onScrub={(idx) => { setReplaying(false); setScrubIdx(idx === history.length ? null : idx); }}
+          position={scrubIdx ?? history.length}
           onReplay={() => { if (!scrubbing) setScrubIdx(0); setReplaying(true); }}
           replaying={replaying}
           onStop={exitScrub}

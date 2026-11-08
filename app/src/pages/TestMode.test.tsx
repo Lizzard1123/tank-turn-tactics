@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import TestMode from './TestMode';
 import Game from './Game';
@@ -76,5 +76,45 @@ test('guest sign-in starts a local game (no DB game) and the 30s AP drip increme
   act(() => {
     vi.advanceTimersByTime(30_000);
   });
+  expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
+});
+
+test('event feed View scrubs the board and Replay animates back to live', async () => {
+  vi.useFakeTimers();
+  render(
+    <LocalGameProvider>
+      <MemoryRouter initialEntries={['/test']}>
+        <Routes>
+          <Route path="/test" element={<TestMode />} />
+          <Route path="/game/:gameId" element={<Game />} />
+        </Routes>
+      </MemoryRouter>
+    </LocalGameProvider>,
+  );
+  await act(async () => {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+
+  // one drip tick so the history has exactly one event (AP 4 -> 5)
+  act(() => { vi.advanceTimersByTime(30_000); });
+  expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
+
+  // clicking View on that event enters scrub mode: ActionBar hidden,
+  // scrubber visible at position 1
+  fireEvent.click(screen.getByRole('button', { name: /view state after event 1/i }));
+  expect(screen.getByTestId('history-scrubber')).toBeInTheDocument();
+  expect(screen.queryByTestId('action-bar')).not.toBeInTheDocument();
+
+  // "Replay from here" animates: one 1s step replays the remaining event
+  // and exits scrub back to live (scrubber stays, position at the end)
+  fireEvent.click(screen.getByTestId('replay-btn'));
+  await act(async () => {
+    vi.advanceTimersByTime(1000);
+  });
+  expect(screen.getByTestId('history-scrubber')).toBeInTheDocument();
+  expect(screen.getByText(/replaying event 1 of 1/i)).toBeInTheDocument();
+  expect(screen.getByTestId('action-bar')).toBeInTheDocument();
   expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
 });
