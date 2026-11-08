@@ -17,6 +17,9 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # the VITE_SUPABASE_* secrets live on the github-pages environment —
+    # a job must declare the environment to read its secrets
+    environment: github-pages
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
