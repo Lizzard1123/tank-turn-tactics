@@ -69,11 +69,19 @@ function LocalGameView() {
   const [replaying, setReplaying] = useState(false);
 
   // AP countdown: the local drip runs every 30s (started at test-mode mount).
+  // Once the game has a winner the countdown stops and the engine drip is
+  // halted (daily_tick bypasses the winner guard, so it must be stopped
+  // explicitly, not caught).
   const [apRemaining, setApRemaining] = useState(30);
   useEffect(() => {
+    if (state?.winner) return;
     const id = setInterval(() => setApRemaining((t) => (t <= 1 ? 30 : t - 1)), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [state?.winner]);
+
+  useEffect(() => {
+    if (state?.winner && game) game.stopApDrip();
+  }, [state, game]);
 
   // Recap replay: step the scrub position forward ~1 event/sec until live.
   const replayLen = game?.history.length ?? 0;
@@ -131,7 +139,9 @@ function LocalGameView() {
       <header className="game-status">
         <span>Day {displayState.day}</span>
         <span className="mode-badge">TEST{scrubbing ? ' · HISTORY' : ''}</span>
-        <span className="timer" data-testid="ap-timer">Next AP in {apRemaining}s</span>
+        {!state.winner && (
+          <span className="timer" data-testid="ap-timer">Next AP in {apRemaining}s</span>
+        )}
         <Link to="/games" className="link-button btn">Exit</Link>
       </header>
 
@@ -297,8 +307,15 @@ function DbGameView({ gameId }: DbGameProps) {
   // scrubbing through history does not reset the countdown.
   const apIntervalMinutes = state?.config.apIntervalMinutes ?? 0;
   const liveClockMinutes = state?.tickClockMinutes ?? 0;
+  // A won game (winner in state) or a server-marked finished game stops the
+  // AP countdown and hides the timer.
+  const gameFinished = !!state?.winner || detail?.status === 'finished';
   const [apRemaining, setApRemaining] = useState<number | null>(null);
   useEffect(() => {
+    if (gameFinished) {
+      setApRemaining(null);
+      return;
+    }
     if (!apIntervalMinutes || apIntervalMinutes <= 0) {
       setApRemaining(null);
       return;
@@ -311,7 +328,7 @@ function DbGameView({ gameId }: DbGameProps) {
       setApRemaining((t) => (t == null || t <= 1 ? intervalSeconds : t - 1));
     }, 1000);
     return () => clearInterval(id);
-  }, [apIntervalMinutes, liveClockMinutes]);
+  }, [gameFinished, apIntervalMinutes, liveClockMinutes]);
 
   // dead player goes to the jury screen
   useEffect(() => {
@@ -384,7 +401,7 @@ function DbGameView({ gameId }: DbGameProps) {
         <span className="mode-badge">
           {detail?.mode === 'test' ? 'TEST' : 'PLAY'}{scrubbing ? ' · HISTORY' : ''}
         </span>
-        {apRemaining != null && (
+        {!gameFinished && apRemaining != null && (
           <span className="timer" data-testid="ap-timer">
             Next AP in {apRemaining}s
           </span>

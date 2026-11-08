@@ -128,6 +128,16 @@ describe('Game page', () => {
     }
   });
 
+  test('won game: no AP timer', () => {
+    setup({ state: { ...STATE, winner: 'p1' } });
+    expect(screen.queryByTestId('ap-timer')).not.toBeInTheDocument();
+  });
+
+  test('server-finished game (no winner in state yet): no AP timer', () => {
+    setup({ detail: { id: 'g1', name: 'g', mode: 'test', status: 'finished', config: STATE.config, createdBy: 'p1', inviteCode: 'i', generation: 1, forkSeq: null } });
+    expect(screen.queryByTestId('ap-timer')).not.toBeInTheDocument();
+  });
+
   test('finished game shows winner banner and games link', () => {
     setup({
       state: { ...STATE, winner: 'p1' },
