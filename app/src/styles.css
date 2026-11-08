@@ -148,6 +148,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* ---------- forms ---------- */
 
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+
 label {
   display: block;
   font-size: 0.8rem;
