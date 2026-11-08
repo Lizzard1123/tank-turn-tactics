@@ -7,7 +7,7 @@ interface AuthState {
   isGuest: boolean;
   signin: (name: string, password: string) => Promise<void>;
   register: (name: string, password: string) => Promise<void>;
-  guestSignin: () => Promise<void>;
+  guestSignin: () => Promise<string>; // resolves with the session token
   signout: () => void;
 }
 
@@ -72,12 +72,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setSession({ token: res.token, player: res.player });
     },
     async guestSignin() {
-      if (session && isGuest) return; // reuse existing guest session
+      if (session && isGuest) return session.token; // reuse existing guest session
       const res = await api.register(randomName(), randomPassword());
       storeSession(res.token, res.player);
       localStorage.setItem(GUEST_KEY, '1');
       setIsGuest(true);
       setSession({ token: res.token, player: res.player });
+      return res.token;
     },
     signout() {
       localStorage.removeItem(TOKEN_KEY);

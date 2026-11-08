@@ -102,6 +102,14 @@ export function gameStart(token: string, gameId: string): Promise<{ ok: true }> 
   return fn<{ ok: true }>('game-start', { gameId }, token);
 }
 
+export function gameUpdate(
+  token: string,
+  gameId: string,
+  config: Partial<GameConfigPayload>,
+): Promise<{ ok: true; config: GameConfigPayload }> {
+  return fn<{ ok: true; config: GameConfigPayload }>('game-update', { gameId, config }, token);
+}
+
 export interface ActionResponse {
   ok: true;
   seq: number;

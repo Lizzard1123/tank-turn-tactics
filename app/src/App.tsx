@@ -5,6 +5,8 @@ import Landing from './pages/Landing';
 import Instructions from './pages/Instructions';
 import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
+import Lobby from './pages/Lobby';
+import TestMode from './pages/TestMode';
 
 function RequireAuth({ children }: { children: ReactNode }) {
   const { player } = useAuth();
@@ -22,7 +24,8 @@ export default function App() {
           <Route path="/instructions" element={<Instructions />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/dashboard" element={<RequireAuth><Dashboard /></RequireAuth>} />
-          <Route path="/test" element={<div>Test mode (todo)</div>} />
+          <Route path="/test" element={<TestMode />} />
+          <Route path="/lobby/:gameId" element={<RequireAuth><Lobby /></RequireAuth>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
