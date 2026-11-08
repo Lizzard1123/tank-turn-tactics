@@ -29,8 +29,13 @@ function logLine(s: GameState, actorId: string, type: string, payload: Record<st
     }
     case 'upgrade_range':
       return `${name(actorId)} upgraded range to ${s.players[actorId].range + 1}`;
-    case 'daily_tick':
-      return `Day ${s.day + 1}: all alive players gain ${payload.apGained ?? 1} AP`;
+    case 'daily_tick': {
+      const day = s.day + 1;
+      const bonus = countBonusVotes(s.pendingVotes);
+      const names = Object.keys(bonus).length
+        ? ` (+1 jury AP to ${Object.keys(bonus).map(name).join(', ')})` : '';
+      return `Day ${day}: all alive players gain ${payload.apGained ?? 1} AP${names}`;
+    }
     case 'jury_vote': {
       const candidateId = payload.candidateId as string;
       return `Jury member ${name(actorId)} voted for ${name(candidateId)}`;
@@ -42,6 +47,12 @@ function logLine(s: GameState, actorId: string, type: string, payload: Record<st
     default:
       return `${actorId} did ${type}`;
   }
+}
+
+function countBonusVotes(votes: { voterId: string; candidateId: string }[]): Record<string, number> {
+  const tally: Record<string, number> = {};
+  for (const v of votes) tally[v.candidateId] = (tally[v.candidateId] ?? 0) + 1;
+  return Object.fromEntries(Object.entries(tally).filter(([, n]) => n >= 3));
 }
 
 function applyAction(s: GameState, actorId: string, type: string, payload: Record<string, unknown>): GameState {
@@ -99,13 +110,32 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     const inner = event.payload.inner as { type: string; payload: Record<string, unknown> } | undefined;
     if (!inner) throw new EngineError('bot_action requires inner action');
     s = applyAction(s, event.actorId, inner.type, inner.payload ?? {});
-  } else if (event.type === 'daily_tick' || event.type === 'jury_vote' || event.type === 'fork') {
-    // Implemented in Task A5 / A6 — reach here only if tests demand; for now:
-    if (event.type === 'fork') {
-      // log-only; no state change (defense-in-depth per plan A6)
-    } else {
-      throw new EngineError(`event type ${event.type} not yet implemented`);
+  } else if (event.type === 'daily_tick') {
+    const apGained = (event.payload.apGained as number) ?? s.config.apPerDay;
+    const players = { ...s.players };
+    for (const p of Object.values(players)) {
+      if (p.hp > 0) players[p.id] = { ...p, ap: p.ap + apGained };
     }
+    // jury bonus: candidates with >= 3 pending votes get +1
+    const bonus = countBonusVotes(s.pendingVotes);
+    for (const [candidateId] of Object.entries(bonus)) {
+      const p = players[candidateId];
+      if (p && p.hp > 0) players[candidateId] = { ...p, ap: p.ap + 1 };
+    }
+    const elapsed = (event.payload.elapsedMinutes as number) ?? 0;
+    s = { ...s, day: s.day + 1, tickClockMinutes: s.tickClockMinutes + elapsed,
+      players, pendingVotes: [] };
+  } else if (event.type === 'jury_vote') {
+    const voter = s.players[event.actorId];
+    if (!voter) throw new EngineError('unknown player');
+    if (voter.hp > 0) throw new EngineError('alive players cannot vote');
+    const candidateId = event.payload.candidateId as string;
+    if (!s.players[candidateId]) throw new EngineError('unknown candidate');
+    if (s.pendingVotes.some(v => v.voterId === event.actorId)) throw new EngineError('already voted this day');
+    s = { ...s, pendingVotes: [...s.pendingVotes, { voterId: event.actorId, candidateId }] };
+  } else if (event.type === 'fork') {
+    // log-only; no state change (defense-in-depth: fork is realized by the
+    // caller replaying a truncated event list, not by mutating state here)
   } else {
     s = applyAction(s, event.actorId, event.type, event.payload);
   }
