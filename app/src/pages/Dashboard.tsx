@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { gameList, gameCreate, gameJoin, gameDelete, type GameSummary } from '../lib/api';
+import { Icon, trashSvg } from '../lib/icons';
 
 export default function Dashboard() {
   const { token, player, isGuest } = useAuth();
@@ -126,7 +127,7 @@ export default function Dashboard() {
                   disabled={deleting === g.id}
                   aria-label={`Delete ${g.name}`}
                 >
-                  {deleting === g.id ? '…' : 'Delete'}
+                  <Icon html={trashSvg} width={20} height={20} />
                 </button>
               )}
             </li>

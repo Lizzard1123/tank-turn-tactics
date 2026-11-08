@@ -126,6 +126,17 @@ describe('Dashboard', () => {
     expect(screen.queryByText('Test Run')).not.toBeInTheDocument();
   });
 
+  test('delete control is an icon-only trash button (svg, no text label)', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [{ id: 'g2', name: 'Test Run', mode: 'test', status: 'lobby', playerCount: 1, created_at: '', createdBy: 'p1' }],
+    });
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByText('Test Run');
+    const btn = screen.getByRole('button', { name: /^delete/i });
+    expect(btn.querySelector('svg')).not.toBeNull();
+    expect(btn.textContent).not.toMatch(/delete/i);
+  });
+
   test('does not show delete for non-host game', async () => {
     vi.mocked(api.gameList).mockResolvedValue({
       games: [{ id: 'g1', name: 'Office War', mode: 'play', status: 'active', playerCount: 4, created_at: '', createdBy: 'p2' }],
