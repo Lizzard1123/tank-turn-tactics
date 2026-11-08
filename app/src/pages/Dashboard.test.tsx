@@ -9,6 +9,7 @@ vi.mock('../lib/api', () => ({
   gameList: vi.fn(),
   gameCreate: vi.fn(),
   gameJoin: vi.fn(),
+  gameDelete: vi.fn(),
 }));
 
 vi.mock('../lib/auth', () => ({
@@ -26,8 +27,8 @@ describe('Dashboard', () => {
   test('renders game list from api', async () => {
     vi.mocked(api.gameList).mockResolvedValue({
       games: [
-        { id: 'g1', name: 'Office War', mode: 'play', status: 'active', playerCount: 4, created_at: '' },
-        { id: 'g2', name: 'Test Run', mode: 'test', status: 'lobby', playerCount: 1, created_at: '' },
+        { id: 'g1', name: 'Office War', mode: 'play', status: 'active', playerCount: 4, created_at: '', createdBy: 'p2' },
+        { id: 'g2', name: 'Test Run', mode: 'test', status: 'lobby', playerCount: 1, created_at: '', createdBy: 'p1' },
       ],
     });
     render(<MemoryRouter><Dashboard /></MemoryRouter>);
@@ -56,5 +57,28 @@ describe('Dashboard', () => {
     await user.type(screen.getByLabelText(/invite code/i), 'zzz999');
     await user.click(screen.getByRole('button', { name: /^join$/i }));
     expect(api.gameJoin).toHaveBeenCalledWith('tok-1', 'zzz999');
+  });
+
+  test('delete removes host-owned lobby game', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [{ id: 'g2', name: 'Test Run', mode: 'test', status: 'lobby', playerCount: 1, created_at: '', createdBy: 'p1' }],
+    });
+    vi.mocked(api.gameDelete).mockResolvedValue({ ok: true });
+    vi.stubGlobal('confirm', () => true);
+    const user = userEvent.setup();
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByText('Test Run');
+    await user.click(screen.getByRole('button', { name: /^Delete$/i }));
+    expect(api.gameDelete).toHaveBeenCalledWith('tok-1', 'g2');
+    expect(screen.queryByText('Test Run')).not.toBeInTheDocument();
+  });
+
+  test('does not show delete for non-host game', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [{ id: 'g1', name: 'Office War', mode: 'play', status: 'active', playerCount: 4, created_at: '', createdBy: 'p2' }],
+    });
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByText('Office War');
+    expect(screen.queryByRole('button', { name: /^Delete$/i })).not.toBeInTheDocument();
   });
 });
