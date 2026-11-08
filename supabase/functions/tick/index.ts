@@ -16,11 +16,8 @@ function dueForTick(game: { mode: string; daily_ap_time: string; ap_interval_min
   const now = new Date();
   if (game.mode === 'play') {
     const [h, m] = game.daily_ap_time.split(':').map(Number);
-    const slot = new Date(now);
-    slot.setUTCHours(h, m, 0, 0);
-    if (!game.last_tick_at) return now >= slot && now.getUTCHours() === h;
-    return now.getUTCHours() === h && now.getUTCMinutes() >= m &&
-      new Date(game.last_tick_at).getUTCDate() !== now.getUTCDate();
+    if (!game.last_tick_at) return now.getUTCHours() === h;
+    return now.getUTCHours() === h && now.getUTCMinutes() >= m;
   }
   const interval = (game.ap_interval_minutes ?? 2) * 60_000;
   if (!game.last_tick_at) return true;

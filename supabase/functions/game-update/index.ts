@@ -23,7 +23,7 @@ Deno.serve(async (req) => {
     if (game.mode !== 'test') return json({ error: 'config edits only in test mode' }, 403);
 
     const cur = game.config as Record<string, unknown>;
-    const next = { ...cur, ...config, seed: cur.seed };
+    const next = { ...cur, ...config, seed: cur.seed, bots: config.bots ?? cur.bots };
 
     if (typeof next.board !== 'number' || next.board < 5 || next.board > 15) return json({ error: 'board must be 5-15' }, 400);
     if (typeof next.startingHp !== 'number' || next.startingHp < 1 || next.startingHp > 10) return json({ error: 'startingHp must be 1-10' }, 400);
