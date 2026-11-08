@@ -1,5 +1,87 @@
 import { Link } from 'react-router-dom';
 
+// Info-page graphics, drawn in the field-operations design system
+// (khaki stock, olive-drab grid, ink outlines, signal-orange accents).
+// The standalone SVG sources live in docs/graphics/.
+
+function BoardOutline() {
+  return (
+    <svg width="200" height="200" viewBox="0 0 200 200" aria-label="8x8 tactical board">
+      <rect width="200" height="200" fill="#e9e2cf" />
+      <defs>
+        <pattern id="ttt-grid" width="25" height="25" patternUnits="userSpaceOnUse">
+          <path d="M25 0V200 M0 25H200" stroke="#6b6a4f" stroke-width="1" />
+        </pattern>
+      </defs>
+      <rect width="200" height="200" fill="url(#ttt-grid)" />
+      <rect width="200" height="200" fill="none" stroke="#26251d" stroke-width="3" />
+    </svg>
+  );
+}
+
+function TankIcon() {
+  return (
+    <svg width="160" height="130" viewBox="0 0 160 130" aria-label="Tank">
+      <circle cx="80" cy="64" r="30" fill="#c8471f" stroke="#26251d" stroke-width="3" />
+      <rect x="68" y="46" width="24" height="18" fill="#c8471f" stroke="#26251d" stroke-width="2" rx="2" />
+      <rect x="46" y="82" width="68" height="12" fill="none" stroke="#26251d" stroke-width="2" />
+      <text
+        x="80"
+        y="71"
+        textAnchor="middle"
+        fill="#e9e2cf"
+        fontFamily="'Black Ops One', sans-serif"
+        fontSize="22"
+        fontWeight="700"
+      >
+        T
+      </text>
+    </svg>
+  );
+}
+
+function APIcon() {
+  return (
+    <svg width="140" height="140" viewBox="0 0 140 140" aria-label="Action points (AP)">
+      <circle cx="70" cy="70" r="32" fill="#a07a1e" stroke="#26251d" stroke-width="3" />
+      <text
+        x="70"
+        y="78"
+        textAnchor="middle"
+        fill="#e9e2cf"
+        fontFamily="'Black Ops One', sans-serif"
+        fontSize="26"
+        fontWeight="700"
+        letterSpacing="2"
+      >
+        AP
+      </text>
+    </svg>
+  );
+}
+
+function FlagIcon() {
+  return (
+    <svg width="140" height="130" viewBox="0 0 140 130" aria-label="Flag marker">
+      <line x1="62" y1="32" x2="62" y2="108" stroke="#26251d" strokeWidth="4" strokeLinecap="round" />
+      <rect x="62" y="42" width="44" height="30" fill="#c8471f" stroke="#26251d" stroke-width="2" />
+    </svg>
+  );
+}
+
+function Figure({ children, caption }: { children: React.ReactNode; caption?: string }) {
+  return (
+    <figure className="graphic" style={{ margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
+      {children}
+      {caption && (
+        <figcaption style={{ fontSize: '0.8rem', color: 'var(--olive)', textAlign: 'center', textTransform: 'uppercase', letterSpacing: '0.1em', fontWeight: 700 }}>
+          {caption}
+        </figcaption>
+      )}
+    </figure>
+  );
+}
+
 export default function Instructions() {
   return (
     <main className="instructions">
@@ -7,47 +89,69 @@ export default function Instructions() {
       <h1>How to play</h1>
 
       <div className="panel">
-        <h2>Goal</h2>
-        <p>Be the last tank standing. Attack others, form alliances, give
-        (and take) Action Points — and outsmart everyone with superior
-        group strategy.</p>
+        <div className="panel-body">
+          <h2>Goal</h2>
+          <p>Be the last tank standing. Attack others, form alliances, give
+          (and take) Action Points — and outsmart everyone with superior
+          group strategy.</p>
+        </div>
+        <Figure caption="The battlefield — an 8×8 cell tactical map">
+          <BoardOutline />
+        </Figure>
       </div>
 
       <div className="panel">
-        <h2>Stats</h2>
-        <p><strong>❤️ Health (HP)</strong> — starts at 3. Never heals. At 0,
-        you die and join the Jury.</p>
-        <p><strong>⚡ Action Points (AP)</strong> — used for everything.
-        Everyone starts at 0 and gains AP every day.</p>
-        <p><strong>🎯 Range</strong> — the distance (in grid steps) at which
-        you can interact with other players. Starts at 2.</p>
+        <div className="panel-body">
+          <h2>Stats</h2>
+          <p><strong>❤️ Health (HP)</strong> — starts at 3. Never heals. At 0,
+          you die and join the Jury.</p>
+          <p><strong>⚡ Action Points (AP)</strong> — used for everything.
+          Everyone starts at 0 and gains AP every day.</p>
+          <p><strong>🎯 Range</strong> — the distance (in grid steps) at which
+          you can interact with other players. Starts at 2.</p>
+        </div>
+        <div className="graphic-row">
+          <Figure caption="Tank"><TankIcon /></Figure>
+          <Figure caption="Action points"><APIcon /></Figure>
+        </div>
       </div>
 
       <div className="panel">
-        <h2>Actions (cost AP)</h2>
-        <p><strong>Move</strong> — 1 square (no diagonals) per 1 AP.</p>
-        <p><strong>Attack</strong> — 1 HP damage to a player in range, per 1 AP.</p>
-        <p><strong>Give AP</strong> — transfer 1 AP to a player in range, per 1 AP.</p>
-        <p><strong>Upgrade Range</strong> — +1 range per 2 AP.</p>
+        <div className="panel-body">
+          <h2>Actions (cost AP)</h2>
+          <p><strong>Move</strong> — 1 square (no diagonals) per 1 AP.</p>
+          <p><strong>Attack</strong> — 1 HP damage to a player in range, per 1 AP.</p>
+          <p><strong>Give AP</strong> — transfer 1 AP to a player in range, per 1 AP.</p>
+          <p><strong>Upgrade Range</strong> — +1 range per 2 AP.</p>
+        </div>
+        <Figure caption="Tank — 1 square per AP"><TankIcon /></Figure>
       </div>
 
       <div className="panel">
-        <h2>The Day Cycle</h2>
-        <p>Once per day, every alive player receives 1 AP. Dead players
-        can't act — but they can vote.</p>
+        <div className="panel-body">
+          <h2>The Day Cycle</h2>
+          <p>Once per day, every alive player receives 1 AP. Dead players
+          can't act — but they can vote.</p>
+        </div>
+        <Figure caption="Action points — gained once per day"><APIcon /></Figure>
       </div>
 
       <div className="panel">
-        <h2>The Jury</h2>
-        <p>When a player dies, they join the Jury. The Jury votes every day;
-        any living player with 3+ votes receives 1 bonus AP. Don't make
-        enemies on your way out.</p>
+        <div className="panel-body">
+          <h2>The Jury</h2>
+          <p>When a player dies, they join the Jury. The Jury votes every day;
+          any living player with 3+ votes receives 1 bonus AP. Don't make
+          enemies on your way out.</p>
+        </div>
+        <Figure caption="Flag marker"><FlagIcon /></Figure>
       </div>
 
       <div className="panel">
-        <h2>Winning</h2>
-        <p>Survive to the end and win. Alliances burn bright and betrayals
-        burn deeper — trust carefully.</p>
+        <div className="panel-body">
+          <h2>Winning</h2>
+          <p>Survive to the end and win. Alliances burn bright and betrayals
+          burn deeper — trust carefully.</p>
+        </div>
       </div>
     </main>
   );
