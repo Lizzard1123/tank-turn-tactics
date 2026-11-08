@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { gameList, gameCreate, gameJoin, type GameSummary } from '../lib/api';
 
@@ -73,6 +73,7 @@ export default function Dashboard() {
 
   return (
     <main className="page">
+      <p><Link to="/" className="link-button">← Home</Link></p>
       <h1>Dashboard</h1>
       <p className="subtitle">Hi {player?.name} — start or join a game.</p>
 
