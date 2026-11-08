@@ -39,11 +39,12 @@ export interface GameConfig {
   apPerDay: number;         // default 1
   upgradeCost: number;      // default 2 AP per +1 range
   apIntervalMinutes: number;// test-mode AP drip; 0 = daily (server-managed)
+  allowLateJoin?: boolean;  // permit joining after game-start (canonical game)
 }
 
 export type ActionType =
   | 'move' | 'attack' | 'give_ap' | 'upgrade_range'
-  | 'daily_tick' | 'jury_vote' | 'fork' | 'bot_action';
+  | 'daily_tick' | 'jury_vote' | 'fork' | 'bot_action' | 'join';
 
 export interface GameEvent {
   seq: number;

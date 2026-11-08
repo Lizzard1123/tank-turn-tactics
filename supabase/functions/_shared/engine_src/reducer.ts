@@ -44,6 +44,11 @@ function logLine(s: GameState, actorId: string, type: string, payload: Record<st
       return `Game forked/rewound to event ${payload.toSeq}`;
     case 'bot_action':
       return `${name(actorId)} acted (bot)`;
+    case 'join': {
+      const joined = payload.playerId as string;
+      const at = s.players[joined]?.pos;
+      return at ? `${payload.name ?? joined} joined the war at (${at.x},${at.y})` : `${joined} joined the war`;
+    }
     default:
       return `${actorId} did ${type}`;
   }
@@ -133,6 +138,26 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     if (!s.players[candidateId]) throw new EngineError('unknown candidate');
     if (s.pendingVotes.some(v => v.voterId === event.actorId)) throw new EngineError('already voted this day');
     s = { ...s, pendingVotes: [...s.pendingVotes, { voterId: event.actorId, candidateId }] };
+  } else if (event.type === 'join') {
+    // mid-game late join: spawn on the first free cell (row-major scan —
+    // deterministic, so replays reconstruct the same position)
+    const playerId = event.payload.playerId as string;
+    const name = (event.payload.name as string) ?? playerId;
+    if (s.players[playerId]) throw new EngineError(`player ${playerId} already in game`);
+    let spawn: Vec | null = null;
+    outer: for (let y = 0; y < s.config.board; y++) {
+      for (let x = 0; x < s.config.board; x++) {
+        if (!occupantAt(s.players, { x, y })) { spawn = { x, y }; break outer; }
+      }
+    }
+    if (!spawn) throw new EngineError('board is full, cannot join');
+    const player: PlayerState = {
+      id: playerId, name, pos: spawn,
+      hp: s.config.startingHp, ap: s.config.startingAp, range: s.config.baseRange,
+      isBot: false, botDifficulty: null,
+    };
+    s = { ...s, players: { ...s.players, [playerId]: player },
+      order: [...s.order, playerId] };
   } else if (event.type === 'fork') {
     // log-only; no state change (defense-in-depth: fork is realized by the
     // caller replaying a truncated event list, not by mutating state here)
