@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Tank Turn Tactics</title>
+    <script>
+      // GitHub Pages SPA fallback: any path without a real file 404s, and
+      // Pages serves this page. Convert the deep link into a query param on
+      // the app entry, where index.html restores it with replaceState.
+      (function () {
+        var l = window.location;
+        // base is the first path segment (project pages: /tank-turn-tactics/)
+        var base = l.pathname.split('/').slice(0, 2).join('/') + '/';
+        var rest = l.pathname.slice(base.length);
+        var q = '?p=' + encodeURIComponent('/' + rest);
+        if (l.search.slice(1)) q += '&q=' + encodeURIComponent(l.search.slice(1));
+        l.replace(base + q);
+      })();
+    </script>
+  </head>
+  <body>
+    <a href="/">Tank Turn Tactics</a>
+  </body>
+</html>

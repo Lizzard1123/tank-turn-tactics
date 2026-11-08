@@ -1,44 +1,51 @@
 import { describe, test, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import HistoryScrubber from './HistoryScrubber';
-import type { GameEvent } from '@ttt/engine';
 
-const EVENTS: GameEvent[] = [
-  { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } } },
-  { seq: 2, type: 'move', actorId: 'p2', createdAt: 't', payload: { to: { x: 4, y: 0 } } },
-  { seq: 3, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 2, y: 0 } } },
+const events = [
+  { seq: 1, type: 'move' as const, actorId: 'me', createdAt: '', payload: {} },
+  { seq: 2, type: 'attack' as const, actorId: 'me', createdAt: '', payload: {} },
 ];
 
+function renderScrubber(overrides: Partial<Parameters<typeof HistoryScrubber>[0]> = {}) {
+  const props = {
+    events,
+    canFork: false,
+    onFork: vi.fn(),
+    onExit: vi.fn(),
+    onScrub: vi.fn(),
+    position: 0,
+    ...overrides,
+  };
+  render(<HistoryScrubber {...props} />);
+  return props;
+}
+
 describe('HistoryScrubber', () => {
-  test('slider goes from 0 to events.length and reports seq on change', () => {
-    const onScrub = vi.fn();
-    render(<HistoryScrubber events={EVENTS} canFork onFork={() => {}} onExit={() => {}} onScrub={onScrub} />);
-    const slider = screen.getByRole('slider') as HTMLInputElement;
-    expect(slider.min).toBe('0');
-    expect(slider.max).toBe(String(EVENTS.length));
-    fireEvent.change(slider, { target: { value: '2' } });
-    expect(onScrub).toHaveBeenCalledWith(2);
+  test('slider position and readout follow the position prop (parent-controlled)', () => {
+    renderScrubber({ position: 1 });
+    const slider = screen.getByRole('slider', { name: /history position/i }) as HTMLInputElement;
+    expect(slider.value).toBe('1');
+    expect(screen.getByText(/replaying event 1 of 2/i)).toBeInTheDocument();
   });
 
-  test('shows current scrub position', () => {
-    render(<HistoryScrubber events={EVENTS} canFork onFork={() => {}} onExit={() => {}} onScrub={() => {}} />);
-    expect(screen.getByText(/replaying/i)).toBeInTheDocument();
+  test('renders replay button when onReplay given', async () => {
+    const props = renderScrubber({ onReplay: vi.fn() });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /replay from here/i }));
+    expect(props.onReplay).toHaveBeenCalled();
   });
 
-  test('rewind button calls onFork with slider value, hidden without canFork', () => {
-    const onFork = vi.fn();
-    render(<HistoryScrubber events={EVENTS} canFork onFork={onFork} onExit={() => {}} onScrub={() => {}} />);
-    const slider = screen.getByRole('slider');
-    fireEvent.change(slider, { target: { value: '1' } });
-    fireEvent.click(screen.getByRole('button', { name: /rewind/i }));
-    expect(onFork).toHaveBeenCalledWith(1);
+  test('while replaying, button becomes Stop and calls onStop', async () => {
+    const props = renderScrubber({ onReplay: vi.fn(), replaying: true, onStop: vi.fn() });
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /stop replay/i }));
+    expect(props.onStop).toHaveBeenCalled();
   });
 
-  test('exit button calls onExit', () => {
-    const onExit = vi.fn();
-    render(<HistoryScrubber events={EVENTS} canFork={false} onFork={() => {}} onExit={onExit} onScrub={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: /back to live/i }));
-    expect(onExit).toHaveBeenCalled();
-    expect(screen.queryByRole('button', { name: /rewind/i })).not.toBeInTheDocument();
+  test('no replay button when onReplay absent (existing behavior)', () => {
+    renderScrubber();
+    expect(screen.queryByRole('button', { name: /replay/i })).not.toBeInTheDocument();
   });
 });

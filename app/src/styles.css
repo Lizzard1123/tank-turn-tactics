@@ -148,6 +148,13 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* ---------- forms ---------- */
 
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: stretch;
+}
+
 label {
   display: block;
   font-size: 0.8rem;
@@ -438,6 +445,19 @@ input[type='radio'] {
   color: var(--ink);
 }
 .event-feed li.empty { color: var(--olive); border-left-color: var(--olive-soft); }
+.event-feed li.feed-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.event-feed .feed-text { min-width: 0; }
+.event-feed .feed-view {
+  flex: none;
+  font-size: 0.75rem;
+  min-height: 44px; /* global touch-target floor */
+  padding: 2px 6px;
+}
 
 /* ---------- history scrubber ---------- */
 

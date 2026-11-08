@@ -106,7 +106,7 @@ export default function Dashboard() {
                 <span className="game-name">{g.name}</span>
                 <span className="game-meta">{g.mode} · {g.status} · {g.playerCount} players</span>
               </button>
-              {g.createdBy === player?.id && g.status === 'lobby' && (
+              {g.createdBy === player?.id && (g.mode === 'test' || g.status === 'lobby') && (
                 <button
                   className="link-button"
                   onClick={(e) => { e.stopPropagation(); handleDelete(g.id, g.name); }}

@@ -81,4 +81,22 @@ describe('Dashboard', () => {
     await screen.findByText('Office War');
     expect(screen.queryByRole('button', { name: /^Delete$/i })).not.toBeInTheDocument();
   });
+
+  test('host sees delete on their active test game', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [{ id: 'g3', name: 'Stale Test', mode: 'test', status: 'active', playerCount: 4, created_at: '', createdBy: 'p1' }],
+    });
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByText('Stale Test');
+    expect(screen.getByRole('button', { name: /^Delete$/i })).toBeInTheDocument();
+  });
+
+  test('no delete on an active play game even for the host', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [{ id: 'g4', name: 'Real War', mode: 'play', status: 'active', playerCount: 4, created_at: '', createdBy: 'p1' }],
+    });
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByText('Real War');
+    expect(screen.queryByRole('button', { name: /^Delete$/i })).not.toBeInTheDocument();
+  });
 });
