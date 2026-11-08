@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { gameList, gameCreate, gameJoin, type GameSummary } from '../lib/api';
+import { gameList, gameCreate, gameJoin, gameDelete, type GameSummary } from '../lib/api';
 
 export default function Dashboard() {
   const { token, player } = useAuth();
@@ -16,6 +16,7 @@ export default function Dashboard() {
   const [invite, setInvite] = useState('');
   const [created, setCreated] = useState<{ gameId: string; inviteCode: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [deleting, setDeleting] = useState<string | null>(null);
 
   // support ?join=CODE deep-link from a shared invite
   const joinParam = new URLSearchParams(location.search).get('join');
@@ -71,6 +72,19 @@ export default function Dashboard() {
     }
   }
 
+  async function handleDelete(gameId: string, name: string) {
+    if (!token || !window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    setDeleting(gameId);
+    try {
+      await gameDelete(token, gameId);
+      setGames((prev) => (prev ? prev.filter((g) => g.id !== gameId) : prev));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'delete failed');
+    } finally {
+      setDeleting(null);
+    }
+  }
+
   return (
     <main className="page">
       <h1>Dashboard</h1>
@@ -91,6 +105,15 @@ export default function Dashboard() {
                 <span className="game-name">{g.name}</span>
                 <span className="game-meta">{g.mode} · {g.status} · {g.playerCount} players</span>
               </button>
+              {g.createdBy === player?.id && g.status === 'lobby' && (
+                <button
+                  className="link-button"
+                  onClick={(e) => { e.stopPropagation(); handleDelete(g.id, g.name); }}
+                  disabled={deleting === g.id}
+                >
+                  {deleting === g.id ? 'Deleting…' : 'Delete'}
+                </button>
+              )}
             </li>
           ))}
         </ul>
