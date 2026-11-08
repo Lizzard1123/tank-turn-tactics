@@ -35,7 +35,9 @@ function formatTime(iso: string): string {
 export default function EventFeed({
   entries, activeSeq, live, replaying, onView, onReplay, onStop, onFork, canFork = false,
 }: EventFeedProps) {
-  const visible = entries.slice(-50).reverse();
+  // The plan's contract: always the FULL list (this feed is the only history
+  // surface — there is no scrubber to reach older events through).
+  const visible = [...entries].reverse();
   const activePos = activeSeq === null ? -1 : entries.findIndex((e) => e.seq === activeSeq);
   const interactive = !!(onView || onReplay || onStop);
   return (

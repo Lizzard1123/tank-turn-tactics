@@ -2,7 +2,7 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import { getPlayer } from '../_shared/auth.ts';
 import { applyEvent, type GameEvent } from '../_shared/engine.ts';
-import { canonicalHistory, type ForkPoint } from '../_shared/history.ts';
+import { canonicalHistory, effectiveForks, type ForkPoint } from '../_shared/history.ts';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -69,7 +69,11 @@ Deno.serve(async (req) => {
         .lte('generation', game.cur_generation);
       const { data: forkRows } = await a.from('game_forks')
         .select('parent_generation, to_seq').eq('game_id', gameId);
-      const history: GameEvent[] = canonicalHistory(historyRows ?? [], (forkRows ?? []) as ForkPoint[])
+      // Heal the deploy window: a fork performed before fork-row recording
+      // shipped set games.fork_seq but wrote no game_forks row — synthesize
+      // the newest parent's cut from fork_seq so its discarded tail is cut.
+      const history: GameEvent[] = canonicalHistory(historyRows ?? [],
+        effectiveForks((forkRows ?? []) as ForkPoint[], game.cur_generation, game.fork_seq))
         .map(e => ({
           seq: e.seq, type: e.type, actorId: e.actor_id,
           createdAt: e.created_at, payload: e.payload ?? {},
