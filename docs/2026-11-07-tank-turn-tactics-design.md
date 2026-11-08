@@ -69,7 +69,10 @@ client and server code paths:
 
 - **Client** uses it for optimistic UI and instant history scrubbing
   (scrubbing = re-running the reducer up to event N — no network round-trip).
-- **Supabase RPCs** re-run it server-side as the authority before appending.
+- **Supabase Edge Functions** (TypeScript on Deno) re-run it server-side as
+  the authority before appending — Edge Functions, not stored SQL functions,
+  because stored functions can't run the shared TS engine. They import this
+  package directly.
 - **Bots** act by the server appending ordinary `bot_action` events.
   Behavior is random with per-difficulty tuning (easy/medium/hard), seeded
   per game so any game is reproducible. Smarter bot logic is a future
@@ -109,11 +112,12 @@ interval has elapsed since its last tick — one job serves both modes.
 - **Postgres RLS is the authority.** The client talks to Supabase directly;
   policies enforce membership-based reads. Lobby listings expose minimal
   info only.
-- **Actions go through RPC functions only** (`move`, `attack`, `give_ap`,
+- **Actions go through Edge Functions only** (`move`, `attack`, `give_ap`,
   `upgrade_range`, `jury_vote`, …). The client never inserts event rows
-  directly. Each RPC validates: actor is alive and a member, AP sufficient,
-  target in range, destination empty — then appends the event and refreshes
-  `game_state`.
+  directly — an RLS policy denies all client INSERTs on `events`; only the
+  service role (Edge Functions and the cron job) writes. Each endpoint
+  validates: actor is alive and a member, AP sufficient, target in range,
+  destination empty — then appends the event and refreshes `game_state`.
 - Test-mode games are private to their creator.
 - Threat model honesty: a player can always act *as themselves* (their token
   is on their device) — but every action is rule-validated server-side, and
@@ -122,10 +126,12 @@ interval has elapsed since its last tick — one job serves both modes.
 
 ### Daily AP drip
 
-`pg_cron` runs an hourly job: finds `active` games whose `daily_ap_time`
-matches the current hour (and that haven't ticked in the current in-game
-day), appends a `daily_tick` event (+1 AP to all alive players) and resolves
-any pending jury votes. One scheduled job, no external scheduler.
+`pg_cron` runs an hourly job that **invokes the `tick` Edge Function** (via
+pg_net — cron can't run the TS engine itself). The function finds `active`
+games whose `daily_ap_time` matches the current hour (and, for test games,
+whose `ap_interval_minutes` has elapsed), appends a `daily_tick` event
+(+1 AP to all alive players) through the engine, and resolves pending jury
+votes. One scheduled job, no external scheduler.
 
 ## Frontend
 
@@ -173,7 +179,7 @@ React + Vite + TypeScript, hosted on GitHub Pages.
 
 - **Frontend:** GitHub Pages via GitHub Actions on push to main (Vite
   `base` configured for the repo path).
-- **Backend:** one Supabase project; schema + RPCs + RLS applied via
-  migration SQL files committed to the repo (applied manually or with the
-  Supabase CLI); `pg_cron` job registered by migration. Frontend reads the
-  Supabase URL + anon key from build-time env.
+- **Backend:** one Supabase project; schema + RLS applied via migration SQL
+  files committed to the repo; Edge Functions (actions + `tick`) and the
+  `pg_cron`→pg_net schedule registered with the Supabase CLI. Frontend reads
+  the Supabase URL + anon key from build-time env.
