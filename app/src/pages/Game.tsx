@@ -196,7 +196,7 @@ export default function Game() {
         </section>
       )}
 
-      {detail?.mode === 'test' && (
+      {detail?.mode === 'test' && currentGenEvents.length > 0 && (
         <HistoryScrubber
           events={currentGenEvents}
           canFork={canFork}

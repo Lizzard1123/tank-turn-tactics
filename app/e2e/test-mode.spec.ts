@@ -26,8 +26,9 @@ test('test mode happy path', async ({ page }) => {
   if (await slider.count()) {
     const max = Number(await slider.getAttribute('max'));
     if (max >= 1) {
-      // scrub to one event back, then rewind (creator = us)
-      await slider.fill('1');
+      // scrub to a strictly-past position (seq === max is live, rewind is
+      // disabled there) — with a single event that position is 0
+      await slider.fill(max >= 2 ? '1' : '0');
       await page.getByRole('button', { name: /rewind/i }).click();
       // after the fork the game reloads; board still visible
       await expect(page.getByTestId('board')).toBeVisible({ timeout: 15_000 });

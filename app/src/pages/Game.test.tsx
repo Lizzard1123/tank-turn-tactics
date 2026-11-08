@@ -128,6 +128,9 @@ describe('Game page', () => {
   test('no rewind button for non-creators', () => {
     setup({
       detail: { id: 'g1', name: 'g', mode: 'test', status: 'active', config: STATE.config, createdBy: 'other', inviteCode: 'i', generation: 1, forkSeq: null },
+      history: [
+        { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
+      ],
     });
     expect(screen.getByTestId('history-scrubber')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /rewind/i })).not.toBeInTheDocument();

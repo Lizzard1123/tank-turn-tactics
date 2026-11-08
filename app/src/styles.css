@@ -1,13 +1,28 @@
+/* ============================================================
+   Tank Turn Tactics — "Field Operations Ledger"
+   A printed field-manual look: khaki stock, olive-drab ink,
+   signal-orange stencil markings. The board is a tactical map.
+   Type: Black Ops One (stencil display) · Barlow Semi Condensed
+   (UI) · IBM Plex Mono (the war diary).
+   ============================================================ */
+
 :root {
-  --bg: #12141a;
-  --panel: #1c202b;
-  --fg: #e8eaf0;
-  --muted: #9aa1b2;
-  --accent: #ffb347;
-  --danger: #ff6b6b;
-  --ok: #7bc96f;
-  --border: #2c3242;
-  color-scheme: dark;
+  --paper: #e9e2cf;        /* khaki stock, page background */
+  --paper-raised: #f4efe1; /* panel/card stock */
+  --ink: #26251d;          /* near-black olive ink */
+  --olive: #6b6a4f;        /* borders, secondary text, grid lines */
+  --olive-soft: #d6d0ba;   /* hairlines, disabled fills */
+  --signal: #c8471f;       /* stenciled signal red-orange: actions, own tank */
+  --signal-soft: #eec9b8;  /* light signal tint for fills */
+  --brass: #a07a1e;        /* AP / energy accents */
+  --radio: #3f6b3a;        /* success states */
+  --rust: #a03024;         /* danger */
+  --shadow: 3px 3px 0 var(--ink);
+  --radius: 4px;
+  --font-display: 'Black Ops One', 'Barlow Semi Condensed', system-ui, sans-serif;
+  --font-body: 'Barlow Semi Condensed', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -17,15 +32,180 @@ body {
   padding: 16px;
   padding-top: max(16px, env(safe-area-inset-top));
   padding-bottom: max(16px, env(safe-area-inset-bottom));
-  background: var(--bg);
-  color: var(--fg);
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  font-size: 14px;
+  background: var(--paper);
+  /* faint paper grain: two crossing olive hairlines */
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0 23px, rgba(107, 106, 79, 0.07) 23px 24px),
+    repeating-linear-gradient(90deg, transparent 0 23px, rgba(107, 106, 79, 0.07) 23px 24px);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
   line-height: 1.5;
 }
 
-h1 { font-size: 1.6rem; margin: 0 0 4px; }
-h2 { font-size: 1.2rem; margin: 20px 0 8px; }
+/* ---------- typography ---------- */
+
+h1 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.9rem;
+  letter-spacing: 0.02em;
+  margin: 0 0 4px;
+  text-transform: uppercase;
+}
+
+h2 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  color: var(--olive);
+  margin: 20px 0 8px;
+  /* stencil section stamp: short rule before the label */
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+h2::before {
+  content: '';
+  width: 18px;
+  height: 3px;
+  background: var(--signal);
+  flex: none;
+}
+
+p { margin: 0 0 10px; }
+
+a { color: var(--signal); }
+
+.subtitle, .tagline { color: var(--olive); }
+.subtitle { margin-bottom: 16px; }
+.landing .tagline { margin-top: 0; }
+
+/* ---------- stamped form boxes ---------- */
+
+.panel, .card {
+  background: var(--paper-raised);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+/* ---------- buttons: stamped, they press into the paper ---------- */
+
+button, .btn {
+  min-height: 44px;
+  padding: 10px 16px;
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border-radius: var(--radius);
+  border: 2px solid var(--ink);
+  background: var(--paper-raised);
+  color: var(--ink);
+  cursor: pointer;
+  box-shadow: var(--shadow);
+  transition: transform 60ms ease, box-shadow 60ms ease;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+  transform: translate(2px, 2px);
+}
+button.primary, button[type='submit'] {
+  background: var(--signal);
+  color: var(--paper-raised);
+}
+button.danger { background: var(--rust); color: var(--paper-raised); }
+button:not(:disabled):active {
+  transform: translate(3px, 3px);
+  box-shadow: none;
+}
+
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 3px solid var(--brass);
+  outline-offset: 2px;
+}
+
+.link-button {
+  background: none;
+  border: none;
+  box-shadow: none;
+  min-height: 0;
+  padding: 0;
+  color: var(--signal);
+  text-decoration: underline;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 600;
+}
+.link-button:active { transform: none; }
+
+/* ---------- forms ---------- */
+
+label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--olive);
+  margin: 10px 0 4px;
+}
+
+input, select {
+  min-height: 44px;
+  padding: 10px 12px;
+  font-family: var(--font-body);
+  font-size: 1rem;
+  border-radius: var(--radius);
+  border: 2px solid var(--olive);
+  background: var(--paper);
+  color: var(--ink);
+  width: 100%;
+}
+input:focus { border-color: var(--ink); outline: none; }
+
+fieldset {
+  border: 2px solid var(--olive);
+  border-radius: var(--radius);
+  padding: 8px 12px 12px;
+  margin: 12px 0;
+  min-width: 0;
+}
+legend {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--olive);
+  padding: 0 6px;
+}
+fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.95rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--ink);
+  margin: 8px 0;
+}
+input[type='radio'] {
+  width: 18px;
+  height: 18px;
+  min-height: 0;
+  accent-color: var(--signal);
+  flex: none;
+}
+
+/* ---------- landing ---------- */
 
 .landing {
   min-height: 80vh;
@@ -35,60 +215,326 @@ h2 { font-size: 1.2rem; margin: 20px 0 8px; }
   max-width: 480px;
   margin: 0 auto;
 }
-.landing .tagline { color: var(--muted); margin-top: 0; }
-
-.menu { display: flex; flex-direction: column; gap: 12px; margin-top: 32px; }
+.menu { display: flex; flex-direction: column; gap: 14px; margin-top: 32px; }
 
 .menu-item {
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 48px;
+  min-height: 52px;
   padding: 12px 20px;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--fg);
+  background: var(--paper-raised);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  color: var(--ink);
   text-decoration: none;
   font-size: 1.05rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.menu-item:active { transform: translate(3px, 3px); box-shadow: none; }
+
+/* ---------- game screen ---------- */
+
+.game-page { max-width: 560px; margin: 0 auto; }
+
+.game-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 700;
+}
+.game-status > span:first-child { font-family: var(--font-mono); font-size: 0.95rem; }
+
+.mode-badge {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
   font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  padding: 3px 8px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--brass);
+  color: var(--ink);
 }
-.menu-item:active { transform: scale(0.98); }
+.mode-badge:empty { display: none; }
 
-button, .btn {
-  min-height: 44px;
-  padding: 10px 16px;
-  font-size: 1rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--panel);
-  color: var(--fg);
-  cursor: pointer;
-}
-button:disabled { opacity: 0.45; cursor: not-allowed; }
-button.primary { background: var(--accent); color: #1a1a1a; border-color: transparent; font-weight: 700; }
-button.danger { background: var(--danger); color: #1a1a1a; border-color: transparent; }
-
-input, select {
-  min-height: 44px;
-  padding: 10px 12px;
-  font-size: 1rem;
-  border-radius: 8px;
-  border: 1px solid var(--border);
-  background: var(--bg);
-  color: var(--fg);
-  width: 100%;
+.banner {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--brass);
+  box-shadow: var(--shadow);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  font-weight: 700;
 }
 
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 16px;
+/* action bar: orders row */
+.action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
   margin-bottom: 12px;
 }
+.action-bar button {
+  min-height: 48px;
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  flex: 1 1 auto;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1.2;
+}
+.action-bar button small {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--olive);
+}
+.action-bar button.primary small,
+.action-bar button.danger small { color: var(--paper-raised); }
+.action-bar button.active {
+  background: var(--ink);
+  color: var(--paper-raised);
+}
+.action-bar button.active small { color: var(--signal-soft); }
+.action-bar button:disabled small { color: var(--olive); }
 
-.error { color: var(--danger); min-height: 20px; }
-.muted { color: var(--muted); }
+.ap-counter {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 6px 10px;
+  border: 2px dashed var(--brass);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: var(--paper-raised);
+}
+
+/* ---------- the tactical map (board) ---------- */
+
+.board {
+  overflow-x: auto;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  background: var(--paper-raised);
+  margin-bottom: 16px;
+  /* map margin inside the frame */
+  padding: 6px;
+}
+.board svg { display: block; max-width: 100%; height: auto; }
+
+.cell {
+  fill: var(--paper-raised);
+  stroke: var(--olive);
+  stroke-width: 1;
+}
+.cell.in-range {
+  fill: url(#ttt-range-hatch);
+  stroke: var(--signal);
+}
+.cell.legal {
+  fill: var(--signal-soft);
+  stroke: var(--signal);
+  stroke-width: 2;
+  stroke-dasharray: 4 3;
+}
+.cell { cursor: pointer; }
+
+.tank-body {
+  stroke: var(--ink);
+  stroke-width: 2;
+}
+.own .tank-body { fill: var(--signal); }
+.enemy .tank-body { fill: var(--olive); }
+
+.tank-letter {
+  font-family: var(--font-display);
+  font-size: 14px;
+  pointer-events: none;
+}
+.own .tank-letter { fill: var(--paper-raised); }
+.enemy .tank-letter { fill: var(--paper-raised); }
+
+.hp-pip { fill: var(--ink); stroke: none; }
+
+/* ---------- tank cards & stats ---------- */
+
+.tank-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--paper);
+  border: 2px solid var(--olive);
+  border-radius: var(--radius);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+}
+.tank-card:active { transform: translate(2px, 2px); box-shadow: none; }
+.tank-card-name { font-weight: 700; }
+.tank-card-stats {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--olive);
+  white-space: nowrap;
+}
+
+/* ---------- the war diary (event feed) ---------- */
+
+.event-feed {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.7;
+}
+.event-feed li {
+  padding: 5px 0 5px 12px;
+  border-left: 3px solid var(--olive-soft);
+  margin-bottom: 2px;
+}
+.event-feed li:first-child {
+  border-left-color: var(--signal);
+  color: var(--ink);
+}
+.event-feed li.empty { color: var(--olive); border-left-color: var(--olive-soft); }
+
+/* ---------- history scrubber ---------- */
+
+.scrubber-actions { display: flex; gap: 8px; margin-top: 8px; }
+
+/* ---------- dashboard lists ---------- */
+
+.game-list { list-style: none; margin: 0; padding: 0; }
+.game-list li { margin-bottom: 8px; }
+.game-link {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 12px;
+  background: var(--paper);
+  border: 2px solid var(--olive);
+  border-radius: var(--radius);
+  font-family: var(--font-body);
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.game-link:active { transform: translate(2px, 2px); }
+.game-name { font-weight: 700; font-size: 1rem; color: var(--ink); }
+.game-meta {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--olive);
+}
+
+.knob-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; }
+.bot-row { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
+
+.invite-result {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  background: var(--paper);
+  border: 2px dashed var(--brass);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+
+.jury-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--olive-soft); }
+
+/* ---------- misc ---------- */
+
+.error { color: var(--rust); min-height: 20px; font-weight: 600; }
+.muted { color: var(--olive); }
 .row { display: flex; gap: 8px; align-items: center; }
 .grow { flex: 1; }
+.empty { color: var(--olive); }
+
+/* ---------- profile: your tank marker ---------- */
+
+.avatar-frame {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: var(--paper-raised);
+  border: 2px dashed var(--olive);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 24px;
+  margin: 12px 0;
+  min-height: 0;
+  font-family: var(--font-body);
+}
+.avatar-frame:active { transform: translate(3px, 3px); box-shadow: none; }
+
+.avatar-preview {
+  display: block;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  object-fit: cover;
+}
+
+.avatar-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: 2px solid var(--ink);
+  background: var(--olive);
+  color: var(--paper-raised);
+  font-family: var(--font-display);
+  font-size: 2.2rem;
+}
+
+.avatar-frame-hint {
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--olive);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.page { max-width: 480px; margin: 0 auto; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}

@@ -54,6 +54,18 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap }: B
         role="img"
         aria-label={`board ${n}x${n}`}
       >
+        <defs>
+          {/* diagonal hatch for the range overlay (referenced from CSS) */}
+          <pattern
+            id="ttt-range-hatch"
+            width="6" height="6"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(45)"
+          >
+            <rect width="6" height="6" fill="var(--signal-soft)" />
+            <line x1="0" y1="0" x2="0" y2="6" stroke="var(--signal)" strokeWidth="1.5" />
+          </pattern>
+        </defs>
         {Array.from({ length: n * n }, (_, i) => {
           const x = i % n;
           const y = Math.floor(i / n);

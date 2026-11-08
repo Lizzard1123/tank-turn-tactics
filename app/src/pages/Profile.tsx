@@ -63,17 +63,27 @@ export default function Profile() {
     <main className="page profile">
       <h1>Profile</h1>
       <p>{player?.name}</p>
-      {preview && <img src={preview} alt="avatar preview" width={96} height={96} className="avatar-preview" />}
+      {/* the tank marker your opponents see on the board */}
+      <button
+        type="button"
+        className="avatar-frame"
+        onClick={() => fileInput.current?.click()}
+        disabled={busy}
+        aria-label={preview ? 'Change picture' : 'Upload picture'}
+      >
+        {preview
+          ? <img src={preview} alt="avatar preview" width={96} height={96} className="avatar-preview" />
+          : <span className="avatar-placeholder" aria-hidden>?</span>}
+        <span className="avatar-frame-hint">{busy ? 'Uploading…' : 'Change picture'}</span>
+      </button>
       <input
         ref={fileInput}
         type="file"
         accept="image/*"
+        className="visually-hidden"
         data-testid="avatar-input"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) void handleFile(f); }}
       />
-      <button type="button" onClick={() => fileInput.current?.click()} disabled={busy} data-testid="btn-avatar">
-        {busy ? 'Uploading…' : 'Upload picture'}
-      </button>
       {done && <p role="status">Picture saved.</p>}
       {error && <p className="error" role="alert">{error}</p>}
       <p><Link to="/dashboard">Back to dashboard</Link></p>
