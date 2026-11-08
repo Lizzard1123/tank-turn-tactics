@@ -10,6 +10,21 @@
       rel="stylesheet"
     />
     <title>Tank Turn Tactics</title>
+    <script>
+      // Restore a deep link that arrived via the 404.html SPA fallback
+      // (?p=/game/abc&q=…). Runs before React mounts; BrowserRouter then
+      // picks the route up normally.
+      (function () {
+        var s = new URLSearchParams(window.location.search);
+        var p = s.get('p');
+        if (!p) return;
+        var base = window.location.pathname.replace(/\/$/, '');
+        var url = base + p;
+        var q = s.get('q');
+        if (q) url += '?' + q;
+        window.history.replaceState(null, '', url);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
