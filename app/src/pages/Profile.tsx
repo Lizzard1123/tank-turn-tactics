@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { getStorageClient } from '../lib/supabaseClient';
+import { supabase } from '../lib/supabaseClient';
 
 const MAX_DIM = 256; // downscale target: board circles are tiny; 256px is plenty
 
@@ -39,13 +39,14 @@ export default function Profile() {
     try {
       const blob = await downscale(file);
       const path = `${player.id}/${Date.now()}.jpg`;
-      const client = getStorageClient(token);
-      const { error: upErr } = await client.storage
+      // supabase-js attaches the GoTrue session token automatically, so
+      // storage RLS resolves auth.uid() to the uploader
+      const { error: upErr } = await supabase.storage
         .from('avatars')
         .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
       if (upErr) throw upErr;
-      const { data } = client.storage.from('avatars').getPublicUrl(path);
-      const { error: dbErr } = await client
+      const { data } = supabase.storage.from('avatars').getPublicUrl(path);
+      const { error: dbErr } = await supabase
         .from('players')
         .update({ avatar_url: data.publicUrl })
         .eq('id', player.id);

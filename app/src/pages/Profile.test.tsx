@@ -3,11 +3,16 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import Profile from './Profile';
 
-const upload = vi.fn();
-const getPublicUrl = vi.fn();
-// the component chains .update(...).eq(...) — mock the builder shape
-const update = vi.fn(() => ({ eq: vi.fn().mockResolvedValue({ error: null }) }));
-const from = vi.fn();
+// vi.mock factories are hoisted above these declarations, so the fns live in
+// vi.hoisted scope where the factory can reach them
+const mocks = vi.hoisted(() => {
+  const upload = vi.fn();
+  const getPublicUrl = vi.fn();
+  // the component chains .update(...).eq(...) — mock the builder shape
+  const update = vi.fn(() => ({ eq: vi.fn().mockResolvedValue({ error: null }) }));
+  const from = vi.fn();
+  return { upload, getPublicUrl, update, from };
+});
 
 vi.mock('../lib/auth', () => ({
   useAuth: () => ({
@@ -19,19 +24,19 @@ vi.mock('../lib/auth', () => ({
 }));
 
 vi.mock('../lib/supabaseClient', () => ({
-  getStorageClient: () => ({
+  supabase: {
     storage: {
-      from: () => ({ upload, getPublicUrl }),
+      from: () => ({ upload: mocks.upload, getPublicUrl: mocks.getPublicUrl }),
     },
-    from,
-  }),
+    from: mocks.from,
+  },
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  upload.mockResolvedValue({ error: null });
-  getPublicUrl.mockReturnValue({ data: { publicUrl: 'https://cdn.example/av.jpg' } });
-  from.mockReturnValue({ update });
+  mocks.upload.mockResolvedValue({ error: null });
+  mocks.getPublicUrl.mockReturnValue({ data: { publicUrl: 'https://cdn.example/av.jpg' } });
+  mocks.from.mockReturnValue({ update: mocks.update });
 });
 
 // 1x1 JPEG (red pixel) — createImageBitmap can decode it in jsdom? jsdom
@@ -54,22 +59,22 @@ describe('Profile (avatar upload)', () => {
     render(<MemoryRouter><Profile /></MemoryRouter>);
     fireEvent.change(screen.getByTestId('avatar-input'), { target: { files: [file()] } });
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/saved/i));
-    expect(upload).toHaveBeenCalledTimes(1);
-    const [path] = upload.mock.calls[0];
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+    const [path] = mocks.upload.mock.calls[0];
     expect(path).toMatch(/^pid-1\//); // per-player folder = storage RLS requirement
-    expect(getPublicUrl).toHaveBeenCalledWith(path);
-    expect(update).toHaveBeenCalledWith({ avatar_url: 'https://cdn.example/av.jpg' });
+    expect(mocks.getPublicUrl).toHaveBeenCalledWith(path);
+    expect(mocks.update).toHaveBeenCalledWith({ avatar_url: 'https://cdn.example/av.jpg' });
     expect(screen.getByAltText('avatar preview')).toHaveAttribute('src', 'https://cdn.example/av.jpg');
   });
 
   test('shows an error when the upload fails', async () => {
     mockImagePipeline();
     // supabase storage errors are Error instances (StorageError)
-    upload.mockResolvedValue({ error: new Error('row-level security') });
+    mocks.upload.mockResolvedValue({ error: new Error('row-level security') });
     render(<MemoryRouter><Profile /></MemoryRouter>);
     fireEvent.change(screen.getByTestId('avatar-input'), { target: { files: [file()] } });
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent(/row-level security/);
-    expect(update).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
   });
 });

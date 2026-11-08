@@ -12,7 +12,6 @@ const KEY = ANON_KEY
   ?? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
 export interface PlayerInfo { id: string; name: string }
-export interface AuthResponse { token: string; player: PlayerInfo }
 
 export interface GameSummary {
   id: string;
@@ -58,14 +57,6 @@ async function fn<T>(path: string, body?: unknown, token?: string, method = 'POS
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error((data as { error?: string }).error ?? `request failed (${res.status})`);
   return data as T;
-}
-
-export function register(name: string, password: string): Promise<AuthResponse> {
-  return fn<AuthResponse>('register', { name, password });
-}
-
-export function signin(name: string, password: string): Promise<AuthResponse> {
-  return fn<AuthResponse>('signin', { name, password });
 }
 
 // --- authenticated calls (token passed explicitly so this module stays framework-free) ---
