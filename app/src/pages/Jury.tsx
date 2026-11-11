@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import Board from '../components/Board';
 import EventFeed from '../components/EventFeed';
 import TankCard from '../components/TankCard';
@@ -47,6 +47,9 @@ export default function Jury() {
 
   return (
     <main className="page">
+      <nav>
+        <Link to="/games" className="link-button btn">← Back</Link>
+      </nav>
       <header className="game-status">
         <span>Day {state.day}</span>
         <span className="mode-badge">JURY</span>
