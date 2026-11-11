@@ -1,9 +1,0 @@
-name: queue-test
-on:
-  workflow_dispatch:
-
-jobs:
-  ping:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "runner assigned OK"
