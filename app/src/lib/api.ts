@@ -120,6 +120,7 @@ export interface GameDetail {
   history: unknown[];
   members: GameMember[];
   avatars?: Record<string, string>;
+  names?: Record<string, string>;
   me: string;
 }
 

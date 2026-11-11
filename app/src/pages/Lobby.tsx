@@ -176,7 +176,7 @@ export default function Lobby() {
         <ul>
           {detail.members.map((m) => (
             <li key={m.player_id}>
-              {m.is_bot ? <><Icon html={robotSvg} width={14} height={14} className="stat-icon" />{' '}{m.bot_difficulty} bot ({m.player_id})</> : m.player_id === detail.me ? `${player?.name} (you)` : m.player_id}
+              {m.is_bot ? <><Icon html={robotSvg} width={14} height={14} className="stat-icon" />{' '}{m.bot_difficulty} bot ({m.player_id})</> : m.player_id === detail.me ? `${player?.name} (you)` : detail.names?.[m.player_id] ?? m.player_id}
             </li>
           ))}
         </ul>

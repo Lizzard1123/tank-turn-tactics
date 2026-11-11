@@ -34,10 +34,12 @@ Deno.serve(async (req) => {
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const memberIds = (members ?? []).map(m => m.player_id).filter(id => UUID_RE.test(id));
     const { data: avatarRows } = await a.from('players')
-      .select('id, avatar_url').in('id', memberIds);
+      .select('id, name, avatar_url').in('id', memberIds);
     const avatars: Record<string, string> = {};
+    const names: Record<string, string> = {};
     for (const row of avatarRows ?? []) {
       if (row.avatar_url) avatars[row.id] = row.avatar_url;
+      if (row.name) names[row.id] = row.name;
     }
 
     const { data: snap } = await a.from('game_state').select('seq, state').eq('game_id', gameId).single();
@@ -93,6 +95,7 @@ Deno.serve(async (req) => {
         history,            // full event record for the scrubber
         members,
         avatars,
+        names,              // playerId -> display name (lobby shows real names)
         me: me.id,
       });
     }
@@ -106,7 +109,7 @@ Deno.serve(async (req) => {
         forkSeq: game.fork_seq,
         lastTickAt: game.last_tick_at, dailyApTime: game.daily_ap_time,
       },
-      state: null, events: [], history: [], members, avatars, me: me.id,
+      state: null, events: [], history: [], members, avatars, names, me: me.id,
     });
   } catch (e) {
     return json({ error: `bad request: ${e instanceof Error ? e.message : 'unknown'}` }, 400);

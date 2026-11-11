@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { gameList, gameCreate, gameJoin, gameDelete, type GameSummary } from '../lib/api';
+import { gameList, gameCreate, gameJoin, gameGet, gameDelete, type GameSummary } from '../lib/api';
 import { Icon, trashSvg, clipboardSvg } from '../lib/icons';
 import { ErrorBlock, LoadingBlock } from '../components/Status';
 
@@ -45,7 +45,10 @@ export default function Dashboard() {
     }
     setAutoJoined(joinParam);
     gameJoin(token, joinParam)
-      .then((r) => navigate(`/game/${r.gameId}`, { replace: true }))
+      // a game still in lobby has no state yet — land on the lobby, not the
+      // game screen's "No game data." error; Lobby redirects once it starts
+      .then((r) => gameGet(token, r.gameId))
+      .then((detail) => navigate(detail.game.status === 'lobby' ? `/lobby/${detail.game.id}` : `/game/${detail.game.id}`, { replace: true }))
       .catch((e) => setError(e instanceof Error ? e.message : 'join failed'));
   }, [token, isGuest, joinParam, autoJoined, navigate]);
 
@@ -76,7 +79,10 @@ export default function Dashboard() {
     setError(null);
     try {
       const r = await gameJoin(token, invite.trim());
-      navigate(`/game/${r.gameId}`);
+      // same as the deep-link path: lobby-status games have no state yet, so
+      // route to the lobby (it self-redirects to the game once started)
+      const detail = await gameGet(token, r.gameId);
+      navigate(detail.game.status === 'lobby' ? `/lobby/${r.gameId}` : `/game/${r.gameId}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'join failed');
     } finally {
