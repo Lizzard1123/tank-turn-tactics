@@ -1,6 +1,6 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
-import { applyEvent, planBotAction, heartSpawnPos, mulberry32, hashSeed, type GameEvent, type GameState } from '../_shared/engine.ts';
+import { applyEvent, planBotAction, heartSpawnPos, normalizeHeartState, mulberry32, hashSeed, type GameEvent, type GameState } from '../_shared/engine.ts';
 
 // AP + heart scheduling (both modes, one mechanism, three schedule shapes):
 //   - game-start seeds last_tick_at (play: now, test: null) and started_at
@@ -176,7 +176,8 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
 
   const { data: snap } = await a.from('game_state').select('seq, state').eq('game_id', gameId).single();
   if (!snap) return 0;
-  let state: GameState = snap.state;
+  // legacy snapshots carry a single `heart`; normalize to the `hearts` array
+  let state: GameState = normalizeHeartState(snap.state as GameState);
 
   let appended = 0;
 
@@ -196,9 +197,12 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
   }
 
   // 2. heart spawn (only when the heart schedule is due); placed BEFORE the
-  // bot pass so bots can immediately react and claim it
+  // bot pass so bots can immediately react and claim it. The board holds at
+  // most heartCap unclaimed hearts — spawn only when under the cap.
   if (due.heart) {
-    const pos = heartSpawnPos(state);
+    const cap = (state.config as { heartCap?: number }).heartCap ?? 1;
+    const onBoard = (state.hearts ?? []).length;
+    const pos = onBoard >= cap ? null : heartSpawnPos(state);
     if (pos) {
       const spawn: GameEvent = {
         seq: state.seq + 1, type: 'heart_spawn', actorId: 'system',

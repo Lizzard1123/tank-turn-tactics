@@ -154,6 +154,7 @@ export default function ConfigView() {
                   <span>Placement</span><span>{cfg.heartPlacement ?? 'random'}</span>
                   <span>Spawn delay</span>
                   <span>{cfg.heartSpawnDelayMinutes ? `${cfg.heartSpawnDelayMinutes} min` : 'none'}</span>
+                  <span>Board cap</span><span>{cfg.heartCap ?? 1} heart{(cfg.heartCap ?? 1) === 1 ? '' : 's'} at once</span>
                 </>
               )}
             </div>

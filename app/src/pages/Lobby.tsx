@@ -46,6 +46,7 @@ export default function Lobby() {
   const [heartTimezone, setHeartTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const [heartPeriodMinutes, setHeartPeriodMinutes] = useState(360);
   const [heartSpawnDelayMinutes, setHeartSpawnDelayMinutes] = useState(0);
+  const [heartCap, setHeartCap] = useState(1);
   const [heartPlacement, setHeartPlacement] = useState<'random' | 'smart'>('random');
   // display option: name plates on tank tiles (default on)
   const [showPlayerNames, setShowPlayerNames] = useState(true);
@@ -91,6 +92,7 @@ export default function Lobby() {
         setHeartTimezone(c.heartTimezone ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'));
         setHeartPeriodMinutes(c.heartPeriodMinutes ?? 360);
         setHeartSpawnDelayMinutes(c.heartSpawnDelayMinutes ?? 0);
+        setHeartCap(c.heartCap ?? 1);
         setHeartPlacement(c.heartPlacement ?? 'random');
         setShowPlayerNames(c.showPlayerNames !== false);
       }
@@ -137,6 +139,7 @@ export default function Lobby() {
           heartTimezone: heartSpawn && heartSchedule === 'timeOfDay' ? heartTimezone : undefined,
           heartPeriodMinutes: heartSpawn && heartSchedule === 'random' ? heartPeriodMinutes : undefined,
           heartSpawnDelayMinutes: heartSpawn ? heartSpawnDelayMinutes : undefined,
+          heartCap: heartSpawn ? heartCap : undefined,
           heartPlacement: heartSpawn ? heartPlacement : undefined,
           showPlayerNames,
           bots,
@@ -328,6 +331,9 @@ export default function Lobby() {
                 <label htmlFor="knob-heartdelay">Spawn delay (minutes, 0 = immediately)</label>
                 <input id="knob-heartdelay" type="number" min={0} max={1440} value={heartSpawnDelayMinutes}
                   onChange={(e) => setHeartSpawnDelayMinutes(Math.max(0, num(e.target.value)))} />
+                <label htmlFor="knob-heartcap">Max hearts on the board</label>
+                <input id="knob-heartcap" type="number" min={1} max={20} value={heartCap}
+                  onChange={(e) => setHeartCap(Math.max(1, Math.min(20, num(e.target.value))))} />
                 <label htmlFor="knob-heartplace">Placement</label>
                 <select id="knob-heartplace" value={heartPlacement}
                   onChange={(e) => setHeartPlacement(e.target.value as 'random' | 'smart')}>
@@ -335,7 +341,7 @@ export default function Lobby() {
                   <option value="smart">Smart (far from everyone)</option>
                 </select>
               </div>
-              <p className="hint">Spawn times are secret — move onto a heart to claim it (+1 HP, capped at your starting HP; at full HP it converts to +2 AP). The spawn delay keeps the early game heart-free.</p>
+              <p className="hint">Spawn times are secret — move onto a heart to claim it (+1 HP, capped at your starting HP; at full HP it converts to +2 AP). The spawn delay keeps the early game heart-free, and at most {heartCap} unclaimed heart{heartCap === 1 ? '' : 's'} sit on the board at once.</p>
             </>
           )}
 

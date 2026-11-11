@@ -49,10 +49,14 @@ history scrubber) doubles as the dev playground.
   (interval / time-of-day / random — same three shapes as AP, independently
   configured, no public timer), optionally delayed by
   `heartSpawnDelayMinutes` after `started_at` to keep the early game
-  heart-free. Placement is `random` or `smart` (seeded distance-field
-  maximization away from all living players and the current heart).
-  Moving onto a heart claims it: +1 HP capped at starting HP, or at full HP
-  +2 AP. A new spawn replaces an unclaimed heart.
+  heart-free. The board holds at most `heartCap` unclaimed hearts at once
+  (1-20, default 1): the tick only spawns while under the cap, so a spawn
+  due at cap waits until a heart is claimed. Placement is `random` or
+  `smart` (seeded distance-field maximization away from all living players
+  and every existing heart). Moving onto a heart claims it: +1 HP capped at
+  starting HP, or at full HP +2 AP. State carries a `hearts` array
+  (legacy snapshots' single `heart` is lifted by `normalizeHeartState` at
+  every snapshot load).
 - **Gravestones** — dead players stay on the board as named, non-blocking
   markers: tanks drive over graves, hearts may spawn on grave squares,
   bots path through them. `occupantAt` counts living players only.
@@ -132,9 +136,10 @@ upgrade cost, base range, tick time-of-day, bot count, bot difficulties.
 ('interval'\|'timeOfDay'\|'random'), `apPeriodMinutes`, `apStealOnKill`,
 `heartGifts`, `revives`, `juryHaunt`, `heartSpawn`, `heartSchedule`,
 `heartIntervalMinutes`, `heartTimeOfDay`/`heartTimezone`,
-`heartPeriodMinutes`, `heartSpawnDelayMinutes`, `heartPlacement`
-('random'\|'smart') — all validated by game-create/game-update, which
-delete the fields of an abandoned schedule shape.
+`heartPeriodMinutes`, `heartSpawnDelayMinutes`, `heartCap` (1-20),
+`heartPlacement` ('random'\|'smart'), `showPlayerNames` — all validated by
+game-create/game-update, which delete the fields of an abandoned schedule
+shape (and all heart fields when `heartSpawn` turns off).
 
 **Tick-speed override:** play games resolve their AP schedule per above
 (legacy play = daily time-of-day). Test games set `ap_interval_minutes`

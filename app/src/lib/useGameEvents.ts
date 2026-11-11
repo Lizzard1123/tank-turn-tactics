@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { applyEvents, type GameEvent, type GameState, type PlayerId } from '@ttt/engine';
+import { applyEvents, normalizeHeartState, type GameEvent, type GameState, type PlayerId } from '@ttt/engine';
 import { gameGet, type GameDetail } from './api';
 import { supabase } from './supabaseClient';
 
@@ -35,10 +35,16 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
       if (!token) throw new Error('not signed in');
       const d = await gameGet(token, gameId);
       if (!aliveRef.current) return;
-      const base = d.state as GameState;
-      // replay the tail events onto the server snapshot
+      const base = normalizeHeartState(d.state as GameState);
+      // game-get ALREADY replays the tail onto the snapshot before returning
+      // (`state` is the merged, authoritative state), so re-applying the tail
+      // here double-applied event N onto a state with seq N — the "seq gap:
+      // expected N+1, got N" errors on every refresh that landed while a tail
+      // existed. Replay only events ahead of the snapshot (none with the
+      // current server, but correct if it ever ships raw snapshots again).
       const tail = d.events as GameEvent[];
-      const merged = tail.length > 0 ? applyEvents({ ...base, seq: base.seq }, tail) : base;
+      const future = tail.filter((e) => e.seq > base.seq);
+      const merged = future.length > 0 ? applyEvents(base, future) : base;
       setDetail(d.game);
       setAvatars(d.avatars);
       setState(merged);

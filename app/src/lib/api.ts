@@ -52,6 +52,8 @@ export interface GameConfigPayload {
   heartTimezone?: string;
   heartPeriodMinutes?: number;
   heartSpawnDelayMinutes?: number;
+  // max unclaimed hearts on the board at once (1-20, default 1)
+  heartCap?: number;
   showPlayerNames?: boolean;
   heartPlacement?: 'random' | 'smart';
   bots?: { difficulty: 'easy' | 'medium' | 'hard' }[];

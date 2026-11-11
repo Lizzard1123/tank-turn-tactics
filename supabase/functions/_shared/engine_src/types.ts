@@ -26,8 +26,12 @@ export interface GameState {
   pendingVotes: JuryVote[]; // this day's jury votes (cleared on tick)
   winner: PlayerId | null;
   log: LogEntry[];
-  // unclaimed board heart (event-sourced via heart_spawn; absent in old
-  // snapshots = no heart). seq = the spawning event's seq, for rng keying.
+  // unclaimed board hearts (event-sourced via heart_spawn; absent/empty in
+  // old snapshots = no hearts — legacy snapshots carry a single `heart`
+  // field, normalized by normalizeHeartState on load). seq = the spawning
+  // event's seq, for rng keying.
+  hearts?: Array<{ x: number; y: number; seq: number }>;
+  /** @deprecated legacy single-heart field; superseded by `hearts` */
   heart?: { x: number; y: number; seq: number } | null;
   // player the most recent tick haunted (juryHaunt) — log/UI hint.
   haunted?: PlayerId | null;
@@ -79,6 +83,7 @@ export interface GameConfig {
   heartPeriodMinutes?: number;   // 'random' mode period length, 1..1440
   heartSpawnDelayMinutes?: number; // no spawns until this long after start (0 = immediately)
   heartPlacement?: 'random' | 'smart'; // smart = distance-field maximization
+  heartCap?: number; // max unclaimed hearts on the board at once (1-20, default 1)
   showPlayerNames?: boolean; // UI hint: render tank names on the board (default true)
 }
 

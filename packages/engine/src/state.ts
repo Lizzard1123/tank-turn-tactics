@@ -23,5 +23,14 @@ export function createInitialState(config: GameConfig, specs: PlayerSpec[]): Gam
     };
     order.push(spec.id);
   }
-  return { seq: 0, day: 1, tickClockMinutes: 0, config, players, order, jury: [], pendingVotes: [], winner: null, log: [], heart: null, haunted: null };
+  return { seq: 0, day: 1, tickClockMinutes: 0, config, players, order, jury: [], pendingVotes: [], winner: null, log: [], hearts: [], haunted: null };
+}
+
+// Normalize legacy snapshots: pre-multi-heart state carried at most one
+// unclaimed heart in `heart`. Returns a state with `hearts` populated from
+// it (and `heart` cleared) so reducers/pickup only ever see the array.
+export function normalizeHeartState(s: GameState): GameState {
+  if (s.hearts) return s;
+  const legacy = s.heart;
+  return { ...s, hearts: legacy ? [{ x: legacy.x, y: legacy.y, seq: legacy.seq }] : [], heart: null };
 }

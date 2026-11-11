@@ -165,13 +165,15 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
             </text>
           </g>
         ))}
-        {/* heart tile: the unclaimed board heart (spawned by the tick loop,
-            claimed by moving onto it). Sits under the tank layer. */}
-        {state.heart && (
+        {/* heart tiles: every unclaimed board heart (spawned by the tick loop
+            up to the config's heart cap, claimed by moving onto one). Sits
+            under the tank layer; legacy snapshots carry a single `heart`. */}
+        {(state.hearts ?? (state.heart ? [state.heart] : [])).map((h) => (
           <g
+            key={`${h.x},${h.y}`}
             data-testid="heart-tile"
             className="heart-tile"
-            style={{ transform: `translate(${state.heart.x * CELL}px, ${state.heart.y * CELL}px)`, pointerEvents: 'none' }}
+            style={{ transform: `translate(${h.x * CELL}px, ${h.y * CELL}px)`, pointerEvents: 'none' }}
           >
             {/* ration-token backing: stamped paper tile with an ink border */}
             <rect
@@ -189,7 +191,7 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
               className="heart-shape"
             />
           </g>
-        )}
+        ))}
         {/* tank layer: one keyed <g> per ALIVE player, translated by position.
             Moves mutate the transform (CSS slides it); dead tanks are drawn
             as gravestones instead (below) and no longer block moves. */}

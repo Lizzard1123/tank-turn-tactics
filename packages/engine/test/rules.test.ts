@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { applyEvent } from '../src/reducer';
 import { EngineError } from '../src/errors';
-import { createInitialState } from '../src/state';
+import { createInitialState, normalizeHeartState } from '../src/state';
+import type { GameState } from '../src/types';
 import { heartSpawnPos } from '../src/pickup';
 import type { GameConfig, GameEvent, GameState } from '../src/types';
 
@@ -205,7 +206,7 @@ describe('juryHaunt', () => {
 describe('heart spawn + claim', () => {
   it('heart_spawn places a heart on a free square', () => {
     let s = applyEvent(base, ev(base, 'system', 'heart_spawn', { x: 3, y: 4 }));
-    expect(s.heart).toEqual({ x: 3, y: 4, seq: 1 });
+    expect(s.hearts).toEqual([{ x: 3, y: 4, seq: 1 }]);
     expect(s.log[s.log.length - 1].kind).toBe('heart_spawn');
   });
   it('rejects heart_spawn on an alive-occupied square', () => {
@@ -216,15 +217,38 @@ describe('heart spawn + claim', () => {
     const s0 = { ...base, players: { ...base.players, p3: { ...base.players.p3, hp: 0 } } };
     const at = s0.players.p3.pos;
     const s = applyEvent(s0, ev(s0, 'system', 'heart_spawn', at));
-    expect(s.heart).toEqual({ x: at.x, y: at.y, seq: 1 });
+    expect(s.hearts).toEqual([{ x: at.x, y: at.y, seq: 1 }]);
   });
   it('rejects heart_spawn outside the board', () => {
     expect(() => applyEvent(base, ev(base, 'system', 'heart_spawn', { x: 8, y: 0 }))).toThrow(/board/);
   });
-  it('a new spawn replaces an unclaimed heart', () => {
+  it('multiple spawns accumulate hearts on distinct squares', () => {
     let s = applyEvent(base, ev(base, 'system', 'heart_spawn', { x: 3, y: 4 }));
     s = applyEvent(s, ev(s, 'system', 'heart_spawn', { x: 5, y: 5 }));
-    expect(s.heart).toEqual({ x: 5, y: 5, seq: 2 });
+    expect(s.hearts).toEqual([
+      { x: 3, y: 4, seq: 1 },
+      { x: 5, y: 5, seq: 2 },
+    ]);
+  });
+  it('rejects heart_spawn on a square that already holds a heart', () => {
+    let s = applyEvent(base, ev(base, 'system', 'heart_spawn', { x: 3, y: 4 }));
+    expect(() => applyEvent(s, ev(s, 'system', 'heart_spawn', { x: 3, y: 4 }))).toThrow(/heart square/);
+  });
+  it('claiming one heart leaves the others on the board', () => {
+    let s = applyEvent(base, ev(base, 'system', 'heart_spawn', { x: 2, y: 1 }));
+    s = applyEvent(s, ev(s, 'system', 'heart_spawn', { x: 5, y: 5 }));
+    const p1 = s.players.p1;
+    s = { ...s, players: { ...s.players, p1: { ...p1, pos: { x: 2, y: 2 }, hp: 2 } } };
+    s = applyEvent(s, ev(s, 'p1', 'move', { to: { x: 2, y: 1 } }));
+    expect(s.hearts).toEqual([{ x: 5, y: 5, seq: 2 }]);
+  });
+  it('normalizeHeartState lifts a legacy single-heart snapshot', () => {
+    const legacy = { ...base, hearts: undefined, heart: { x: 3, y: 4, seq: 7 } } as unknown as GameState;
+    const s = normalizeHeartState(legacy);
+    expect(s.hearts).toEqual([{ x: 3, y: 4, seq: 7 }]);
+    expect(s.heart).toBeNull();
+    // already-normalized state passes through untouched
+    expect(normalizeHeartState(s)).toBe(s);
   });
   it('moving onto the heart claims it (+1 hp, capped)', () => {
     let s = applyEvent(base, ev(base, 'system', 'heart_spawn', { x: 2, y: 1 }));
@@ -232,7 +256,7 @@ describe('heart spawn + claim', () => {
     s = { ...s, players: { ...s.players, p1: { ...p1, pos: { x: 2, y: 2 }, hp: 2 } } }; // teleport next to heart
     s = applyEvent(s, ev(s, 'p1', 'move', { to: { x: 2, y: 1 } }));
     expect(s.players.p1.hp).toBe(3);
-    expect(s.heart).toBeNull();
+    expect(s.hearts).toEqual([]);
     expect(s.log[s.log.length - 1].text).toContain('found a heart');
   });
   it('claiming at full hp converts the heart to +2 AP', () => {
@@ -243,7 +267,7 @@ describe('heart spawn + claim', () => {
     s = applyEvent(s, ev(s, 'p1', 'move', { to: { x: 2, y: 1 } }));
     expect(s.players.p1.hp).toBe(3);
     expect(s.players.p1.ap).toBe(apBefore - 1 + 2); // move cost, then +2 AP
-    expect(s.heart).toBeNull();
+    expect(s.hearts).toEqual([]);
     expect(s.log[s.log.length - 1].text).toContain('+2 AP');
   });
 });
@@ -298,7 +322,7 @@ describe('heartSpawnPos', () => {
   });
   it('smart mode also avoids the current heart', () => {
     const s: GameState = {
-      ...base, heart: { x: 7, y: 7, seq: 1 },
+      ...base, hearts: [{ x: 7, y: 7, seq: 1 }],
       config: { ...cfg, heartPlacement: 'smart' },
       players: {
         p1: { ...base.players.p1, pos: { x: 0, y: 0 }, hp: 3 },
@@ -313,7 +337,7 @@ describe('heartSpawnPos', () => {
   });
   it('random mode avoids the current heart square', () => {
     for (let i = 0; i < 30; i++) {
-      const s = { ...base, seq: i, heart: { x: 0, y: 0, seq: 1 } };
+      const s = { ...base, seq: i, hearts: [{ x: 0, y: 0, seq: 1 }] };
       const pos = heartSpawnPos(s)!;
       expect(!(pos.x === 0 && pos.y === 0)).toBe(true);
     }

@@ -183,8 +183,9 @@ export default function Instructions() {
           hearts appear until the chosen time after the game starts.</p>
           <p><strong>Claiming:</strong> move onto a heart to pick it up —
           +1 HP, capped at your starting HP. At full HP the heart converts to
-          <strong> +2 AP</strong> instead — a heart is never wasted. A new
-          spawn replaces an unclaimed heart.</p>
+          <strong> +2 AP</strong> instead — a heart is never wasted. Hosts can
+          also cap how many unclaimed hearts sit on the board at once: once
+          the cap is reached, new spawns wait until one is picked up.</p>
           <p><strong>Placement:</strong> <em>Random</em> scatters hearts
           anywhere free; <em>Smart</em> places each heart as far away from
           every living player (and the previous heart) as possible — expect a

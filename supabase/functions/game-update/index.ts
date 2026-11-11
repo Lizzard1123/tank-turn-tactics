@@ -42,6 +42,11 @@ Deno.serve(async (req) => {
       if (v !== undefined && (typeof v !== 'number' || v < 0 || v > 1440))
         return json({ error: 'heartSpawnDelayMinutes must be 0-1440' }, 400);
     }
+    {
+      const v = (next as Record<string, unknown>).heartCap;
+      if (v !== undefined && (typeof v !== 'number' || !Number.isInteger(v) || v < 1 || v > 20))
+        return json({ error: 'heartCap must be 1-20' }, 400);
+    }
 
     // Schedule groups: AP and hearts each have one active schedule shape
     // (interval | timeOfDay | random) with mutually exclusive fields — a
@@ -146,7 +151,16 @@ Deno.serve(async (req) => {
       if (hp !== 'random' && hp !== 'smart') return json({ error: 'invalid heartPlacement' }, 400);
       nextRec.heartPlacement = hp;
     }
-    if (nextRec.heartSpawn !== true) delete nextRec.heartPlacement;
+    const hc = patchRec.heartCap;
+    if (hc !== undefined) {
+      if (typeof hc !== 'number' || !Number.isInteger(hc) || hc < 1 || hc > 20)
+        return json({ error: 'heartCap must be 1-20' }, 400);
+      nextRec.heartCap = hc;
+    }
+    if (nextRec.heartSpawn !== true) {
+      delete nextRec.heartPlacement;
+      delete nextRec.heartCap;
+    }
 
     const bots = Array.isArray(next.bots) ? next.bots : [];
     if (bots.length > 8) return json({ error: 'max 8 bots' }, 400);

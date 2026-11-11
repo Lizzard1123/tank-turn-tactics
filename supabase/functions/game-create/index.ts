@@ -40,6 +40,8 @@ function validateConfig(input: Record<string, unknown>): typeof CONFIG_DEFAULTS 
   if (hsd !== undefined && (typeof hsd !== 'number' || hsd < 0 || hsd > 1440)) return 'heartSpawnDelayMinutes must be 0-1440';
   const hp = (c as Record<string, unknown>).heartPlacement;
   if (hp !== undefined && hp !== 'random' && hp !== 'smart') return 'invalid heartPlacement';
+  const hc = (c as Record<string, unknown>).heartCap;
+  if (hc !== undefined && (typeof hc !== 'number' || !Number.isInteger(hc) || hc < 1 || hc > 20)) return 'heartCap must be 1-20';
   const bots = Array.isArray(input.bots) ? input.bots : [];
   if (bots.length > 8) return 'max 8 bots';
   for (const b of bots) {
@@ -92,6 +94,7 @@ Deno.serve(async (req) => {
       delete cfgRec.heartSpawnDelayMinutes;
       delete cfgRec.heartPlacement;
       delete cfgRec.heartSchedule;
+      delete cfgRec.heartCap;
     }
 
     // time-of-day fields ("HH:mm" + IANA tz, defaulting UTC) — AP and hearts

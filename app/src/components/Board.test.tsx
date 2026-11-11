@@ -208,13 +208,18 @@ describe('Board — new rules', () => {
     expect(screen.getByTestId('tank-p1')).toBeInTheDocument();
   });
 
-  test('board heart renders a heart tile at its square', () => {
-    render(<Board state={state({ heart: { x: 3, y: 3, seq: 1 } })} selectedMode="none" me="p1" onCellTap={() => {}} />);
+  test('board hearts render one tile per heart on the board', () => {
+    render(<Board state={state({ hearts: [{ x: 3, y: 3, seq: 1 }, { x: 0, y: 1, seq: 2 }] })} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    expect(screen.getAllByTestId('heart-tile')).toHaveLength(2);
+  });
+
+  test('legacy single-heart snapshots still render a heart tile', () => {
+    render(<Board state={state({ hearts: undefined, heart: { x: 3, y: 3, seq: 1 } } as never)} selectedMode="none" me="p1" onCellTap={() => {}} />);
     expect(screen.getByTestId('heart-tile')).toBeInTheDocument();
   });
 
   test('no heart tile without a board heart', () => {
-    render(<Board state={state({ heart: null })} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    render(<Board state={state({ hearts: [] })} selectedMode="none" me="p1" onCellTap={() => {}} />);
     expect(screen.queryByTestId('heart-tile')).not.toBeInTheDocument();
   });
 

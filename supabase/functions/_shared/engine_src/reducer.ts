@@ -23,7 +23,9 @@ function logLine(
     case 'move': {
       const to = payload.to as Vec;
       const base = `${name(actorId)} moved to (${to.x},${to.y})`;
-      const claimed = pre.heart && pre.heart.x === to.x && pre.heart.y === to.y;
+      const claimed = (pre.hearts ?? (pre.heart ? [pre.heart] : [])).some(
+        (h) => h.x === to.x && h.y === to.y,
+      );
       if (!claimed) return { text: base };
       // at full hp the heart converts to +2 AP instead of healing
       if ((pre.players[actorId]?.hp ?? 0) >= s.config.startingHp)
@@ -103,17 +105,17 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
       if (dx + dy !== 1) throw new EngineError('move must be 1 orthogonal square');
       if (to.x < 0 || to.y < 0 || to.x >= s.config.board || to.y >= s.config.board) throw new EngineError('outside board');
       if (occupantAt(s.players, to)) throw new EngineError('cell occupied');
-      // stepping onto the heart claims it: +1 hp, OR — at full hp — the
-      // heart converts to +2 AP instead (never wasted)
+      // stepping onto a heart claims it: +1 hp, OR — at full hp — the heart
+      // converts to +2 AP instead (never wasted)
       let players = { ...s.players, [actorId]: { ...actor, pos: to, ap: actor.ap - 1 } };
-      let heart = s.heart;
-      if (heart && heart.x === to.x && heart.y === to.y) {
+      const hearts = s.hearts ?? (s.heart ? [s.heart] : []);
+      if (hearts.some((h) => h.x === to.x && h.y === to.y)) {
         players[actorId] = players[actorId].hp >= s.config.startingHp
           ? { ...players[actorId], ap: players[actorId].ap + 2 }
           : { ...players[actorId], hp: players[actorId].hp + 1 };
-        heart = null;
       }
-      return { ...s, players, heart };
+      const remaining = hearts.filter((h) => !(h.x === to.x && h.y === to.y));
+      return { ...s, players, hearts: remaining, heart: null };
     }
     case 'attack': {
       const targetId = payload.targetId as string;
@@ -213,15 +215,18 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     s = { ...s, day: s.day + 1, tickClockMinutes: s.tickClockMinutes + elapsed,
       players, pendingVotes: [], haunted: lastHaunted };
   } else if (event.type === 'heart_spawn') {
-    // system-only event (the tick function mints it): place/replace the
-    // board heart. The square must be free of ALIVE players (graves are ok).
+    // system-only event (the tick function mints it): place another board
+    // heart (the tick enforces the config's heart cap). The square must be
+    // free of ALIVE players (graves are ok) and not already a heart.
     const at = event.payload as unknown as Vec;
     if (typeof at.x !== 'number' || typeof at.y !== 'number'
       || at.x < 0 || at.y < 0 || at.x >= s.config.board || at.y >= s.config.board) {
       throw new EngineError('heart_spawn outside board');
     }
     if (occupantAt(s.players, at)) throw new EngineError('heart_spawn on an occupied square');
-    s = { ...s, heart: { x: at.x, y: at.y, seq: event.seq } };
+    const hearts = s.hearts ?? (s.heart ? [s.heart] : []);
+    if (hearts.some((h) => h.x === at.x && h.y === at.y)) throw new EngineError('heart_spawn on a heart square');
+    s = { ...s, hearts: [...hearts, { x: at.x, y: at.y, seq: event.seq }], heart: null };
   } else if (event.type === 'jury_vote') {
     const voter = s.players[event.actorId];
     if (!voter) throw new EngineError('unknown player');
