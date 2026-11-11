@@ -52,6 +52,7 @@ export interface GameConfigPayload {
   heartTimezone?: string;
   heartPeriodMinutes?: number;
   heartSpawnDelayMinutes?: number;
+  showPlayerNames?: boolean;
   heartPlacement?: 'random' | 'smart';
   bots?: { difficulty: 'easy' | 'medium' | 'hard' }[];
 }

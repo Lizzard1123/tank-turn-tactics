@@ -79,6 +79,7 @@ export interface GameConfig {
   heartPeriodMinutes?: number;   // 'random' mode period length, 1..1440
   heartSpawnDelayMinutes?: number; // no spawns until this long after start (0 = immediately)
   heartPlacement?: 'random' | 'smart'; // smart = distance-field maximization
+  showPlayerNames?: boolean; // UI hint: render tank names on the board (default true)
 }
 
 export type ActionType =

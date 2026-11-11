@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
 
     // new-rule toggles: booleans only (type error if a patch sends garbage;
     // fields the patch omits keep their current value)
-    for (const k of ['apStealOnKill', 'heartGifts', 'revives', 'juryHaunt', 'heartSpawn']) {
+    for (const k of ['apStealOnKill', 'heartGifts', 'revives', 'juryHaunt', 'heartSpawn', 'showPlayerNames']) {
       const v = patchRec[k];
       if (v === undefined) continue;
       if (typeof v !== 'boolean') return json({ error: `${k} must be a boolean` }, 400);

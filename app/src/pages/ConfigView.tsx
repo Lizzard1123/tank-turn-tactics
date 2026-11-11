@@ -108,6 +108,7 @@ export default function ConfigView() {
               <span>Upgrade cost</span><span>{cfg.upgradeCost}</span>
               <span>Players / bots</span>
               <span>{detail.members.filter((m) => !m.is_bot).length} / {detail.members.filter((m) => m.is_bot).length}</span>
+              <span>Player names</span><span>{cfg.showPlayerNames !== false ? 'on' : 'off'}</span>
             </div>
           </section>
 

@@ -250,4 +250,16 @@ describe('Board — new rules', () => {
     })} selectedMode="give_heart" me="p1" onCellTap={() => {}} />);
     expect(screen.getByTestId('cell-1-0')).toHaveClass('legal');
   });
+
+  test('tank name plates render by default and hide when showPlayerNames is off', () => {
+    render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    expect(screen.getByText('me')).toBeInTheDocument();
+    expect(screen.getByText('foe')).toBeInTheDocument();
+
+    render(<Board state={state({ config: { ...state().config, showPlayerNames: false } })} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    // both boards are mounted; scope the assertion to the second
+    const boards = screen.getAllByTestId('board');
+    const hidden = boards[1];
+    expect(hidden.textContent).not.toContain('foe');
+  });
 });

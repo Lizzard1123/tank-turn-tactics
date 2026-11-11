@@ -18,7 +18,7 @@ function validateConfig(input: Record<string, unknown>): typeof CONFIG_DEFAULTS 
   if (typeof c.upgradeCost !== 'number' || c.upgradeCost < 1 || c.upgradeCost > 10) return 'upgradeCost must be 1-10';
   if (typeof c.apIntervalMinutes !== 'number' || c.apIntervalMinutes < 0 || c.apIntervalMinutes > 1440) return 'invalid apIntervalMinutes';
   // new-rule toggles (all optional booleans; absent = off / legacy behavior)
-  const boolKeys = ['apStealOnKill', 'heartGifts', 'revives', 'juryHaunt', 'heartSpawn'] as const;
+  const boolKeys = ['apStealOnKill', 'heartGifts', 'revives', 'juryHaunt', 'heartSpawn', 'showPlayerNames'] as const;
   for (const k of boolKeys) {
     const v = (c as Record<string, unknown>)[k];
     if (v !== undefined && typeof v !== 'boolean') return `${k} must be a boolean`;

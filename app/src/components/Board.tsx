@@ -206,6 +206,13 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
               className="tank-image"
               data-testid={`tank-image-${p.id}`}
             />
+            {/* name plate: stamped across the top of the square (host can
+                turn names off via config.showPlayerNames) */}
+            {state.config.showPlayerNames !== false && (
+              <text x={CELL / 2} y={9} textAnchor="middle" className="tank-name">
+                {p.name}
+              </text>
+            )}
             {/* ownership ring (signal = own, olive = enemy) */}
             <rect
               x={0} y={0} width={CELL} height={CELL}

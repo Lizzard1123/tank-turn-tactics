@@ -47,6 +47,8 @@ export default function Lobby() {
   const [heartPeriodMinutes, setHeartPeriodMinutes] = useState(360);
   const [heartSpawnDelayMinutes, setHeartSpawnDelayMinutes] = useState(0);
   const [heartPlacement, setHeartPlacement] = useState<'random' | 'smart'>('random');
+  // display option: name plates on tank tiles (default on)
+  const [showPlayerNames, setShowPlayerNames] = useState(true);
 
   const isHost = detail?.game.createdBy === player?.id;
 
@@ -90,6 +92,7 @@ export default function Lobby() {
         setHeartPeriodMinutes(c.heartPeriodMinutes ?? 360);
         setHeartSpawnDelayMinutes(c.heartSpawnDelayMinutes ?? 0);
         setHeartPlacement(c.heartPlacement ?? 'random');
+        setShowPlayerNames(c.showPlayerNames !== false);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'failed to load game');
@@ -135,6 +138,7 @@ export default function Lobby() {
           heartPeriodMinutes: heartSpawn && heartSchedule === 'random' ? heartPeriodMinutes : undefined,
           heartSpawnDelayMinutes: heartSpawn ? heartSpawnDelayMinutes : undefined,
           heartPlacement: heartSpawn ? heartPlacement : undefined,
+          showPlayerNames,
           bots,
         });
       }
@@ -242,6 +246,13 @@ export default function Lobby() {
 
           <h3>Rules</h3>
           <div className="check-grid">
+            <label className="check-item">
+              <input type="checkbox" checked={showPlayerNames} onChange={(e) => setShowPlayerNames(e.target.checked)} />
+              <span className="check-text">
+                <span className="check-title">Player names on tiles</span>
+                <span className="check-sub">Show each tank&rsquo;s name stamped across the top of its square. Off for anonymous warfare.</span>
+              </span>
+            </label>
             <label className="check-item">
               <input type="checkbox" checked={apStealOnKill} onChange={(e) => setApStealOnKill(e.target.checked)} />
               <span className="check-text">

@@ -770,6 +770,20 @@ input[type='radio'] {
   pointer-events: none;
 }
 
+/* tank name plates: stamped across the top of the square — paper text with
+   an ink halo so it reads on any avatar */
+.tank-name {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  fill: var(--paper-raised, #f3ecdb);
+  stroke: var(--ink, #26251d);
+  stroke-width: 2.5px;
+  paint-order: stroke;
+  pointer-events: none;
+}
+
 /* board heart: a stamped ration token — paper tile, ink border, rust heart.
    Static (no animation): a spawn is a board event, not a carnival. */
 .heart-backing {
