@@ -160,13 +160,30 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
           [actorId]: { ...actor, hp: actor.hp - 1 },
           [target.id]: { ...target, hp: target.hp + 1 } } };
       }
-      // revive: dead target returns at 1 hp / 0 AP and leaves the jury
+      // revive: dead target returns at 1 hp / 0 AP and leaves the jury.
+      // Revive keeps the target's position — and a heart may have spawned on
+      // their grave while they were dead — so a heart under their feet is
+      // claimed on the spot (+1 hp, or +2 AP if the revive alone maxed them).
       if (!s.config.revives) throw new EngineError('revives are disabled');
+      const graveHearts = s.hearts ?? (s.heart ? [s.heart] : []);
+      const underFeet = graveHearts.find(
+        (h) => h.x === target.pos.x && h.y === target.pos.y,
+      );
+      let revived: PlayerState = { ...target, hp: 1, ap: 0 };
+      if (underFeet) {
+        revived = revived.hp >= s.config.startingHp
+          ? { ...revived, ap: revived.ap + 2 }
+          : { ...revived, hp: revived.hp + 1 };
+      }
       return { ...s,
         players: { ...s.players,
           [actorId]: { ...actor, hp: actor.hp - 1 },
-          [target.id]: { ...target, hp: 1, ap: 0 } },
-        jury: s.jury.filter(id => id !== targetId) };
+          [target.id]: revived },
+        jury: s.jury.filter(id => id !== targetId),
+        hearts: underFeet
+          ? graveHearts.filter((h) => h !== underFeet)
+          : graveHearts,
+        heart: null };
     }
     case 'upgrade_range': {
       return { ...s, players: { ...s.players,
@@ -247,9 +264,15 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
       return { ...s, seq: event.seq, log: [...s.log, entry] };
     }
     let spawn: Vec | null = null;
+    const joinHearts = s.hearts ?? (s.heart ? [s.heart] : []);
     outer: for (let y = 0; y < s.config.board; y++) {
       for (let x = 0; x < s.config.board; x++) {
-        if (!occupantAt(s.players, { x, y })) { spawn = { x, y }; break outer; }
+        // hearts count as taken: spawning onto one would leave it unclaimed
+        // under an alive player (claims only trigger on move)
+        if (!occupantAt(s.players, { x, y })
+          && !joinHearts.some((h) => h.x === x && h.y === y)) {
+          spawn = { x, y }; break outer;
+        }
       }
     }
     if (!spawn) throw new EngineError('board is full, cannot join');

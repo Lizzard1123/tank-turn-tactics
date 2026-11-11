@@ -230,7 +230,7 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
             so a new event remounts the layer and restarts the animations.
             animationend hides the layer — except the bullet's, which would cut
             the victim flash short (bullet 250ms vs flash 400ms). */}
-        {fx && lastEvent && (
+        {fx && lastEvent && lastEvent.actorId === me && (
           <g
             key={lastEvent.seq}
             data-testid={FX_TESTIDS[fx.kind]}

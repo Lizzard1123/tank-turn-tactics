@@ -384,9 +384,14 @@ input[type='radio'] {
 .cell { cursor: pointer; }
 
 /* tanks are a translated overlay layer: moving mutates the transform so CSS
-   slides the tank between cells instead of remounting it */
-.tank {
+   slides the tank between cells. Only YOUR tank slides — other players'
+   moves snap instantly, so animation never leaks anyone else's activity. */
+.tank.own {
   transition: transform 300ms ease;
+}
+
+.tank:not(.own) {
+  transition: none;
 }
 
 .tank-image {
