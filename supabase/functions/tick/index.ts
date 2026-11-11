@@ -99,7 +99,14 @@ function timeOfDayDue(spec: { timeOfDay?: string; timezone?: string; lastAt: str
 function intervalDue(spec: { intervalMinutes?: number; lastAt: string | null; fallbackMinutes: number }): boolean {
   const interval = (spec.intervalMinutes && spec.intervalMinutes > 0 ? spec.intervalMinutes : spec.fallbackMinutes) * 60_000;
   if (!spec.lastAt) return true;
-  return Date.now() - new Date(spec.lastAt).getTime() >= interval;
+  // cron fires ~every minute with sub-second jitter; when the interval
+  // EQUALS the cron period, `now - last` lands just under the interval
+  // (59.6s) and every other grant is skipped (observed in prod: 1-minute
+  // interval dripped every 2 minutes). Tolerate a few seconds of jitter —
+  // safe because cron's period (60s) far exceeds the tolerance, so a grant
+  // can never fire twice per interval.
+  const JITTER_MS = 5000;
+  return Date.now() - new Date(spec.lastAt).getTime() >= interval - JITTER_MS;
 }
 
 function dueForTick(game: {
