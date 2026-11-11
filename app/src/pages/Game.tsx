@@ -352,9 +352,14 @@ function DbGameView({ gameId }: DbGameProps) {
         // tomorrow's slot
         return Math.round((tzSlotToday + 86_400_000 - now) / 1000);
       }
-      // interval: base = last server tick, or game start when none yet
-      const base = lastTickAt ? new Date(lastTickAt).getTime() : gameStartedAt;
-      if (!base) return null;
+      // interval: base = last server tick. With none yet, the server grants
+      // immediately on its next cron fire, so the first countdown runs to the
+      // top of the minute — not gameStart + interval (cron owns the phase).
+      if (!lastTickAt) {
+        if (!gameStartedAt) return null;
+        return Math.round((60_000 - (now % 60_000)) / 1000);
+      }
+      const base = new Date(lastTickAt).getTime();
       const intervalSeconds = apIntervalMinutes * 60;
       const elapsed = Math.floor((now - base) / 1000);
       return Math.max(0, intervalSeconds - (elapsed % intervalSeconds));
