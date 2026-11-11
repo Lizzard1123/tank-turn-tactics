@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { gameList, gameCreate, gameJoin, gameGet, gameDelete, type GameSummary } from '../lib/api';
-import { Icon, trashSvg, clipboardSvg } from '../lib/icons';
+import { Icon, trashSvg, clipboardSvg, flagSvgIcon } from '../lib/icons';
 import { ErrorBlock, LoadingBlock } from '../components/Status';
 
 export default function Dashboard() {
@@ -90,8 +90,11 @@ export default function Dashboard() {
     }
   }
 
-  async function handleDelete(gameId: string, gameName: string) {
-    if (!token || !window.confirm(`Delete "${gameName}"? This cannot be undone.`)) return;
+  async function handleDelete(gameId: string, gameName: string, ending = false) {
+    const msg = ending
+      ? `End "${gameName}"? The game finishes for every player — the recap stays viewable.`
+      : `Delete "${gameName}"? This cannot be undone.`;
+    if (!token || !window.confirm(msg)) return;
     setDeleting(gameId);
     try {
       await gameDelete(token, gameId);
@@ -106,6 +109,8 @@ export default function Dashboard() {
   // Shared by the active list and the finished-games expander — the delete rule
   // (host test games incl. finished ones, plus host lobby games) is identical.
   function GameRow({ g }: { g: GameSummary }) {
+    const hostControl = g.createdBy === player?.id && (g.mode === 'test' || g.status === 'lobby' || g.status === 'active');
+    const ending = g.status === 'active' && g.mode !== 'test';
     return (
       <>
         <button
@@ -115,14 +120,14 @@ export default function Dashboard() {
           <span className="game-name">{g.name}</span>
           <span className="game-meta">{g.mode} · {g.status} · {g.playerCount} players</span>
         </button>
-        {g.createdBy === player?.id && (g.mode === 'test' || g.status === 'lobby') && (
+        {hostControl && (
           <button
             className="game-delete"
-            onClick={() => handleDelete(g.id, g.name)}
+            onClick={() => handleDelete(g.id, g.name, ending)}
             disabled={deleting === g.id}
-            aria-label={`Delete ${g.name}`}
+            aria-label={`${ending ? 'End' : 'Delete'} ${g.name}`}
           >
-            <Icon html={trashSvg} width={20} height={20} />
+            <Icon html={ending ? flagSvgIcon : trashSvg} width={20} height={20} />
           </button>
         )}
       </>
