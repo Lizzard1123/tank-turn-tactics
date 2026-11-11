@@ -2,26 +2,83 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import { applyEvent, planBotAction, type GameEvent, type GameState } from '../_shared/engine.ts';
 
-// AP distribution flow (test mode):
-//   - game-start seeds last_tick_at = null, so the first tick invocation fires
-//     immediately (dueForTick returns true on a null last_tick_at).
-//   - thereafter a tick is due once ap_interval_minutes has elapsed.
-//   - each tick appends a daily_tick event that gives config.apPerDay AP to every
-//     alive player (engine reducer, daily_tick branch), then last_tick_at is
-//     persisted below after tickGame returns.
-// Note: AP only flows when this function is actually invoked on a schedule
-// (pg_cron / cron trigger); that wiring is out of scope here. With no scheduled
-// invocations, no AP distributes — that is an ops/configuration gap, not a code gap.
-function dueForTick(game: { mode: string; daily_ap_time: string; ap_interval_minutes: number | null; last_tick_at: string | null }): boolean {
-  const now = new Date();
-  if (game.mode === 'play') {
-    const [h, m] = game.daily_ap_time.split(':').map(Number);
-    if (!game.last_tick_at) return now.getUTCHours() === h;
-    return now.getUTCHours() === h && now.getUTCMinutes() >= m;
+// AP distribution flow (both modes, one mechanism):
+//   - game-start seeds last_tick_at = null; interval games then fire their
+//     first tick on the first invocation; time-of-day games fire at their slot.
+//   - interval games (test): due once ap_interval_minutes has elapsed since
+//     last_tick_at (the COLUMN, which game-update keeps in sync with
+//     config.apIntervalMinutes — the knob only worked if the column moved).
+//   - time-of-day games (play, or any game with config.apTimeOfDay): due in the
+//     first invocation at/after the configured local wall-clock time
+//     (config.apTimeOfDay in config.apTimezone) that is on a LATER local day
+//     than last_tick_at — so a slot grants at most once/day and downtime
+//     catches up exactly once, never once per missed hour.
+//   - each tick appends a daily_tick event granting config.apPerDay AP to every
+//     alive player (engine reducer, daily_tick branch); last_tick_at persists
+//     below after tickGame returns. The cron schedule must fire at least every
+//     minute for short intervals to work (0003 moved hourly → * * * * *).
+function tzParts(d: Date, timeZone: string): { y: number; mo: number; day: number; hh: number; mi: number } | null {
+  try {
+    const parts = new Intl.DateTimeFormat('en-GB', {
+      timeZone, year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    }).formatToParts(d);
+    const get = (t: string) => Number(parts.find((p) => p.type === t)?.value);
+    return { y: get('year'), mo: get('month'), day: get('day'), hh: get('hour') % 24, mi: get('minute') };
+  } catch {
+    return null; // unknown tz id — caller treats as not-due, never silently UTC
   }
-  const interval = (game.ap_interval_minutes ?? 2) * 60_000;
+}
+
+function timeOfDayDue(game: {
+  apTimeOfDay?: string; apTimezone?: string; daily_ap_time: string; last_tick_at: string | null;
+}): boolean {
+  // config schedule wins; fall back to the daily_ap_time column (UTC).
+  const tod = game.apTimeOfDay ?? game.daily_ap_time ?? '09:00';
+  const [h, m] = tod.split(':').map(Number);
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return false;
+
+  const now = new Date();
+  // Without a timezone, work in UTC wall-clock (the column's original meaning).
+  const tz = game.apTimezone;
+  if (tz) {
+    const nowP = tzParts(now, tz);
+    if (!nowP) return false;
+    if (nowP.hh * 60 + nowP.mi < h * 60 + m) return false; // before today's slot
+    if (!game.last_tick_at) return true;                    // never ticked
+    const lastP = tzParts(new Date(game.last_tick_at), tz);
+    if (!lastP) return false;
+    // due only if the last grant was on a PREVIOUS local day
+    return Date.UTC(lastP.y, lastP.mo, lastP.day) < Date.UTC(nowP.y, nowP.mo, nowP.day);
+  }
+  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
+  if (utcMinutes < h * 60 + m) return false;
   if (!game.last_tick_at) return true;
-  return now.getTime() - new Date(game.last_tick_at).getTime() >= interval;
+  const last = new Date(game.last_tick_at);
+  const lastDay = Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate());
+  const todayDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  return lastDay < todayDay;
+}
+
+function dueForTick(game: {
+  mode: string; daily_ap_time: string; ap_interval_minutes: number | null; last_tick_at: string | null;
+  config: { apIntervalMinutes?: number; apTimeOfDay?: string; apTimezone?: string };
+}): boolean {
+  // Time-of-day schedule: play mode always, or any game that configured
+  // config.apTimeOfDay (one shared mechanism, not two tick paths).
+  if (game.mode === 'play' || game.config?.apTimeOfDay) {
+    return timeOfDayDue({
+      apTimeOfDay: game.config?.apTimeOfDay,
+      apTimezone: game.config?.apTimezone,
+      daily_ap_time: game.daily_ap_time,
+      last_tick_at: game.last_tick_at,
+    });
+  }
+  // Interval schedule: due once the interval has elapsed (null last_tick_at =
+  // first tick fires immediately). Prefer the synced column; fall back to config.
+  const interval = (game.ap_interval_minutes ?? game.config?.apIntervalMinutes ?? 2) * 60_000;
+  if (!game.last_tick_at) return true;
+  return Date.now() - new Date(game.last_tick_at).getTime() >= interval;
 }
 
 async function tickGame(gameId: string): Promise<number> {
@@ -98,7 +155,7 @@ Deno.serve(async (req) => {
   try {
     const a = admin();
     const { data: activeGames } = await a.from('games')
-      .select('id, mode, daily_ap_time, ap_interval_minutes, last_tick_at')
+      .select('id, mode, daily_ap_time, ap_interval_minutes, last_tick_at, config')
       .eq('status', 'active');
 
     let total = 0;

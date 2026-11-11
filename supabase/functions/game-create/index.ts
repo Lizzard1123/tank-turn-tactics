@@ -63,6 +63,26 @@ Deno.serve(async (req) => {
       if (typeof body.dailyApTime === 'string' && /^\d{2}:\d{2}$/.test(body.dailyApTime)) {
         dailyApTime = body.dailyApTime;
       }
+      // time-of-day schedule (config.apTimeOfDay in config.apTimezone) — the
+      // same tick mechanism as the interval drip, just a different due check.
+      if (typeof (config as Record<string, unknown>).apTimeOfDay === 'string'
+        && /^\d{2}:\d{2}$/.test((config as { apTimeOfDay: string }).apTimeOfDay)) {
+        const [h, m] = (config as { apTimeOfDay: string }).apTimeOfDay.split(':').map(Number);
+        if (h <= 23 && m <= 59) {
+          (config as Record<string, unknown>).apTimeOfDay = (config as { apTimeOfDay: string }).apTimeOfDay;
+          const tz = (config as Record<string, unknown>).apTimezone;
+          if (typeof tz === 'string' && tz) {
+            try {
+              new Intl.DateTimeFormat('en-US', { timeZone: tz });
+              (config as Record<string, unknown>).apTimezone = tz;
+            } catch {
+              (config as Record<string, unknown>).apTimezone = 'UTC';
+            }
+          } else {
+            (config as Record<string, unknown>).apTimezone = 'UTC';
+          }
+        }
+      }
     } else {
       apIntervalMinutes = config.apIntervalMinutes > 0 ? config.apIntervalMinutes : 2;
     }

@@ -87,6 +87,9 @@ export interface GameDetail {
     status: 'lobby' | 'active' | 'finished';
     config: GameConfigPayload; createdBy: string;
     inviteCode: string; generation: number; forkSeq: number | null;
+    /** server AP schedule: interval base (ISO) and/or daily wall-clock slot */
+    lastTickAt?: string | null;
+    dailyApTime?: string | null;
   };
   state: unknown | null;
   events: unknown[];

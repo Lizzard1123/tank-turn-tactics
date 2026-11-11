@@ -40,6 +40,11 @@ export interface GameConfig {
   upgradeCost: number;      // default 2 AP per +1 range
   apIntervalMinutes: number;// test-mode AP drip; 0 = daily (server-managed)
   allowLateJoin?: boolean;  // permit joining after game-start (canonical game)
+  // AP-at-time schedule (play mode): grant AP daily at a fixed local time.
+  // Same underlying tick mechanics as the interval drip — the tick function
+  // computes whether the slot is due, one code path for both.
+  apTimeOfDay?: string;     // "HH:mm" local wall-clock, e.g. "12:00"
+  apTimezone?: string;      // IANA tz, e.g. "America/New_York"
 }
 
 export type ActionType =

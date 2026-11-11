@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  applyEvent, createInitialState, manhattan,
+  applyEvent, createInitialState,
   type ActionType, type GameEvent, type GameState, type PlayerSpec,
 } from '@ttt/engine';
 import Board, { type BoardMode } from '../components/Board';
@@ -68,16 +68,38 @@ function LocalGameView() {
   const [scrubIdx, setScrubIdx] = useState<number | null>(null);
   const [replaying, setReplaying] = useState(false);
 
-  // AP countdown: the local drip runs every 30s (started at test-mode mount).
-  // Once the game has a winner the countdown stops and the engine drip is
-  // halted (daily_tick bypasses the winner guard, so it must be stopped
-  // explicitly, not caught).
-  const [apRemaining, setApRemaining] = useState(30);
+  // AP countdown: derived from the local drip's LAST actual tick (history),
+  // not an independent counter — the two can never disagree. The drip interval
+  // is the game's apIntervalMinutes (default 30s when unset). Once the game
+  // has a winner the countdown stops and the engine drip is halted
+  // (daily_tick bypasses the winner guard, so it must be stopped explicitly).
+  const dripMs = (game?.state().config.apIntervalMinutes ?? 0) > 0
+    ? game!.state().config.apIntervalMinutes * 60_000
+    : 30_000;
+  const lastDripAt: number | null = useMemo(() => {
+    for (let i = game?.history.length ?? 0; i-- > 0;) {
+      const e = game?.history[i];
+      if (e?.type === 'daily_tick') return new Date(e.createdAt).getTime();
+    }
+    return null; // no tick yet: countdown runs from game start
+  }, [game, game?.history.length]);
+  const gameStartAt = useMemo(
+    () => (game?.history[0] ? new Date(game.history[0].createdAt).getTime() : Date.now()),
+    [game, game?.history.length],
+  );
+  const [apRemaining, setApRemaining] = useState<number | null>(null);
   useEffect(() => {
-    if (state?.winner) return;
-    const id = setInterval(() => setApRemaining((t) => (t <= 1 ? 30 : t - 1)), 1000);
+    if (state?.winner) { setApRemaining(null); return; }
+    const base = lastDripAt ?? gameStartAt;
+    const compute = () => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - base) / 1000));
+      const interval = Math.round(dripMs / 1000);
+      return Math.max(1, interval - (elapsed % interval));
+    };
+    setApRemaining(compute());
+    const id = setInterval(() => setApRemaining(compute()), 1000);
     return () => clearInterval(id);
-  }, [state?.winner]);
+  }, [state?.winner, lastDripAt, gameStartAt, dripMs]);
 
   useEffect(() => {
     if (state?.winner && game) game.stopApDrip();
@@ -117,10 +139,6 @@ function LocalGameView() {
     setMode('none');
     setScrubIdx(idx + 1);
   };
-
-  const inRangePlayers = Object.values(state.players).filter(
-    (p) => p.id !== me && mine && mine.hp > 0 && manhattan(mine.pos, p.pos) <= mine.range,
-  );
 
   // Newest applied event, or (while scrubbing/replaying) the event at the scrub
   // position — Board plays its fx for this event. scrubIdx is the index ONE
@@ -220,6 +238,12 @@ function DbGameView({ gameId }: DbGameProps) {
   const [mode, setMode] = useState<BoardMode>('none');
   const [toast, setToast] = useState<string | null>(null);
   const [scrubIdx, setScrubIdx] = useState<number | null>(null);
+  // when this client first saw the game active — fallback base for the AP
+  // countdown before the server's first tick exists (lastTickAt is null)
+  const gameStartedAtRef = useRef<number | null>(null);
+  if (detail?.status === 'active' && gameStartedAtRef.current === null) {
+    gameStartedAtRef.current = Date.now();
+  }
 
   // Optimistic actions: events posted but not yet confirmed by a refetch.
   // Applied on top of the authoritative state so the board reacts instantly;
@@ -287,47 +311,58 @@ function DbGameView({ gameId }: DbGameProps) {
     setScrubIdx(idx + 1);
   };
 
-  // AP countdown: seconds until the next AP point. Only shown for games with
-  // a client-known interval (apIntervalMinutes > 0). Daily server-managed AP
-  // (0) has no client-visible schedule, so the timer hides.
-  // Derived from the LIVE state (never the scrubbed display state) so
-  // scrubbing through history does not reset the countdown.
-  // Use a ref to detect server ticks: when tickClockMinutes jumps, the
-  // countdown recalculates from the new base so it doesn't drift to 0.
-  const lastTickClockRef = useRef<number | null>(null);
-  const apIntervalMinutes = state?.config.apIntervalMinutes ?? 0;
-  const liveClockMinutes = state?.tickClockMinutes ?? 0;
-  // A won game (winner in state) or a server-marked finished game stops the
-  // AP countdown and hides the timer.
+  // AP countdown: derived from the SERVER schedule, never a client guess.
+  //   - interval games: base is detail.lastTickAt (the server's actual last
+  //     grant; null = game just started, base is status-change time). Refresh-
+  //     proof: every refetch recomputes from the same server timestamp, so the
+  //     countdown cannot reset or stay at 0 — it lands back on the true value.
+  //   - time-of-day games: target is the next apTimeOfDay slot in the
+  //     schedule's timezone; the countdown shows time until that slot.
+  // A won game (winner in state) or a server-marked finished game hides it.
   const gameFinished = !!state?.winner || detail?.status === 'finished';
+  const lastTickAt = detail?.lastTickAt ?? null;
+  const sched = state?.config as { apIntervalMinutes?: number; apTimeOfDay?: string; apTimezone?: string } | undefined;
+  const apIntervalMinutes = sched?.apIntervalMinutes ?? 0;
+  const apTimeOfDay = sched?.apTimeOfDay;
+  const apTimezone = sched?.apTimezone;
+  const gameStartedAt = gameStartedAtRef.current; // set when first active detail loads
   const [apRemaining, setApRemaining] = useState<number | null>(null);
   useEffect(() => {
-    if (gameFinished) {
+    if (gameFinished || (!apIntervalMinutes && !apTimeOfDay)) {
       setApRemaining(null);
       return;
     }
-    if (!apIntervalMinutes || apIntervalMinutes <= 0) {
-      setApRemaining(null);
-      return;
-    }
-    const intervalSeconds = apIntervalMinutes * 60;
-    const prev = lastTickClockRef.current;
-    // tickClockMinutes jumped? recalculate from the new base.
-    if (prev !== null && liveClockMinutes !== prev) {
-      lastTickClockRef.current = liveClockMinutes;
-      const remaining = intervalSeconds - (liveClockMinutes * 60) % intervalSeconds;
-      setApRemaining(remaining <= 0 ? intervalSeconds : remaining);
-      return;
-    }
-    lastTickClockRef.current = liveClockMinutes;
-    let remaining = intervalSeconds - (liveClockMinutes * 60) % intervalSeconds;
-    if (remaining <= 0) remaining = intervalSeconds;
-    setApRemaining(remaining);
-    const id = setInterval(() => {
-      setApRemaining((t) => (t == null || t <= 1 ? intervalSeconds : t - 1));
-    }, 1000);
+    const compute = (): number | null => {
+      const now = Date.now();
+      if (apTimeOfDay) {
+        // next slot at/after now, in the schedule's timezone (UTC fallback)
+        const [h, m] = apTimeOfDay.split(':').map(Number);
+        const fmt = new Intl.DateTimeFormat('en-GB', {
+          timeZone: apTimezone || 'UTC', year: 'numeric', month: '2-digit',
+          day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+        });
+        const p = fmt.formatToParts(new Date(now));
+        const get = (t: string) => Number(p.find((x) => x.type === t)?.value);
+        const slotToday = Date.UTC(get('year'), get('month') - 1, get('day'), h, m);
+        // tz "now" in UTC-terms: shift now by (tzWallclock - utcWallclock)
+        const offsetMin = (get('hour') % 24) * 60 + get('minute') - (new Date(now).getUTCHours() * 60 + new Date(now).getUTCMinutes());
+        const tzNow = new Date(now + offsetMin * 60_000);
+        const tzSlotToday = slotToday + offsetMin * 60_000;
+        if (tzNow.getTime() < tzSlotToday) return Math.round((tzSlotToday - now) / 1000);
+        // tomorrow's slot
+        return Math.round((tzSlotToday + 86_400_000 - now) / 1000);
+      }
+      // interval: base = last server tick, or game start when none yet
+      const base = lastTickAt ? new Date(lastTickAt).getTime() : gameStartedAt;
+      if (!base) return null;
+      const intervalSeconds = apIntervalMinutes * 60;
+      const elapsed = Math.floor((now - base) / 1000);
+      return Math.max(0, intervalSeconds - (elapsed % intervalSeconds));
+    };
+    setApRemaining(compute());
+    const id = setInterval(() => setApRemaining(compute()), 1000);
     return () => clearInterval(id);
-  }, [gameFinished, apIntervalMinutes, liveClockMinutes]);
+  }, [gameFinished, apIntervalMinutes, apTimeOfDay, apTimezone, lastTickAt, gameStartedAt]);
 
   // dead player goes to the jury screen
   useEffect(() => {
@@ -387,10 +422,6 @@ function DbGameView({ gameId }: DbGameProps) {
   if (!state || !me || !displayState) return <main className="page"><p>No game data.</p></main>;
 
   const mine = state.players[me];
-  const inRangePlayers = Object.values(state.players).filter(
-    (p) => p.id !== me && mine && mine.hp > 0
-      && manhattan(mine.pos, p.pos) <= mine.range,
-  );
   const canFork = detail?.mode === 'test' && detail.createdBy === me;
 
   // Newest applied event, or (while scrubbing/replaying) the event at the scrub

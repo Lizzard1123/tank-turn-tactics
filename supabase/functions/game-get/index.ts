@@ -84,6 +84,9 @@ Deno.serve(async (req) => {
           config: game.config, createdBy: game.created_by,
           inviteCode: game.invite_code, generation: game.cur_generation,
           forkSeq: game.fork_seq,
+          // server AP schedule — the client derives its countdown from these,
+          // never from a client-side guess, so refreshes stay in sync
+          lastTickAt: game.last_tick_at, dailyApTime: game.daily_ap_time,
         },
         state,
         events: tail,       // authoritative tail (applied)
@@ -101,6 +104,7 @@ Deno.serve(async (req) => {
         config: game.config, createdBy: game.created_by,
         inviteCode: game.invite_code, generation: game.cur_generation,
         forkSeq: game.fork_seq,
+        lastTickAt: game.last_tick_at, dailyApTime: game.daily_ap_time,
       },
       state: null, events: [], history: [], members, avatars, me: me.id,
     });
