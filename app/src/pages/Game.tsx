@@ -209,13 +209,18 @@ function LocalGameView() {
           const occId = Object.entries(state.players).find(
             ([, p]) => p.pos.x === pos.x && p.pos.y === pos.y,
           )?.[0];
-          if (mode === 'move' && !occId) {
+          if (mode === 'move' && (!occId || state.players[occId].hp <= 0)) {
+            // graves are passable: only a LIVING occupant blocks the move
+            // (same rule the board highlight uses)
             void doAction('move', { to: pos });
-          } else if ((mode === 'attack' || mode === 'give_ap' || mode === 'give_heart') && occId && occId !== me) {
+          } else if ((mode === 'attack' || mode === 'give_ap') && occId && occId !== me && state.players[occId].hp > 0) {
             void doAction(mode, {
               targetId: occId,
               ...(mode === 'give_ap' ? { amount: 1 } : {}),
             });
+          } else if (mode === 'give_heart' && occId && occId !== me) {
+            // hearts may target graves too (a gift to a grave revives)
+            void doAction('give_heart', { targetId: occId });
           }
         }}
       />
@@ -508,18 +513,21 @@ function DbGameView({ gameId }: DbGameProps) {
         lastEvent={lastEvent}
         onCellTap={(pos) => {
           // tap semantics: in move mode a legal cell commits; in attack/give
-          // mode an enemy in range commits; otherwise nothing
+          // mode an occupant in range commits. Graves are passable and
+          // revive-targetable: only LIVING occupants block/attack.
           if (scrubbing || mode === 'none') return;
           const occId = Object.entries(state.players).find(
             ([, p]) => p.pos.x === pos.x && p.pos.y === pos.y,
           )?.[0];
-          if (mode === 'move' && !occId) {
+          if (mode === 'move' && (!occId || state.players[occId].hp <= 0)) {
             void doAction('move', { to: pos });
-          } else if ((mode === 'attack' || mode === 'give_ap' || mode === 'give_heart') && occId && occId !== me) {
+          } else if ((mode === 'attack' || mode === 'give_ap') && occId && occId !== me && state.players[occId].hp > 0) {
             void doAction(mode, {
               targetId: occId,
               ...(mode === 'give_ap' ? { amount: 1 } : {}),
             });
+          } else if (mode === 'give_heart' && occId && occId !== me) {
+            void doAction('give_heart', { targetId: occId });
           }
         }}
       />

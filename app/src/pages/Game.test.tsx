@@ -110,6 +110,46 @@ describe('Game page', () => {
     );
   });
 
+  test('move: tapping a square with a grave on it commits the move (graves passable)', async () => {
+    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4, state: STATE });
+    setup({
+      state: {
+        ...STATE,
+        players: {
+          ...STATE.players,
+          // dead player buried on the tapped square (1, 0)
+          p3: { id: 'p3', name: 'late', pos: { x: 1, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+        },
+        order: ['p1', 'p2', 'p3'],
+      },
+    });
+    fireEvent.click(screen.getByTestId('btn-move'));
+    fireEvent.click(screen.getByTestId('tap-legal'));
+    await waitFor(() =>
+      expect(vi.mocked(api.action)).toHaveBeenCalledWith('tok-1', 'g1', 'move', { to: { x: 1, y: 0 } }),
+    );
+  });
+
+  test('give heart: tapping a grave commits the revive gift (revives on)', async () => {
+    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4, state: STATE });
+    setup({
+      state: {
+        ...STATE,
+        config: { ...STATE.config, heartGifts: true, revives: true },
+        players: {
+          ...STATE.players,
+          p3: { id: 'p3', name: 'late', pos: { x: 1, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+        },
+        order: ['p1', 'p2', 'p3'],
+      },
+    });
+    fireEvent.click(screen.getByTestId('btn-give-heart'));
+    fireEvent.click(screen.getByTestId('tap-legal'));
+    await waitFor(() =>
+      expect(vi.mocked(api.action)).toHaveBeenCalledWith('tok-1', 'g1', 'give_heart', { targetId: 'p3' }),
+    );
+  });
+
   test('server failure refetches and shows error, state not corrupted', async () => {
     const refresh = vi.fn();
     vi.mocked(api.action).mockRejectedValue(new Error('server rejected'));
