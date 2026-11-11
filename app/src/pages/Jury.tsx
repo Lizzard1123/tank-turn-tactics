@@ -56,7 +56,8 @@ export default function Jury() {
         <h2>Alive players</h2>
         {alive.map((p) => (
           <div className="jury-row" key={p.id}>
-            <TankCard player={p} isMe={false} />
+            {/* revives on = fog of war: voters see names, not HP/range */}
+            <TankCard player={p} isMe={false} hideStats={!!state.config.revives} />
             <button
               data-testid={`vote-${p.id}`}
               disabled={alreadyVoted}

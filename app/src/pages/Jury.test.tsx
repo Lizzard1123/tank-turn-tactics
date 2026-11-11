@@ -74,4 +74,12 @@ describe('Jury screen', () => {
     expect(screen.getAllByTestId('board').length).toBeGreaterThan(0);
     expect(screen.getByTestId('revive-waiting')).toBeInTheDocument();
   });
+
+  test('revives on hides HP/range stats from jury voters (fog of war)', () => {
+    const { container } = setup({ ...STATE, config: { ...STATE.config, revives: true } });
+    expect(container.querySelector('[data-testid="card-p2"] .tank-card-stats')).toBeNull();
+    // without revives the stats are visible
+    const { container: container2 } = setup();
+    expect(container2.querySelector('[data-testid="card-p2"] .tank-card-stats')).not.toBeNull();
+  });
 });
