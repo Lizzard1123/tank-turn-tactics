@@ -6,7 +6,7 @@ import {
 } from '@ttt/engine';
 import Board, { type BoardMode } from '../components/Board';
 import ActionBar from '../components/ActionBar';
-import TankCard from '../components/TankCard';
+
 import EventFeed, { type FeedEntry } from '../components/EventFeed';
 import { Icon, trophySvg } from '../lib/icons';
 import { useGameEvents } from '../lib/useGameEvents';
@@ -494,13 +494,6 @@ function DbGameView({ gameId }: DbGameProps) {
           }
         }}
       />
-
-      {!scrubbing && mine && mine.hp > 0 && (
-        <section className="card" aria-label="Your tank">
-          <h2>Your tank</h2>
-          <TankCard player={mine} isMe />
-        </section>
-      )}
 
       {/* Event feed is post-game only — actions are hidden until the game ends */}
       {(displayState.winner || scrubbing) && (
