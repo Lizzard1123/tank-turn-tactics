@@ -53,6 +53,18 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
     }
   }, [gameId]);
 
+  // one fetch at a time — a realtime burst plus the poller must not stack
+  const inFlight = useRef(false);
+  const refreshThrottled = useCallback(async () => {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    try {
+      await refresh();
+    } finally {
+      inFlight.current = false;
+    }
+  }, [refresh]);
+
   useEffect(() => {
     aliveRef.current = true;
     setLoading(true);
@@ -72,11 +84,29 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'events', filter: `game_id=eq.${gameId}` },
-        () => { void refresh(); },
+        () => { void refreshThrottled(); },
       )
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [gameId, refresh]);
+  }, [gameId, refreshThrottled]);
+
+  // polling fallback: the tick's AP drip only reaches the client through a
+  // refetch, and a silently-dead realtime socket would otherwise leave the
+  // AP display frozen until the player's next action. Poll on a short cadence
+  // while the tab is visible and the game is still live.
+  const finished = detail?.status === 'finished' || !!state?.winner;
+  useEffect(() => {
+    if (finished) return;
+    const id = setInterval(() => {
+      if (document.visibilityState === 'visible') void refreshThrottled();
+    }, 4000);
+    const onVisible = () => { if (document.visibilityState === 'visible') void refreshThrottled(); };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [finished, refreshThrottled]);
 
   return { state, events, history, me, detail, avatars, loading, error, refresh };
 }

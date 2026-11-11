@@ -327,6 +327,10 @@ function DbGameView({ gameId }: DbGameProps) {
   const apTimezone = sched?.apTimezone;
   const gameStartedAt = gameStartedAtRef.current; // set when first active detail loads
   const [apRemaining, setApRemaining] = useState<number | null>(null);
+  // grant-hold flag: true once the countdown reaches a grant boundary; cleared
+  // when a refetch brings a new server lastTickAt (the grant was confirmed).
+  const grantPendingRef = useRef(false);
+  useEffect(() => { grantPendingRef.current = false; }, [lastTickAt]);
   useEffect(() => {
     if (gameFinished || (!apIntervalMinutes && !apTimeOfDay)) {
       setApRemaining(null);
@@ -362,6 +366,14 @@ function DbGameView({ gameId }: DbGameProps) {
       const base = new Date(lastTickAt).getTime();
       const intervalSeconds = apIntervalMinutes * 60;
       const elapsed = Math.floor((now - base) / 1000);
+      // grant boundary: hold at 0 until the server confirms the grant (a
+      // refetch brings a new lastTickAt and resets the hold) — no rollover on
+      // guesswork while the actual drip may be seconds late (cron jitter).
+      if (grantPendingRef.current) return 0;
+      if (elapsed >= intervalSeconds && elapsed % intervalSeconds === 0) {
+        grantPendingRef.current = true;
+        return 0;
+      }
       return Math.max(0, intervalSeconds - (elapsed % intervalSeconds));
     };
     setApRemaining(compute());
