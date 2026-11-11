@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { gameGet, gameList, type GameConfigPayload, type GameDetail, type GameSummary } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { Icon, clipboardSvg } from '../lib/icons';
+import { ErrorBlock, LoadingBlock } from '../components/Status';
 
 // Read-only view of a game's EFFECTIVE server config — what the tick loop
 // actually enforces (lobby knobs are only authoritative once the host saves
@@ -44,6 +45,21 @@ export default function ConfigView() {
       .catch(() => {});
   }
 
+  // Short timezone label for schedule rows: "America/New_York" → "EST/EDT"
+  // (whichever is in effect today). Zones without an abbreviation fall back
+  // to the IANA id; UTC stays "UTC".
+  function tzShort(tz: string | undefined): string {
+    if (!tz || tz === 'UTC') return 'UTC';
+    try {
+      const name = new Intl.DateTimeFormat('en-US', { timeZone: tz, timeZoneName: 'short' })
+        .formatToParts(new Date())
+        .find((p) => p.type === 'timeZoneName')?.value;
+      return name && !/^GMT/.test(name) ? name : tz;
+    } catch {
+      return tz;
+    }
+  }
+
   return (
     <main className="page">
       <p className="row" style={{ justifyContent: 'space-between' }}>
@@ -55,12 +71,12 @@ export default function ConfigView() {
         )}
       </p>
       <h1>Game config</h1>
-      {error && <p className="error" role="alert">{error}</p>}
+      {error && <ErrorBlock message={error} />}
 
       {!gameId && (
         <section className="card" aria-label="Pick a game">
           <h2>Pick a game</h2>
-          {games === null && <p>Loading…</p>}
+          {games === null && !error && <LoadingBlock label="Loading games…" />}
           {games?.length === 0 && <p>No games yet — create one first.</p>}
           <ul className="game-list">
             {games?.map((g) => (
@@ -75,7 +91,7 @@ export default function ConfigView() {
         </section>
       )}
 
-      {gameId && !detail && !error && <p>Loading…</p>}
+      {gameId && !detail && !error && <LoadingBlock label="Loading config…" />}
 
       {detail && cfg && (
         <>
@@ -106,7 +122,7 @@ export default function ConfigView() {
               )}
               {apSchedule === 'timeOfDay' && (
                 <>
-                  <span>Time of day</span><span>{cfg.apTimeOfDay} ({cfg.apTimezone ?? 'UTC'})</span>
+                  <span>Time of day</span><span>{cfg.apTimeOfDay} ({tzShort(cfg.apTimezone)})</span>
                 </>
               )}
               {apSchedule === 'random' && (
@@ -129,7 +145,7 @@ export default function ConfigView() {
                     <><span>Interval</span><span>{cfg.heartIntervalMinutes ?? 60} min</span></>
                   )}
                   {(cfg.heartSchedule) === 'timeOfDay' && (
-                    <><span>Time of day</span><span>{cfg.heartTimeOfDay} ({cfg.heartTimezone ?? 'UTC'})</span></>
+                    <><span>Time of day</span><span>{cfg.heartTimeOfDay} ({tzShort(cfg.heartTimezone)})</span></>
                   )}
                   {(cfg.heartSchedule) === 'random' && (
                     <><span>Period</span><span>{cfg.heartPeriodMinutes} min</span></>

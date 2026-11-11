@@ -14,9 +14,11 @@ export function Icon({ html, className, width = 14, height = 14 }: { html: strin
 const svg = (inner: string) =>
   `<svg width="100%" height="100%" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none" aria-hidden="true">${inner}</svg>`;
 
-const heartPath = "M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3.05 1.29-3.8 2.8c-0.75-1.51-2.04-2.8-3.8-2.8A5.5 5.5 0 0 0 2 8.5c0 2.3 1.51 4.04 3 5.5l7 7.3 7-7.3c1.49-1.46 3-3.21 3-5.5z";
+// Heart stat icon: solid stamped heart (fills with the surrounding color,
+// ink-weight stroke) to match the field-operations look.
+const heartPath = "M12 21.3C5.4 16.6 2.5 13.4 2.5 9.3 2.5 6.4 4.8 4 7.7 4c1.7 0 3.2.8 4.3 2.3C13.1 4.8 14.6 4 16.3 4c2.9 0 5.2 2.4 5.2 5.3 0 4.1-2.9 7.3-9.5 12z";
 
-export const heartSvg = svg(`<path d="${heartPath}" />`);
+export const heartSvg = svg(`<path d="${heartPath}" fill="currentColor" />`);
 export const boltSvg = svg(`<path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />`);
 export const targetSvg = svg(`
   <circle cx="12" cy="12" r="10" />

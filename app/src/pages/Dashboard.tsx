@@ -3,6 +3,7 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { gameList, gameCreate, gameJoin, gameDelete, type GameSummary } from '../lib/api';
 import { Icon, trashSvg, clipboardSvg } from '../lib/icons';
+import { ErrorBlock, LoadingBlock } from '../components/Status';
 
 export default function Dashboard() {
   const { token, player, isGuest } = useAuth();
@@ -147,8 +148,8 @@ export default function Dashboard() {
 
       <section className="card" aria-label="Your games">
         <h2>Your games</h2>
-        {error && <p className="error" role="alert">{error}</p>}
-        {games === null && <p>Loading…</p>}
+        {error && <ErrorBlock message={error} />}
+        {games === null && !error && <LoadingBlock label="Loading games…" />}
         {activeGames?.length === 0 && !finishedGames?.length && (
           <p>No games yet — create or join one below.</p>
         )}

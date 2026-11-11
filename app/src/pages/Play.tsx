@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { gameGet, gameJoin } from '../lib/api';
 import { useAuth } from '../lib/auth';
+import { ErrorBlock, LoadingBlock } from '../components/Status';
 
 // /play — the canonical-game entry point. Joins the configured canonical
 // game (VITE_CANONICAL_INVITE_CODE) and routes to it; without a configured
@@ -44,10 +45,10 @@ export default function Play() {
   if (error) {
     return (
       <main className="page">
-        <p className="error" role="alert">{error}</p>
+        <ErrorBlock message={error} hint="The game may not exist or may not be shared with you." />
         <button type="button" onClick={() => navigate('/games')}>Go to games</button>
       </main>
     );
   }
-  return <main className="page"><p>Joining the war…</p></main>;
+  return <main className="page"><LoadingBlock label="Joining the war…" /></main>;
 }

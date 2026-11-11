@@ -160,16 +160,32 @@ describe('auth context', () => {
     expect(out.auth!.player).toBeNull();
   });
 
-  test('guestSignin creates one anonymous session and reuses it', async () => {
+  test('guestSignin reuses a REAL player session instead of logging them out', async () => {
+    // regression for the "test game logged me out" bug: calling
+    // signInAnonymously over a live session REPLACES it (auth-js saves the
+    // new session over the old one), destroying the signed-in identity.
+    // guestSignin must return the existing token as-is.
     const out = await probe();
-    const session = stubSession('tg', 'g1', 'guest-x', true);
+    stubSession('t1', 'p1', 'abc', false);
+    let token = '';
+    await act(async () => { token = await out.auth!.guestSignin(); });
+    expect(token).toBe('t1');
+    expect(supabase.auth.signInAnonymously).not.toHaveBeenCalled();
+  });
+
+  test('guestSignin creates one anonymous session when signed out and reuses it', async () => {
+    const out = await probe();
+    // signed-out default: getSession/getUser return null until the mock
+    // sign-in below installs the anon session
     vi.mocked(supabase.auth.signInAnonymously).mockImplementation(async () => {
+      const session = stubSession('tg', 'g1', 'guest-x', true);
       await fireSignIn(session);
       return { data: { user: null, session }, error: null } as never;
     });
     let token = '';
     await act(async () => { token = await out.auth!.guestSignin(); });
     expect(token).toBe('tg');
+    expect(supabase.auth.signInAnonymously).toHaveBeenCalledTimes(1);
     expect(localStorage.getItem('ttt_token')).toBe('tg');
     expect(out.auth!.isGuest).toBe(true);
 

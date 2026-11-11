@@ -74,8 +74,13 @@ function HeartGraphic() {
   return (
     <svg width="120" height="110" viewBox="0 0 120 110" aria-label="Heart pickup">
       <rect width="120" height="110" fill="#e9e2cf" stroke="#26251d" stroke-width="3" />
+      {/* ration-token marker: paper octagon, ink border, rust heart */}
+      <rect
+        x="24" y="20" width="72" height="70" rx="12"
+        fill="#f3ecdb" stroke="#26251d" stroke-width="3"
+      />
       <path
-        d="M60 88 C 30 66, 22 44, 38 30 C 48 22, 60 30, 60 40 C 60 30, 72 22, 82 30 C 98 44, 90 66, 60 88 Z"
+        d="M60 78 C 36 62, 30 46, 42 36 C 49 30, 60 36, 60 44 C 60 36, 71 30, 78 36 C 90 46, 84 62, 60 78 Z"
         fill="#c8471f" stroke="#26251d" stroke-width="3"
       />
     </svg>
@@ -98,7 +103,7 @@ function Figure({ children, caption }: { children: React.ReactNode; caption?: st
 export default function Instructions() {
   return (
     <main className="instructions">
-      <Link to="/" className="muted">← Back</Link>
+      <Link to="/" className="link-button btn">← Back</Link>
       <h1>How to play</h1>
 
       <div className="panel">
@@ -227,7 +232,7 @@ export default function Instructions() {
           <p>During a game the live battle log only shows what matters:
           <strong> who dealt a final blow</strong> and <strong>who got
           revived</strong>. The full event history unlocks after the game
-          ends (test-mode hosts can scrub and fork it anytime).</p>
+          ends (test-mode hosts can scrub it anytime).</p>
         </div>
       </div>
 

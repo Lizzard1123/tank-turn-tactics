@@ -5,6 +5,7 @@ import TankCard from '../components/TankCard';
 import { Icon, skullSvg } from '../lib/icons';
 import { useGameEvents } from '../lib/useGameEvents';
 import { action } from '../lib/api';
+import { ErrorScreen, Loading } from '../components/Status';
 
 // Screen for eliminated players: watch the board, vote on AP bonuses.
 export default function Jury() {
@@ -12,7 +13,9 @@ export default function Jury() {
   const { state, me, avatars, refresh } = useGameEvents(gameId);
 
   if (!state || !me) {
-    return <main className="page"><p>{state ? 'You are not on the jury.' : 'Loading…'}</p></main>;
+    return state
+      ? <ErrorScreen message="You are not on the jury." />
+      : <Loading label="Loading jury…" />;
   }
 
   const alive = Object.values(state.players).filter((p) => p.hp > 0);

@@ -30,7 +30,7 @@ export default function Auth() {
 
   return (
     <main className="auth">
-      <Link to="/" className="muted">← Back</Link>
+      <Link to="/" className="link-button btn">← Back</Link>
       <h1>{mode === 'signin' ? 'Sign in' : 'Create account'}</h1>
       <div className="row" role="tablist">
         <button className={mode === 'signin' ? 'primary' : ''} onClick={() => setMode('signin')}>Sign in</button>

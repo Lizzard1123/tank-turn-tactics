@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { gameGet, gameStart, gameUpdate, type GameDetail, type ScheduleMode } from '../lib/api';
 import { Icon, robotSvg } from '../lib/icons';
+import { ErrorScreen, Loading } from '../components/Status';
 
 const BOT_DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
 const SCHEDULE_MODES: { value: ScheduleMode; label: string }[] = [
@@ -146,8 +147,8 @@ export default function Lobby() {
     }
   }
 
-  if (error) return <main className="page"><p className="error" role="alert">{error}</p></main>;
-  if (!detail) return <main className="page"><p>Loading…</p></main>;
+  if (error) return <ErrorScreen message={error} />;
+  if (!detail) return <Loading label="Loading lobby…" />;
 
   const { game } = detail;
   const started = game.status !== 'lobby';
@@ -241,29 +242,44 @@ export default function Lobby() {
 
           <h3>Rules</h3>
           <div className="check-grid">
-            <label>
+            <label className="check-item">
               <input type="checkbox" checked={apStealOnKill} onChange={(e) => setApStealOnKill(e.target.checked)} />
-              Steal AP on kill <span className="hint-inline">— the killer loots the victim&rsquo;s AP</span>
+              <span className="check-text">
+                <span className="check-title">Steal AP on kill</span>
+                <span className="check-sub">The killer loots the victim&rsquo;s entire AP stash; off, it dies with them.</span>
+              </span>
             </label>
-            <label>
+            <label className="check-item">
               <input type="checkbox" checked={heartGifts} onChange={(e) => setHeartGifts(e.target.checked)} />
-              Heart gifts <span className="hint-inline">— give 1 of your hearts to heal or revive an ally</span>
+              <span className="check-text">
+                <span className="check-title">Heart gifts</span>
+                <span className="check-sub">Give 1 of your hearts (never AP) to heal an ally in range.</span>
+              </span>
             </label>
-            <label>
+            <label className="check-item">
               <input type="checkbox" checked={revives} onChange={(e) => setRevives(e.target.checked)} />
-              Revives <span className="hint-inline">— a gifted heart returns a dead player at 1 HP / 0 AP</span>
+              <span className="check-text">
+                <span className="check-title">Revives</span>
+                <span className="check-sub">A gifted heart brings a dead player back at 1 HP / 0 AP, off the jury.</span>
+              </span>
             </label>
-            <label>
+            <label className="check-item">
               <input type="checkbox" checked={juryHaunt} onChange={(e) => setJuryHaunt(e.target.checked)} />
-              Jury haunt <span className="hint-inline">— the jury&rsquo;s most-voted player earns no AP that day</span>
+              <span className="check-text">
+                <span className="check-title">Jury haunt</span>
+                <span className="check-sub">The jury&rsquo;s most-voted living player earns no AP on the next tick.</span>
+              </span>
             </label>
           </div>
 
           <h3>Hearts</h3>
           <div className="check-grid">
-            <label>
+            <label className="check-item">
               <input type="checkbox" checked={heartSpawn} onChange={(e) => setHeartSpawn(e.target.checked)} />
-              Spawn collectible hearts on the board
+              <span className="check-text">
+                <span className="check-title">Spawn collectible hearts on the board</span>
+                <span className="check-sub">Hearts appear on their own schedule; move onto one to claim it (+1 HP, or +2 AP at full HP).</span>
+              </span>
             </label>
           </div>
           {heartSpawn && (

@@ -270,21 +270,30 @@ Deno.serve(async (req) => {
     let total = 0;
     const ticked: string[] = [];
     const hearted: string[] = [];
+    const failed: string[] = [];
+    // per-game isolation: one bad game must not throw away the whole batch
+    // (an uncaught error here 500s the request and every OTHER active game
+    // silently misses its grant for that fire)
     for (const game of activeGames ?? []) {
-      const due = dueForTick(game);
-      if (!due.ap && !due.heart) continue;
-      const n = await tickGame(game.id, due);
-      if (n > 0) {
-        const patch: Record<string, string> = {};
-        if (due.ap) patch.last_tick_at = new Date().toISOString();
-        if (due.heart) patch.last_heart_at = new Date().toISOString();
-        await a.from('games').update(patch).eq('id', game.id);
-        total += n;
-        ticked.push(game.id);
-        if (due.heart) hearted.push(game.id);
+      try {
+        const due = dueForTick(game);
+        if (!due.ap && !due.heart) continue;
+        const n = await tickGame(game.id, due);
+        if (n > 0) {
+          const patch: Record<string, string> = {};
+          if (due.ap) patch.last_tick_at = new Date().toISOString();
+          if (due.heart) patch.last_heart_at = new Date().toISOString();
+          await a.from('games').update(patch).eq('id', game.id);
+          total += n;
+          ticked.push(game.id);
+          if (due.heart) hearted.push(game.id);
+        }
+      } catch (gameErr) {
+        failed.push(game.id);
+        console.error(`tick: game ${game.id} failed:`, gameErr instanceof Error ? gameErr.message : gameErr);
       }
     }
-    return json({ ok: true, ticked, hearted, eventsAppended: total });
+    return json({ ok: true, ticked, hearted, failed, eventsAppended: total });
   } catch (e) {
     return json({ error: `tick failed: ${e instanceof Error ? e.message : 'unknown'}` }, 500);
   }

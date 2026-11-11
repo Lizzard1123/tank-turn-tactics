@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { createLocalGame } from '../lib/localGame';
 import { useLocalGame } from '../lib/localGameContext';
+import { ErrorScreen, Loading } from '../components/Status';
 
 // Test Mode: guest sign-in only, no database game, no cron.
 // Builds a local in-memory engine game (starting AP = 4), starts a client-side
@@ -31,6 +32,6 @@ export default function TestMode() {
     })();
   }, [guestSignin, setGame, navigate]);
 
-  if (error) return <main className="page"><p className="error" role="alert">{error}</p></main>;
-  return <main className="page"><p>Setting up your local test game…</p></main>;
+  if (error) return <ErrorScreen message={error} hint="Go back and try again — nothing was saved." />;
+  return <Loading label="Setting up your local test game…" />;
 }

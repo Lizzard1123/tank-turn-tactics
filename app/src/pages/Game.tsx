@@ -6,6 +6,7 @@ import {
 } from '@ttt/engine';
 import Board, { type BoardMode } from '../components/Board';
 import ActionBar from '../components/ActionBar';
+import { ErrorScreen, Loading } from '../components/Status';
 
 import EventFeed, { type FeedEntry } from '../components/EventFeed';
 import { Icon, trophySvg } from '../lib/icons';
@@ -451,9 +452,9 @@ function DbGameView({ gameId }: DbGameProps) {
     }
   }, [gameId, state, me, refresh]);
 
-  if (loading) return <main className="page"><p>Loading game…</p></main>;
-  if (error) return <main className="page"><p className="error" role="alert">{error}</p></main>;
-  if (!state || !me || !displayState) return <main className="page"><p>No game data.</p></main>;
+  if (loading) return <Loading label="Loading game…" />;
+  if (error) return <ErrorScreen message={error} />;
+  if (!state || !me || !displayState) return <ErrorScreen message="No game data." />;
 
   const mine = state.players[me];
 

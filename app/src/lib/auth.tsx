@@ -104,8 +104,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     async guestSignin() {
+      // Reuse ANY live session. Re-signing in anonymously would REPLACE the
+      // current session (auth-js saves the new one over it), which destroys a
+      // real player's signed-in identity — the "test game logged me out" bug.
+      // A real player keeps their identity here; the local test game never
+      // touches the database, so using their token is harmless.
       const existing = await playerForSession();
-      if (existing && isGuest) return existing.token; // reuse the current guest session
+      if (existing) return existing.token;
       const name = randomName();
       const { error } = await supabase.auth.signInAnonymously({
         options: { data: { name } },

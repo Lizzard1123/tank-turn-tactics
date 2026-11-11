@@ -143,13 +143,15 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
           );
         })}
         {/* gravestone layer: one non-blocking marker per DEAD player —
-            a tombstone glyph plus their name. Tanks drive over graves. */}
+            a tombstone glyph plus their name. Tanks drive over graves. The
+            layer is click-transparent: taps pass through to the cell rects
+            underneath (moving onto a grave, or targeting it for a revive). */}
         {Object.values(state.players).filter((p) => p.hp <= 0).map((p) => (
           <g
             key={p.id}
             data-testid={`grave-${p.id}`}
             className="grave"
-            style={{ transform: `translate(${p.pos.x * CELL}px, ${p.pos.y * CELL}px)` }}
+            style={{ transform: `translate(${p.pos.x * CELL}px, ${p.pos.y * CELL}px)`, pointerEvents: 'none' }}
           >
             <path
               d={`M${CELL * 0.28} ${CELL * 0.86}
@@ -169,14 +171,21 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
           <g
             data-testid="heart-tile"
             className="heart-tile"
-            style={{ transform: `translate(${state.heart.x * CELL}px, ${state.heart.y * CELL}px)` }}
+            style={{ transform: `translate(${state.heart.x * CELL}px, ${state.heart.y * CELL}px)`, pointerEvents: 'none' }}
           >
+            {/* ration-token backing: stamped paper tile with an ink border */}
+            <rect
+              x={CELL * 0.08} y={CELL * 0.08}
+              width={CELL * 0.84} height={CELL * 0.84}
+              rx={CELL * 0.14}
+              className="heart-backing"
+            />
             <path
-              d={`M${CELL / 2} ${CELL * 0.82}
-                  C ${CELL * 0.18} ${CELL * 0.58}, ${CELL * 0.08} ${CELL * 0.34}, ${CELL * 0.26} ${CELL * 0.2}
-                  C ${CELL * 0.36} ${CELL * 0.12}, ${CELL / 2} ${CELL * 0.2}, ${CELL / 2} ${CELL * 0.32}
-                  C ${CELL / 2} ${CELL * 0.2}, ${CELL * 0.64} ${CELL * 0.12}, ${CELL * 0.74} ${CELL * 0.2}
-                  C ${CELL * 0.92} ${CELL * 0.34}, ${CELL * 0.82} ${CELL * 0.58}, ${CELL / 2} ${CELL * 0.82} Z`}
+              d={`M${CELL / 2} ${CELL * 0.78}
+                  C ${CELL * 0.2} ${CELL * 0.56}, ${CELL * 0.12} ${CELL * 0.36}, ${CELL * 0.28} ${CELL * 0.24}
+                  C ${CELL * 0.37} ${CELL * 0.17}, ${CELL / 2} ${CELL * 0.24}, ${CELL / 2} ${CELL * 0.34}
+                  C ${CELL / 2} ${CELL * 0.24}, ${CELL * 0.63} ${CELL * 0.17}, ${CELL * 0.72} ${CELL * 0.24}
+                  C ${CELL * 0.88} ${CELL * 0.36}, ${CELL * 0.8} ${CELL * 0.56}, ${CELL / 2} ${CELL * 0.78} Z`}
               className="heart-shape"
             />
           </g>
@@ -216,6 +225,7 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
           <g
             key={lastEvent.seq}
             data-testid={FX_TESTIDS[fx.kind]}
+            style={{ pointerEvents: 'none' }}
             onAnimationEnd={(e) => {
               if (!(e.target as Element).classList.contains('fx-bullet')) setFxLive(false);
             }}
