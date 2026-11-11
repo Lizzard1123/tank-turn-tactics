@@ -52,6 +52,11 @@ export default function Jury() {
         </p>
       )}
 
+      {/* the board is always visible — jury members spectate the war. It sits
+          above the votes; with revives on, the live event feed stays hidden
+          (the board is all a dead player sees); with revives off it shows. */}
+      <Board state={state} selectedMode="none" me={me} avatars={avatars} onCellTap={() => {}} />
+
       <section className="card" aria-label="Alive players">
         <h2>Alive players</h2>
         {alive.map((p) => (
@@ -76,11 +81,6 @@ export default function Jury() {
             : 'The most-voted player will be haunted (no AP next tick).'}
         </p>
       )}
-
-      {/* the board is always visible — jury members spectate the war. With
-          revives on, the live event feed stays hidden (the board is all a
-          dead player sees); with revives off, the feed is shown too. */}
-      <Board state={state} selectedMode="none" me={me} avatars={avatars} onCellTap={() => {}} />
 
       {state.config.revives ? (
         <p className="banner" data-testid="revive-waiting">
