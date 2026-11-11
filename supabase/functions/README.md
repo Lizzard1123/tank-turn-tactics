@@ -8,8 +8,8 @@ vendored into `_shared/engine_src/` with Deno-style `.ts` import extensions.
 To re-sync after editing `packages/engine/src/`:
 
 ```bash
-cp ../../packages/engine/src/{types,rng,geom,state,reducer,replay,bots,errors,index}.ts _shared/engine_src/
-sed -i '' "s|from './types'|from './types.ts'|; s|from './rng'|from './rng.ts'|; s|from './geom'|from './geom.ts'|; s|from './state'|from './state.ts'|; s|from './reducer'|from './reducer.ts'|; s|from './replay'|from './replay.ts'|; s|from './bots'|from './bots.ts'|; s|from './errors'|from './errors.ts'|" _shared/engine_src/*.ts
+cp ../../packages/engine/src/{types,rng,geom,state,reducer,replay,bots,pickup,errors,index}.ts _shared/engine_src/
+sed -i '' "s|from './types'|from './types.ts'|; s|from './rng'|from './rng.ts'|; s|from './geom'|from './geom.ts'|; s|from './state'|from './state.ts'|; s|from './reducer'|from './reducer.ts'|; s|from './replay'|from './replay.ts'|; s|from './bots'|from './bots.ts'|; s|from './pickup'|from './pickup.ts'|; s|from './errors'|from './errors.ts'|" _shared/engine_src/*.ts
 ```
 
 (Linux: drop the `''` after `sed -i`.)

@@ -23,6 +23,8 @@ export interface GameSummary {
   createdBy: string;
 }
 
+export type ScheduleMode = 'interval' | 'timeOfDay' | 'random';
+
 export interface GameConfigPayload {
   seed?: number;
   board: number;
@@ -32,6 +34,24 @@ export interface GameConfigPayload {
   apPerDay: number;
   upgradeCost: number;
   apIntervalMinutes?: number;
+  // AP schedule shape (absent = legacy: apTimeOfDay ? timeOfDay : interval)
+  apSchedule?: ScheduleMode;
+  apPeriodMinutes?: number;
+  apTimeOfDay?: string;
+  apTimezone?: string;
+  // new-rule toggles (all default off)
+  apStealOnKill?: boolean;
+  heartGifts?: boolean;
+  revives?: boolean;
+  juryHaunt?: boolean;
+  // heart spawns: own schedule + placement, independent of the AP schedule
+  heartSpawn?: boolean;
+  heartSchedule?: ScheduleMode;
+  heartIntervalMinutes?: number;
+  heartTimeOfDay?: string;
+  heartTimezone?: string;
+  heartPeriodMinutes?: number;
+  heartPlacement?: 'random' | 'smart';
   bots?: { difficulty: 'easy' | 'medium' | 'hard' }[];
 }
 

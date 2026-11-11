@@ -23,5 +23,5 @@ export function createInitialState(config: GameConfig, specs: PlayerSpec[]): Gam
     };
     order.push(spec.id);
   }
-  return { seq: 0, day: 1, tickClockMinutes: 0, config, players, order, jury: [], pendingVotes: [], winner: null, log: [] };
+  return { seq: 0, day: 1, tickClockMinutes: 0, config, players, order, jury: [], pendingVotes: [], winner: null, log: [], heart: null, haunted: null };
 }

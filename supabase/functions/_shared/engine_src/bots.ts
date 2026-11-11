@@ -15,7 +15,8 @@ function legalMoves(s: GameState, botId: string): Vec[] {
   for (const [dx, dy] of dirs) {
     const to = { x: bot.pos.x + dx, y: bot.pos.y + dy };
     if (to.x < 0 || to.y < 0 || to.x >= s.config.board || to.y >= s.config.board) continue;
-    if (Object.values(s.players).some(p => p.pos.x === to.x && p.pos.y === to.y)) continue;
+    // graves are passable: only ALIVE players block (occupantAt semantics)
+    if (Object.values(s.players).some(p => p.pos.x === to.x && p.pos.y === to.y && p.hp > 0)) continue;
     moves.push(to);
   }
   return moves;

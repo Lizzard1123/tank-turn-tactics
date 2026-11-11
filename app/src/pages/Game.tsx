@@ -20,12 +20,24 @@ const EVENT_FALLBACK_TEXT: Record<string, string> = {
   move: 'moved',
   attack: 'attacked',
   give_ap: 'gave AP',
+  give_heart: 'gave a heart',
+  heart_spawn: 'a heart appeared',
   upgrade_range: 'upgraded range',
   daily_tick: 'day tick',
   bot_action: 'bot acted',
   jury_vote: 'jury vote',
   fork: 'forked the timeline',
 };
+
+// Live battle feed: during play only final blows and revives are shown (the
+// full event log stays post-game / in history scrubbing). Newest first.
+function battleLines(state: GameState | null, limit = 12): { seq: number; text: string; kind: string }[] {
+  return (state?.log ?? [])
+    .filter((l) => l.kind === 'kill' || l.kind === 'revive')
+    .slice(-limit)
+    .reverse()
+    .map((l) => ({ seq: l.seq, text: l.text, kind: l.kind as string }));
+}
 
 // Feed entries from the CANONICAL history (never the scrubbed log, which
 // would drop the events that come after the viewed point). Text comes from
@@ -164,7 +176,7 @@ function LocalGameView() {
       <header className="game-status">
         <span>Day {displayState.day}</span>
         <span className="mode-badge">TEST{scrubbing ? ' · HISTORY' : ''}</span>
-        {!state.winner && (
+        {!state.winner && state.config.apSchedule !== 'random' && (
           <span className="timer" data-testid="ap-timer">Next AP in {apRemaining}s</span>
         )}
         <Link to="/games" className="link-button btn">Exit</Link>
@@ -198,8 +210,8 @@ function LocalGameView() {
           )?.[0];
           if (mode === 'move' && !occId) {
             void doAction('move', { to: pos });
-          } else if ((mode === 'attack' || mode === 'give_ap') && occId && occId !== me) {
-            void doAction(mode === 'attack' ? 'attack' : 'give_ap', {
+          } else if ((mode === 'attack' || mode === 'give_ap' || mode === 'give_heart') && occId && occId !== me) {
+            void doAction(mode, {
               targetId: occId,
               ...(mode === 'give_ap' ? { amount: 1 } : {}),
             });
@@ -207,21 +219,34 @@ function LocalGameView() {
         }}
       />
 
-      {/* Event feed is post-game only — actions are hidden until the game ends */}
-      {(state.winner || scrubbing) && (
-        <section className="card" aria-label="Events">
-          <h2>Events{scrubbing ? ' (History)' : ' (Post-Game)'}</h2>
-          <EventFeed
-            entries={feedEntries(game.history, state)}
-            activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, game.history.length) - 1}
-            live={!scrubbing}
-            onView={viewEvent}
-            onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
-            onStop={exitScrub}
-            replaying={replaying}
-          />
+      {/* live battle log: final blows + revives only, during play */}
+      {!state.winner && !scrubbing && battleLines(state).length > 0 && (
+        <section className="card battle-card" aria-label="Battle log" data-testid="battle-log">
+          <h2>Battle log</h2>
+          <ul className="battle-log">
+            {battleLines(state).map((l) => (
+              <li key={l.seq} className={`battle-line kind-${l.kind}`}>{l.text}</li>
+            ))}
+          </ul>
         </section>
       )}
+
+      {/* Local (test) games keep the full event feed during play — it is the
+          scrub/replay/fork tooling test mode exists for. Play games (the
+          database view) get the filtered battle log instead, with the full
+          feed unlocked post-game. */}
+      <section className="card" aria-label="Events">
+        <h2>Events{scrubbing ? ' (History)' : ''}</h2>
+        <EventFeed
+          entries={feedEntries(game.history, state)}
+          activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, game.history.length) - 1}
+          live={!scrubbing}
+          onView={viewEvent}
+          onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
+          onStop={exitScrub}
+          replaying={replaying}
+        />
+      </section>
     </main>
   );
 }
@@ -319,9 +344,15 @@ function DbGameView({ gameId }: DbGameProps) {
   //   - time-of-day games: target is the next apTimeOfDay slot in the
   //     schedule's timezone; the countdown shows time until that slot.
   // A won game (winner in state) or a server-marked finished game hides it.
+  // 'random' schedules have no public countdown at all — the grant minute is
+  // secret (derived from the seed), so there is nothing to count down to.
   const gameFinished = !!state?.winner || detail?.status === 'finished';
   const lastTickAt = detail?.lastTickAt ?? null;
-  const sched = state?.config as { apIntervalMinutes?: number; apTimeOfDay?: string; apTimezone?: string } | undefined;
+  const sched = state?.config as {
+    apIntervalMinutes?: number; apTimeOfDay?: string; apTimezone?: string;
+    apSchedule?: 'interval' | 'timeOfDay' | 'random';
+  } | undefined;
+  const apScheduleMode = sched?.apSchedule ?? (sched?.apTimeOfDay ? 'timeOfDay' : 'interval');
   const apIntervalMinutes = sched?.apIntervalMinutes ?? 0;
   const apTimeOfDay = sched?.apTimeOfDay;
   const apTimezone = sched?.apTimezone;
@@ -332,7 +363,7 @@ function DbGameView({ gameId }: DbGameProps) {
   const grantPendingRef = useRef(false);
   useEffect(() => { grantPendingRef.current = false; }, [lastTickAt]);
   useEffect(() => {
-    if (gameFinished || (!apIntervalMinutes && !apTimeOfDay)) {
+    if (gameFinished || apScheduleMode === 'random' || (!apIntervalMinutes && !apTimeOfDay)) {
       setApRemaining(null);
       return;
     }
@@ -379,7 +410,7 @@ function DbGameView({ gameId }: DbGameProps) {
     setApRemaining(compute());
     const id = setInterval(() => setApRemaining(compute()), 1000);
     return () => clearInterval(id);
-  }, [gameFinished, apIntervalMinutes, apTimeOfDay, apTimezone, lastTickAt, gameStartedAt]);
+  }, [gameFinished, apScheduleMode, apIntervalMinutes, apTimeOfDay, apTimezone, lastTickAt, gameStartedAt]);
 
   // dead player goes to the jury screen
   useEffect(() => {
@@ -498,14 +529,26 @@ function DbGameView({ gameId }: DbGameProps) {
           )?.[0];
           if (mode === 'move' && !occId) {
             void doAction('move', { to: pos });
-          } else if ((mode === 'attack' || mode === 'give_ap') && occId && occId !== me) {
-            void doAction(mode === 'attack' ? 'attack' : 'give_ap', {
+          } else if ((mode === 'attack' || mode === 'give_ap' || mode === 'give_heart') && occId && occId !== me) {
+            void doAction(mode, {
               targetId: occId,
               ...(mode === 'give_ap' ? { amount: 1 } : {}),
             });
           }
         }}
       />
+
+      {/* live battle log: final blows + revives only, during play */}
+      {!displayState.winner && !scrubbing && battleLines(state).length > 0 && (
+        <section className="card battle-card" aria-label="Battle log" data-testid="battle-log">
+          <h2>Battle log</h2>
+          <ul className="battle-log">
+            {battleLines(state).map((l) => (
+              <li key={l.seq} className={`battle-line kind-${l.kind}`}>{l.text}</li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* Event feed is post-game only — actions are hidden until the game ends */}
       {(displayState.winner || scrubbing) && (

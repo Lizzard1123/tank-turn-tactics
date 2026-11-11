@@ -7,7 +7,7 @@ const CONFIG_DEFAULTS = {
   apPerDay: 1, upgradeCost: 2, apIntervalMinutes: 0,
 };
 
-function validateConfig(input: Record<string, unknown>): { config: typeof CONFIG_DEFAULTS & { seed: number; bots: { difficulty: string }[] } } | string {
+function validateConfig(input: Record<string, unknown>): typeof CONFIG_DEFAULTS & { seed: number; bots: { difficulty: string }[] } | string {
   const c = { ...CONFIG_DEFAULTS, ...input };
   if (typeof c.seed !== 'number' || c.seed < 0 || c.seed > 2 ** 31) return 'invalid seed';
   if (typeof c.board !== 'number' || c.board < 5 || c.board > 15) return 'board must be 5-15';
@@ -17,6 +17,26 @@ function validateConfig(input: Record<string, unknown>): { config: typeof CONFIG
   if (typeof c.apPerDay !== 'number' || c.apPerDay < 0 || c.apPerDay > 10) return 'apPerDay must be 0-10';
   if (typeof c.upgradeCost !== 'number' || c.upgradeCost < 1 || c.upgradeCost > 10) return 'upgradeCost must be 1-10';
   if (typeof c.apIntervalMinutes !== 'number' || c.apIntervalMinutes < 0 || c.apIntervalMinutes > 1440) return 'invalid apIntervalMinutes';
+  // new-rule toggles (all optional booleans; absent = off / legacy behavior)
+  const boolKeys = ['apStealOnKill', 'heartGifts', 'revives', 'juryHaunt', 'heartSpawn'] as const;
+  for (const k of boolKeys) {
+    const v = (c as Record<string, unknown>)[k];
+    if (v !== undefined && typeof v !== 'boolean') return `${k} must be a boolean`;
+  }
+  // schedule shapes (AP + hearts share the same three modes)
+  const SCHEDULES = ['interval', 'timeOfDay', 'random'];
+  for (const k of ['apSchedule', 'heartSchedule'] as const) {
+    const v = (c as Record<string, unknown>)[k];
+    if (v === undefined) continue;
+    if (typeof v !== 'string' || !SCHEDULES.includes(v)) return `invalid ${k}`;
+  }
+  for (const k of ['apPeriodMinutes', 'heartPeriodMinutes', 'heartIntervalMinutes'] as const) {
+    const v = (c as Record<string, unknown>)[k];
+    if (v === undefined) continue;
+    if (typeof v !== 'number' || v < 1 || v > 1440) return `${k} must be 1-1440`;
+  }
+  const hp = (c as Record<string, unknown>).heartPlacement;
+  if (hp !== undefined && hp !== 'random' && hp !== 'smart') return 'invalid heartPlacement';
   const bots = Array.isArray(input.bots) ? input.bots : [];
   if (bots.length > 8) return 'max 8 bots';
   for (const b of bots) {
@@ -58,34 +78,40 @@ Deno.serve(async (req) => {
     if (config.seed === 0) config.seed = Math.floor(Math.random() * 2 ** 31);
 
     let dailyApTime = '09:00';
-    let apIntervalMinutes: number | null = null;
-    if (mode === 'play') {
-      if (typeof body.dailyApTime === 'string' && /^\d{2}:\d{2}$/.test(body.dailyApTime)) {
-        dailyApTime = body.dailyApTime;
-      }
-      // time-of-day schedule (config.apTimeOfDay in config.apTimezone) — the
-      // same tick mechanism as the interval drip, just a different due check.
-      if (typeof (config as Record<string, unknown>).apTimeOfDay === 'string'
-        && /^\d{2}:\d{2}$/.test((config as { apTimeOfDay: string }).apTimeOfDay)) {
-        const [h, m] = (config as { apTimeOfDay: string }).apTimeOfDay.split(':').map(Number);
-        if (h <= 23 && m <= 59) {
-          (config as Record<string, unknown>).apTimeOfDay = (config as { apTimeOfDay: string }).apTimeOfDay;
-          const tz = (config as Record<string, unknown>).apTimezone;
-          if (typeof tz === 'string' && tz) {
-            try {
-              new Intl.DateTimeFormat('en-US', { timeZone: tz });
-              (config as Record<string, unknown>).apTimezone = tz;
-            } catch {
-              (config as Record<string, unknown>).apTimezone = 'UTC';
-            }
-          } else {
-            (config as Record<string, unknown>).apTimezone = 'UTC';
-          }
-        }
-      }
-    } else {
-      apIntervalMinutes = config.apIntervalMinutes > 0 ? config.apIntervalMinutes : 2;
+    if (mode === 'play' && typeof body.dailyApTime === 'string' && /^\d{2}:\d{2}$/.test(body.dailyApTime)) {
+      dailyApTime = body.dailyApTime;
     }
+
+    // time-of-day fields ("HH:mm" + IANA tz, defaulting UTC) — AP and hearts
+    // each carry their own pair; invalid values are rejected, not dropped.
+    const cfgRec = config as Record<string, unknown>;
+    for (const [todKey, tzKey] of [['apTimeOfDay', 'apTimezone'], ['heartTimeOfDay', 'heartTimezone']]) {
+      const v = cfgRec[todKey];
+      if (v === undefined || v === null) { delete cfgRec[todKey]; delete cfgRec[tzKey]; continue; }
+      if (typeof v !== 'string' || !/^\d{2}:\d{2}$/.test(v)) return json({ error: `${todKey} must be HH:mm` }, 400);
+      const [h, m] = v.split(':').map(Number);
+      if (h > 23 || m > 59) return json({ error: `${todKey} must be HH:mm` }, 400);
+      const tz = cfgRec[tzKey];
+      if (typeof tz === 'string' && tz) {
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: tz });
+        } catch {
+          return json({ error: `invalid ${tzKey} (IANA id required)` }, 400);
+        }
+      } else {
+        cfgRec[tzKey] = 'UTC';
+      }
+    }
+
+    // tick column sync: only interval-schedule games drip on the column;
+    // timeOfDay/random resolve from config alone (test keeps the 2-min floor)
+    const apSchedule = (cfgRec.apSchedule as string)
+      ?? (cfgRec.apTimeOfDay ? 'timeOfDay' : 'interval');
+    const apIntervalMinutes = apSchedule === 'interval'
+      ? (mode === 'test'
+        ? ((cfgRec.apIntervalMinutes as number) > 0 ? (cfgRec.apIntervalMinutes as number) : 2)
+        : ((cfgRec.apIntervalMinutes as number) > 0 ? (cfgRec.apIntervalMinutes as number) : null))
+      : null;
 
     const { data: game, error } = await a.from('games').insert({
       name: name.trim(), mode, config, created_by: me.id,

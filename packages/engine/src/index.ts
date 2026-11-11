@@ -5,4 +5,5 @@ export * from './state';
 export * from './reducer';
 export * from './replay';
 export * from './bots';
+export * from './pickup';
 export * from './errors';

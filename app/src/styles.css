@@ -753,3 +753,61 @@ input[type='radio'] {
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; }
 }
+
+/* --- new-rules feature: graves, hearts, battle log, config view --- */
+
+/* gravestones: non-blocking dead-player markers (tanks drive over them) */
+.grave-stone {
+  fill: var(--olive);
+  stroke: var(--ink, #26251d);
+  stroke-width: 2;
+  opacity: 0.85;
+}
+.grave-name {
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--ink, #26251d);
+  pointer-events: none;
+}
+
+/* board heart: pulsing pickup tile */
+.heart-shape {
+  fill: #c8471f;
+  stroke: var(--ink, #26251d);
+  stroke-width: 2;
+}
+.heart-tile { animation: heart-pulse 1.2s ease-in-out infinite; transform-box: fill-box; }
+@keyframes heart-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.12); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .heart-tile { animation: none; }
+}
+
+/* live battle log: kill/revive rows only */
+.battle-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.battle-line { padding: 4px 8px; border-left: 3px solid var(--olive); }
+.battle-line.kind-kill { border-left-color: #c8471f; }
+.battle-line.kind-revive { border-left-color: #3c7a3c; }
+
+/* lobby checkbox rows */
+.check-grid { display: grid; gap: 8px; }
+.check-grid label { display: flex; align-items: center; gap: 8px; }
+.hint { color: var(--olive); font-size: 0.85rem; margin: 6px 0 0; }
+.hint-inline { color: var(--olive); font-size: 0.85rem; }
+
+/* config view: read-only label/value pairs */
+.config-grid {
+  display: grid;
+  grid-template-columns: minmax(120px, max-content) 1fr;
+  gap: 6px 16px;
+  align-items: baseline;
+}
+.config-grid > span:nth-child(odd) {
+  color: var(--olive);
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 700;
+}

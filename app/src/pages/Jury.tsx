@@ -65,12 +65,30 @@ export default function Jury() {
         ))}
       </section>
 
-      <Board state={state} selectedMode="none" me={me} avatars={avatars} onCellTap={() => {}} />
+      {state.config.juryHaunt && (
+        <p className="banner" data-testid="haunt-banner">
+          {state.haunted
+            ? `${state.players[state.haunted]?.name ?? state.haunted} is haunted today — no AP for them.`
+            : 'The most-voted player will be haunted (no AP next tick).'}
+        </p>
+      )}
 
-      <section className="card" aria-label="Events">
-        <h2>Events</h2>
-        <EventFeed entries={state.log.map((l) => ({ seq: l.seq, text: l.text }))} activeIndex={null} live replaying={false} />
-      </section>
+      {/* with revives on, dead players must not see the board or the feed —
+          they can only wait for a gifted heart to come back */}
+      {state.config.revives ? (
+        <p className="banner" data-testid="revive-waiting">
+          Waiting for a heart… a living player can revive you by giving you one.
+        </p>
+      ) : (
+        <>
+          <Board state={state} selectedMode="none" me={me} avatars={avatars} onCellTap={() => {}} />
+
+          <section className="card" aria-label="Events">
+            <h2>Events</h2>
+            <EventFeed entries={state.log.map((l) => ({ seq: l.seq, text: l.text }))} activeIndex={null} live replaying={false} />
+          </section>
+        </>
+      )}
     </main>
   );
 }

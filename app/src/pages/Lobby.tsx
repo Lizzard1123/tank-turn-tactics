@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
-import { gameGet, gameStart, gameUpdate, type GameDetail } from '../lib/api';
+import { gameGet, gameStart, gameUpdate, type GameDetail, type ScheduleMode } from '../lib/api';
 import { Icon, robotSvg } from '../lib/icons';
 
 const BOT_DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
+const SCHEDULE_MODES: { value: ScheduleMode; label: string }[] = [
+  { value: 'interval', label: 'Fixed interval' },
+  { value: 'timeOfDay', label: 'Daily at a fixed time' },
+  { value: 'random', label: 'Random time within a period' },
+];
 
 export default function Lobby() {
   const { gameId } = useParams<{ gameId: string }>();
@@ -23,6 +28,23 @@ export default function Lobby() {
   const [upgradeCost, setUpgradeCost] = useState(2);
   const [apIntervalMinutes, setApIntervalMinutes] = useState(5);
   const [bots, setBots] = useState<{ difficulty: 'easy' | 'medium' | 'hard' }[]>([]);
+  // AP schedule shape + new-rule toggles
+  const [apSchedule, setApSchedule] = useState<ScheduleMode>('interval');
+  const [apPeriodMinutes, setApPeriodMinutes] = useState(360);
+  const [apTimeOfDay, setApTimeOfDay] = useState('09:00');
+  const [apTimezone, setApTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const [apStealOnKill, setApStealOnKill] = useState(false);
+  const [heartGifts, setHeartGifts] = useState(false);
+  const [revives, setRevives] = useState(false);
+  const [juryHaunt, setJuryHaunt] = useState(false);
+  // heart spawns: independent schedule + placement
+  const [heartSpawn, setHeartSpawn] = useState(false);
+  const [heartSchedule, setHeartSchedule] = useState<ScheduleMode>('interval');
+  const [heartIntervalMinutes, setHeartIntervalMinutes] = useState(120);
+  const [heartTimeOfDay, setHeartTimeOfDay] = useState('12:00');
+  const [heartTimezone, setHeartTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
+  const [heartPeriodMinutes, setHeartPeriodMinutes] = useState(360);
+  const [heartPlacement, setHeartPlacement] = useState<'random' | 'smart'>('random');
 
   const isHost = detail?.game.createdBy === player?.id;
 
@@ -48,6 +70,23 @@ export default function Lobby() {
         setUpgradeCost(c.upgradeCost);
         setApIntervalMinutes(c.apIntervalMinutes ?? 5);
         setBots(c.bots ?? []);
+        // legacy configs have no apSchedule: play games ran on the daily
+        // time-of-day slot, test games on the interval drip
+        setApSchedule(c.apSchedule ?? (c.apTimeOfDay ? 'timeOfDay' : d.game.mode === 'play' ? 'timeOfDay' : 'interval'));
+        setApPeriodMinutes(c.apPeriodMinutes ?? 360);
+        setApTimeOfDay(c.apTimeOfDay ?? '09:00');
+        setApTimezone(c.apTimezone ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'));
+        setApStealOnKill(!!c.apStealOnKill);
+        setHeartGifts(!!c.heartGifts);
+        setRevives(!!c.revives);
+        setJuryHaunt(!!c.juryHaunt);
+        setHeartSpawn(!!c.heartSpawn);
+        setHeartSchedule(c.heartSchedule ?? 'interval');
+        setHeartIntervalMinutes(c.heartIntervalMinutes ?? 120);
+        setHeartTimeOfDay(c.heartTimeOfDay ?? '12:00');
+        setHeartTimezone(c.heartTimezone ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'));
+        setHeartPeriodMinutes(c.heartPeriodMinutes ?? 360);
+        setHeartPlacement(c.heartPlacement ?? 'random');
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'failed to load game');
@@ -74,10 +113,25 @@ export default function Lobby() {
     setError(null);
     try {
       if (editable) {
-        // persist host knob edits (incl. bot composition) before launching
+        // persist host knob edits (incl. bot composition) before launching.
+        // Per-schedule fields are sent only for the active shape — the server
+        // deletes whatever a schedule switch abandoned.
         await gameUpdate(token, gameId, {
           board, startingHp, startingAp, baseRange, apPerDay, upgradeCost,
-          apIntervalMinutes, bots,
+          apIntervalMinutes: apSchedule === 'interval' ? apIntervalMinutes : undefined,
+          apSchedule,
+          apPeriodMinutes: apSchedule === 'random' ? apPeriodMinutes : undefined,
+          apTimeOfDay: apSchedule === 'timeOfDay' ? apTimeOfDay : undefined,
+          apTimezone: apSchedule === 'timeOfDay' ? apTimezone : undefined,
+          apStealOnKill, heartGifts, revives, juryHaunt,
+          heartSpawn,
+          heartSchedule: heartSpawn ? heartSchedule : undefined,
+          heartIntervalMinutes: heartSpawn && heartSchedule === 'interval' ? heartIntervalMinutes : undefined,
+          heartTimeOfDay: heartSpawn && heartSchedule === 'timeOfDay' ? heartTimeOfDay : undefined,
+          heartTimezone: heartSpawn && heartSchedule === 'timeOfDay' ? heartTimezone : undefined,
+          heartPeriodMinutes: heartSpawn && heartSchedule === 'random' ? heartPeriodMinutes : undefined,
+          heartPlacement: heartSpawn ? heartPlacement : undefined,
+          bots,
         });
       }
       await gameStart(token, gameId);
@@ -144,11 +198,113 @@ export default function Lobby() {
             <label htmlFor="knob-upgrade">Upgrade cost</label>
             <input id="knob-upgrade" type="number" min={1} max={10} value={upgradeCost}
               onChange={(e) => setUpgradeCost(Math.max(1, num(e.target.value)))} />
-
-            <label htmlFor="knob-interval">AP interval (minutes, test mode)</label>
-            <input id="knob-interval" type="number" min={1} max={1440} value={apIntervalMinutes}
-              onChange={(e) => setApIntervalMinutes(Math.max(1, num(e.target.value)))} />
           </div>
+
+          <h3>AP schedule</h3>
+          <div className="knob-grid">
+            <label htmlFor="knob-apsched">Schedule</label>
+            <select id="knob-apsched" value={apSchedule}
+              onChange={(e) => setApSchedule(e.target.value as ScheduleMode)}>
+              {SCHEDULE_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+            </select>
+            {apSchedule === 'interval' && (
+              <>
+                <label htmlFor="knob-interval">AP interval (minutes)</label>
+                <input id="knob-interval" type="number" min={1} max={1440} value={apIntervalMinutes}
+                  onChange={(e) => setApIntervalMinutes(Math.max(1, num(e.target.value)))} />
+              </>
+            )}
+            {apSchedule === 'timeOfDay' && (
+              <>
+                <label htmlFor="knob-aptod">AP time (HH:mm)</label>
+                <input id="knob-aptod" type="time" value={apTimeOfDay}
+                  onChange={(e) => setApTimeOfDay(e.target.value)} />
+                <label htmlFor="knob-aptz">Timezone (IANA)</label>
+                <input id="knob-aptz" type="text" value={apTimezone} placeholder="e.g. America/New_York"
+                  onChange={(e) => setApTimezone(e.target.value)} />
+              </>
+            )}
+            {apSchedule === 'random' && (
+              <>
+                <label htmlFor="knob-apperiod">Period length (minutes)</label>
+                <input id="knob-apperiod" type="number" min={1} max={1440} value={apPeriodMinutes}
+                  onChange={(e) => setApPeriodMinutes(Math.max(1, num(e.target.value)))} />
+              </>
+            )}
+          </div>
+          {apSchedule === 'random' && (
+            <p className="hint">AP lands once per period at a secret random minute — players see no countdown.</p>
+          )}
+
+          <h3>Rules</h3>
+          <div className="check-grid">
+            <label>
+              <input type="checkbox" checked={apStealOnKill} onChange={(e) => setApStealOnKill(e.target.checked)} />
+              Steal AP on kill <span className="hint-inline">— the killer loots the victim&rsquo;s AP</span>
+            </label>
+            <label>
+              <input type="checkbox" checked={heartGifts} onChange={(e) => setHeartGifts(e.target.checked)} />
+              Heart gifts <span className="hint-inline">— give 1 of your hearts to heal or revive an ally</span>
+            </label>
+            <label>
+              <input type="checkbox" checked={revives} onChange={(e) => setRevives(e.target.checked)} />
+              Revives <span className="hint-inline">— a gifted heart returns a dead player at 1 HP / 0 AP</span>
+            </label>
+            <label>
+              <input type="checkbox" checked={juryHaunt} onChange={(e) => setJuryHaunt(e.target.checked)} />
+              Jury haunt <span className="hint-inline">— the jury&rsquo;s most-voted player earns no AP that day</span>
+            </label>
+          </div>
+
+          <h3>Hearts</h3>
+          <div className="check-grid">
+            <label>
+              <input type="checkbox" checked={heartSpawn} onChange={(e) => setHeartSpawn(e.target.checked)} />
+              Spawn collectible hearts on the board
+            </label>
+          </div>
+          {heartSpawn && (
+            <>
+              <div className="knob-grid">
+                <label htmlFor="knob-heartsched">Spawn schedule</label>
+                <select id="knob-heartsched" value={heartSchedule}
+                  onChange={(e) => setHeartSchedule(e.target.value as ScheduleMode)}>
+                  {SCHEDULE_MODES.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
+                </select>
+                {heartSchedule === 'interval' && (
+                  <>
+                    <label htmlFor="knob-heartinterval">Spawn interval (minutes)</label>
+                    <input id="knob-heartinterval" type="number" min={1} max={1440} value={heartIntervalMinutes}
+                      onChange={(e) => setHeartIntervalMinutes(Math.max(1, num(e.target.value)))} />
+                  </>
+                )}
+                {heartSchedule === 'timeOfDay' && (
+                  <>
+                    <label htmlFor="knob-hearttod">Spawn time (HH:mm)</label>
+                    <input id="knob-hearttod" type="time" value={heartTimeOfDay}
+                      onChange={(e) => setHeartTimeOfDay(e.target.value)} />
+                    <label htmlFor="knob-hearttz">Timezone (IANA)</label>
+                    <input id="knob-hearttz" type="text" value={heartTimezone} placeholder="e.g. Europe/Berlin"
+                      onChange={(e) => setHeartTimezone(e.target.value)} />
+                  </>
+                )}
+                {heartSchedule === 'random' && (
+                  <>
+                    <label htmlFor="knob-heartperiod">Spawn period (minutes)</label>
+                    <input id="knob-heartperiod" type="number" min={1} max={1440} value={heartPeriodMinutes}
+                      onChange={(e) => setHeartPeriodMinutes(Math.max(1, num(e.target.value)))} />
+                  </>
+                )}
+                <label htmlFor="knob-heartplace">Placement</label>
+                <select id="knob-heartplace" value={heartPlacement}
+                  onChange={(e) => setHeartPlacement(e.target.value as 'random' | 'smart')}>
+                  <option value="random">Random square</option>
+                  <option value="smart">Smart (far from everyone)</option>
+                </select>
+              </div>
+              <p className="hint">Spawn times are secret — move onto a heart to claim it (+1 HP, capped at your starting HP).</p>
+            </>
+          )}
 
           <h3>Bots</h3>
           {bots.map((b, i) => (

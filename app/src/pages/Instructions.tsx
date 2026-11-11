@@ -70,6 +70,18 @@ function FlagIcon() {
   );
 }
 
+function HeartGraphic() {
+  return (
+    <svg width="120" height="110" viewBox="0 0 120 110" aria-label="Heart pickup">
+      <rect width="120" height="110" fill="#e9e2cf" stroke="#26251d" stroke-width="3" />
+      <path
+        d="M60 88 C 30 66, 22 44, 38 30 C 48 22, 60 30, 60 40 C 60 30, 72 22, 82 30 C 98 44, 90 66, 60 88 Z"
+        fill="#c8471f" stroke="#26251d" stroke-width="3"
+      />
+    </svg>
+  );
+}
+
 function Figure({ children, caption }: { children: React.ReactNode; caption?: string }) {
   return (
     <figure className="graphic" style={{ margin: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
@@ -135,6 +147,85 @@ export default function Instructions() {
           can't act — but they can vote.</p>
         </div>
         <Figure caption="Action points — gained once per day"><APIcon /></Figure>
+      </div>
+
+      <div className="panel">
+        <div className="panel-body">
+          <h2>AP schedules (host-configurable)</h2>
+          <p>How AP lands on the board depends on the game's schedule:</p>
+          <p><strong>Fixed interval</strong> — AP drips every N minutes from
+          the moment the game starts. The countdown shows the next grant.</p>
+          <p><strong>Daily at a fixed time</strong> — AP lands once per day at
+          a fixed wall-clock time in the configured timezone (work-days
+          style). The countdown shows time until that slot.</p>
+          <p><strong>Random time within a period</strong> — the day is split
+          into periods (e.g. every 6 hours); AP lands once per period at a
+          secret random minute. There is <strong>no countdown</strong> in this
+          mode — stay ready, and don't assume anyone else's AP either.</p>
+          <p><strong>AP is secret</strong> — hoard it, spend it, or gift it;
+          only your own stash is visible to you.</p>
+        </div>
+        <Figure caption="Action points — three ways to receive them"><APIcon /></Figure>
+      </div>
+
+      <div className="panel">
+        <div className="panel-body">
+          <h2>Heart spawns (host-configurable)</h2>
+          <p>Game hosts can enable collectible hearts that appear on the board
+          on their own schedule (fixed interval, daily time, or a secret random
+          minute inside a period — spawn times are never shown).</p>
+          <p><strong>Claiming:</strong> move onto a heart to pick it up —
+          +1 HP, capped at your starting HP. A new spawn replaces an unclaimed
+          heart.</p>
+          <p><strong>Placement:</strong> <em>Random</em> scatters hearts
+          anywhere free; <em>Smart</em> places each heart as far away from
+          every living player (and the previous heart) as possible — expect a
+          hike.</p>
+        </div>
+        <Figure caption="Hearts — find them, claim them"><HeartGraphic /></Figure>
+      </div>
+
+      <div className="panel">
+        <div className="panel-body">
+          <h2>Heart gifts &amp; revives (host-configurable)</h2>
+          <p>When heart gifts are enabled, you can <strong>give a heart</strong>
+          to a player in range. It costs <strong>1 of YOUR hearts</strong> (you
+          always keep at least one) — never AP.</p>
+          <p><strong>Heal:</strong> a living ally below max HP gains 1 HP.</p>
+          <p><strong>Revive:</strong> if revives are enabled, giving a heart
+          to a <em>dead</em> player brings them back at <strong>1 HP / 0
+          AP</strong>, straight off the jury. Dead players with revives on see
+          no board and no event log — just the jury vote and a long wait for
+          someone to care.</p>
+        </div>
+        <Figure caption="Hearts — give them, receive them"><HeartGraphic /></Figure>
+      </div>
+
+      <div className="panel">
+        <div className="panel-body">
+          <h2>Blood money &amp; haunted tanks (host-configurable)</h2>
+          <p><strong>Steal AP on kill:</strong> with this rule on, the final
+          blow transfers the victim's entire AP stash to their killer. Off,
+          a dead player's AP dies with them. Choose your assassinations by
+          the loot.</p>
+          <p><strong>Jury haunt:</strong> the jury's most-voted living player
+          is <em>haunted</em> for the day — they receive no AP on the next
+          tick. A tie haunts nobody; the 3-vote jury bonus still applies to
+          the haunted player. Vote carefully.</p>
+          <p><strong>Gravestones:</strong> dead tanks stay on the board as
+          gravestones with their name on them. Graves don't block movement —
+          drive right over them (and hearts can spawn beside them).</p>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="panel-body">
+          <h2>Battle log</h2>
+          <p>During a game the live battle log only shows what matters:
+          <strong> who dealt a final blow</strong> and <strong>who got
+          revived</strong>. The full event history unlocks after the game
+          ends (test-mode hosts can scrub and fork it anytime).</p>
+        </div>
       </div>
 
       <div className="panel">

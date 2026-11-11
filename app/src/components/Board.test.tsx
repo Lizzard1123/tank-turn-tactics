@@ -193,3 +193,61 @@ describe('Board', () => {
     expect((giveFx.querySelector('.fx-bullet') as SVGElement).style.getPropertyValue('--fx-dx')).toBe('80px');
   });
 });
+
+describe('Board — new rules', () => {
+  test('dead players render gravestones with their name, alive render tanks', () => {
+    render(<Board state={state({
+      players: {
+        p1: { id: 'p1', name: 'me', pos: { x: 0, y: 0 }, hp: 3, ap: 1, range: 2, isBot: false, botDifficulty: null },
+        p2: { id: 'p2', name: 'foe', pos: { x: 2, y: 0 }, hp: 0, ap: 1, range: 2, isBot: false, botDifficulty: null },
+      },
+    })} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    expect(screen.getByTestId('grave-p2')).toBeInTheDocument();
+    expect(screen.getByTestId('grave-p2')).toHaveTextContent('foe');
+    expect(screen.queryByTestId('tank-p2')).not.toBeInTheDocument();
+    expect(screen.getByTestId('tank-p1')).toBeInTheDocument();
+  });
+
+  test('board heart renders a heart tile at its square', () => {
+    render(<Board state={state({ heart: { x: 3, y: 3, seq: 1 } })} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    expect(screen.getByTestId('heart-tile')).toBeInTheDocument();
+  });
+
+  test('no heart tile without a board heart', () => {
+    render(<Board state={state({ heart: null })} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    expect(screen.queryByTestId('heart-tile')).not.toBeInTheDocument();
+  });
+
+  test('give_heart mode highlights an under-max ally in range', () => {
+    render(<Board state={state({
+      config: { seed: 1, board: 4, startingHp: 3, startingAp: 1, baseRange: 2, apPerDay: 1, upgradeCost: 2, apIntervalMinutes: 0, heartGifts: true },
+      players: {
+        p1: { id: 'p1', name: 'me', pos: { x: 0, y: 0 }, hp: 3, ap: 1, range: 2, isBot: false, botDifficulty: null },
+        p2: { id: 'p2', name: 'foe', pos: { x: 1, y: 0 }, hp: 2, ap: 1, range: 2, isBot: false, botDifficulty: null },
+      },
+    })} selectedMode="give_heart" me="p1" onCellTap={() => {}} />);
+    expect(screen.getByTestId('cell-1-0')).toHaveClass('legal');
+  });
+
+  test('give_heart mode rejects full-hp allies and graves when revives are off', () => {
+    render(<Board state={state({
+      config: { seed: 1, board: 4, startingHp: 3, startingAp: 1, baseRange: 2, apPerDay: 1, upgradeCost: 2, apIntervalMinutes: 0, heartGifts: true, revives: false },
+      players: {
+        p1: { id: 'p1', name: 'me', pos: { x: 0, y: 0 }, hp: 3, ap: 1, range: 2, isBot: false, botDifficulty: null },
+        p2: { id: 'p2', name: 'foe', pos: { x: 1, y: 0 }, hp: 0, ap: 1, range: 2, isBot: false, botDifficulty: null },
+      },
+    })} selectedMode="give_heart" me="p1" onCellTap={() => {}} />);
+    expect(screen.getByTestId('cell-1-0')).not.toHaveClass('legal');
+  });
+
+  test('give_heart mode highlights a grave when revives are on', () => {
+    render(<Board state={state({
+      config: { seed: 1, board: 4, startingHp: 3, startingAp: 1, baseRange: 2, apPerDay: 1, upgradeCost: 2, apIntervalMinutes: 0, heartGifts: true, revives: true },
+      players: {
+        p1: { id: 'p1', name: 'me', pos: { x: 0, y: 0 }, hp: 3, ap: 1, range: 2, isBot: false, botDifficulty: null },
+        p2: { id: 'p2', name: 'foe', pos: { x: 1, y: 0 }, hp: 0, ap: 1, range: 2, isBot: false, botDifficulty: null },
+      },
+    })} selectedMode="give_heart" me="p1" onCellTap={() => {}} />);
+    expect(screen.getByTestId('cell-1-0')).toHaveClass('legal');
+  });
+});

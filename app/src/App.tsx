@@ -7,6 +7,7 @@ import Auth from './pages/Auth';
 import Dashboard from './pages/Dashboard';
 import Play from './pages/Play';
 import Profile from './pages/Profile';
+import ConfigView from './pages/ConfigView';
 import Lobby from './pages/Lobby';
 import TestMode from './pages/TestMode';
 import Game from './pages/Game';
@@ -29,6 +30,8 @@ export default function App() {
             <Route path="/" element={<Landing />} />
             <Route path="/play" element={<RequireAuth><Play /></RequireAuth>} />
             <Route path="/profile" element={<RequireAuth><Profile /></RequireAuth>} />
+            <Route path="/config" element={<RequireAuth><ConfigView /></RequireAuth>} />
+            <Route path="/config/:gameId" element={<RequireAuth><ConfigView /></RequireAuth>} />
             <Route path="/instructions" element={<Instructions />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/games" element={<RequireAuth><Dashboard /></RequireAuth>} />

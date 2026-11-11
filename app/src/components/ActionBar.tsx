@@ -30,6 +30,14 @@ export default function ActionBar({ state, me, mode, onAction, onModeChange }: A
   const canGive = ap >= cost && (mode !== 'give_ap' || targetId !== null);
   const canUpgrade = ap >= state.config.upgradeCost;
 
+  // heart gifts cost 1 of the GIVER's hp (never the last one); targets are
+  // allies under max hp, or graves when revives are on
+  const heartTarget = Object.values(state.players).find(
+    (p) => p.id !== me && inRange(mine.pos, p.pos, mine.range)
+      && (p.hp > 0 ? p.hp < state.config.startingHp : !!state.config.revives),
+  )?.id ?? null;
+  const canGiveHeart = mine.hp >= 2 && (mode !== 'give_heart' || heartTarget !== null);
+
   function handleAttack() {
     if (mode === 'attack' && targetId) onAction('attack', { targetId });
     else onModeChange('attack');
@@ -37,6 +45,10 @@ export default function ActionBar({ state, me, mode, onAction, onModeChange }: A
   function handleGive() {
     if (mode === 'give_ap' && targetId) onAction('give_ap', { targetId, amount: 1 });
     else onModeChange('give_ap');
+  }
+  function handleGiveHeart() {
+    if (mode === 'give_heart' && heartTarget) onAction('give_heart', { targetId: heartTarget });
+    else onModeChange('give_heart');
   }
   function handleMove() {
     onModeChange(mode === 'move' ? 'none' : 'move');
@@ -69,6 +81,16 @@ export default function ActionBar({ state, me, mode, onAction, onModeChange }: A
       >
         Give AP <small>1 AP</small>
       </button>
+      {state.config.heartGifts && (
+        <button
+          data-testid="btn-give-heart"
+          disabled={!canGiveHeart}
+          onClick={handleGiveHeart}
+          className={mode === 'give_heart' ? 'active' : ''}
+        >
+          Give Heart <small>1 HP</small>
+        </button>
+      )}
       <button
         data-testid="btn-upgrade"
         disabled={!canUpgrade}

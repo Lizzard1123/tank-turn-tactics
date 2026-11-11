@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { gameList, gameCreate, gameJoin, gameDelete, type GameSummary } from '../lib/api';
-import { Icon, trashSvg } from '../lib/icons';
+import { Icon, trashSvg, clipboardSvg } from '../lib/icons';
 
 export default function Dashboard() {
   const { token, player, isGuest } = useAuth();
@@ -129,7 +129,12 @@ export default function Dashboard() {
     <main className="page">
       <p className="row" style={{ justifyContent: 'space-between' }}>
         <Link to="/" className="link-button btn">← Home</Link>
-        <Link to="/profile" className="link-button btn">Profile</Link>
+        <span className="row" style={{ gap: 8 }}>
+          <Link to="/config" className="link-button btn" data-testid="nav-config" aria-label="Game config">
+            <Icon html={clipboardSvg} width={14} height={14} /> Config
+          </Link>
+          <Link to="/profile" className="link-button btn">Profile</Link>
+        </span>
       </p>
       <h1>Games</h1>
       <p className="subtitle">Hi {player?.name} — start or join a game.</p>

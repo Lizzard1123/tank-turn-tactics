@@ -1,22 +1,29 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
-import { applyEvent, planBotAction, type GameEvent, type GameState } from '../_shared/engine.ts';
+import { applyEvent, planBotAction, heartSpawnPos, mulberry32, hashSeed, type GameEvent, type GameState } from '../_shared/engine.ts';
 
-// AP distribution flow (both modes, one mechanism):
-//   - game-start seeds last_tick_at = null; interval games then fire their
-//     first tick on the first invocation; time-of-day games fire at their slot.
-//   - interval games (test): due once ap_interval_minutes has elapsed since
-//     last_tick_at (the COLUMN, which game-update keeps in sync with
-//     config.apIntervalMinutes — the knob only worked if the column moved).
-//   - time-of-day games (play, or any game with config.apTimeOfDay): due in the
-//     first invocation at/after the configured local wall-clock time
-//     (config.apTimeOfDay in config.apTimezone) that is on a LATER local day
-//     than last_tick_at — so a slot grants at most once/day and downtime
-//     catches up exactly once, never once per missed hour.
-//   - each tick appends a daily_tick event granting config.apPerDay AP to every
-//     alive player (engine reducer, daily_tick branch); last_tick_at persists
-//     below after tickGame returns. The cron schedule must fire at least every
-//     minute for short intervals to work (0003 moved hourly → * * * * *).
+// AP + heart scheduling (both modes, one mechanism, three schedule shapes):
+//   - game-start seeds last_tick_at (play: now, test: null) and started_at
+//     (the anchor for 'random' periods).
+//   - interval: due once the interval has elapsed since the last grant
+//     (the COLUMN, which game-update keeps in sync with config).
+//   - timeOfDay: due in the first invocation at/after the configured local
+//     wall-clock time that is on a LATER local day than the last grant —
+//     grants at most once/day; downtime catches up exactly once.
+//   - random: each period of length P (anchored at started_at) has ONE grant
+//     minute, derived deterministically from the game seed:
+//       offset(i) = floor(mulberry32(hashSeed(`${seed}:${key}:${i}`))() * P)
+//     due iff now >= started_at + i*P + offset(i) AND the last grant happened
+//     before that instant (at most one grant per period, catch-up once).
+//     No public countdown — the client hides the timer in this mode.
+//   - hearts run the SAME three shapes off config.heartSchedule with their
+//     own last_heart_at column; spawn position comes from the engine's
+//     heartSpawnPos(state) and travels inside the heart_spawn event.
+//   - cron must fire at least every minute (0003/0010/0011) for short
+//     intervals and per-minute random granularity.
+
+type ScheduleMode = 'interval' | 'timeOfDay' | 'random';
+
 function tzParts(d: Date, timeZone: string): { y: number; mo: number; day: number; hh: number; mi: number } | null {
   try {
     const parts = new Intl.DateTimeFormat('en-GB', {
@@ -30,58 +37,129 @@ function tzParts(d: Date, timeZone: string): { y: number; mo: number; day: numbe
   }
 }
 
-function timeOfDayDue(game: {
-  apTimeOfDay?: string; apTimezone?: string; daily_ap_time: string; last_tick_at: string | null;
-}): boolean {
-  // config schedule wins; fall back to the daily_ap_time column (UTC).
-  const tod = game.apTimeOfDay ?? game.daily_ap_time ?? '09:00';
+// Legacy fallback: no apSchedule in config = old resolution order — play
+// mode always used the daily time-of-day slot (daily_ap_time column), test
+// mode used the interval unless apTimeOfDay was set.
+function resolveApSchedule(config: Record<string, unknown>, mode: string): ScheduleMode {
+  const s = config.apSchedule as ScheduleMode | undefined;
+  if (s === 'interval' || s === 'timeOfDay' || s === 'random') return s;
+  return mode === 'play' || config.apTimeOfDay ? 'timeOfDay' : 'interval';
+}
+
+function resolveHeartSchedule(config: Record<string, unknown>): ScheduleMode | null {
+  if (!config.heartSpawn) return null;
+  const s = config.heartSchedule as ScheduleMode | undefined;
+  if (s === 'interval' || s === 'timeOfDay' || s === 'random') return s;
+  return 'interval'; // hearts default to a simple cadence
+}
+
+function randomDue(spec: { startedAt: string | null; lastAt: string | null; periodMinutes?: number; seed: number; key: string }): boolean {
+  const P = (spec.periodMinutes ?? 0) * 60_000;
+  if (!spec.startedAt || P <= 0) return false;
+  const start = new Date(spec.startedAt).getTime();
+  const now = Date.now();
+  const i = Math.floor((now - start) / P);
+  if (i < 0) return false;
+  const offset = Math.floor(mulberry32(hashSeed(`${spec.seed}:${spec.key}:${i}`))() * P);
+  const dueAt = start + i * P + offset;
+  if (now < dueAt) return false;
+  // at most one grant per period: skip if the last grant happened at/after
+  // this period's due instant (also covers catch-up after downtime: only the
+  // CURRENT period can fire, never one per missed period)
+  if (spec.lastAt && new Date(spec.lastAt).getTime() >= dueAt) return false;
+  return true;
+}
+
+function timeOfDayDue(spec: { timeOfDay?: string; timezone?: string; lastAt: string | null }): boolean {
+  const tod = spec.timeOfDay ?? '09:00';
   const [h, m] = tod.split(':').map(Number);
   if (!Number.isFinite(h) || !Number.isFinite(m)) return false;
 
   const now = new Date();
-  // Without a timezone, work in UTC wall-clock (the column's original meaning).
-  const tz = game.apTimezone;
+  const tz = spec.timezone;
   if (tz) {
     const nowP = tzParts(now, tz);
     if (!nowP) return false;
     if (nowP.hh * 60 + nowP.mi < h * 60 + m) return false; // before today's slot
-    if (!game.last_tick_at) return true;                    // never ticked
-    const lastP = tzParts(new Date(game.last_tick_at), tz);
+    if (!spec.lastAt) return true;                          // never granted
+    const lastP = tzParts(new Date(spec.lastAt), tz);
     if (!lastP) return false;
     // due only if the last grant was on a PREVIOUS local day
     return Date.UTC(lastP.y, lastP.mo, lastP.day) < Date.UTC(nowP.y, nowP.mo, nowP.day);
   }
   const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
   if (utcMinutes < h * 60 + m) return false;
-  if (!game.last_tick_at) return true;
-  const last = new Date(game.last_tick_at);
+  if (!spec.lastAt) return true;
+  const last = new Date(spec.lastAt);
   const lastDay = Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate());
   const todayDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
   return lastDay < todayDay;
 }
 
-function dueForTick(game: {
-  mode: string; daily_ap_time: string; ap_interval_minutes: number | null; last_tick_at: string | null;
-  config: { apIntervalMinutes?: number; apTimeOfDay?: string; apTimezone?: string };
-}): boolean {
-  // Time-of-day schedule: play mode always, or any game that configured
-  // config.apTimeOfDay (one shared mechanism, not two tick paths).
-  if (game.mode === 'play' || game.config?.apTimeOfDay) {
-    return timeOfDayDue({
-      apTimeOfDay: game.config?.apTimeOfDay,
-      apTimezone: game.config?.apTimezone,
-      daily_ap_time: game.daily_ap_time,
-      last_tick_at: game.last_tick_at,
-    });
-  }
-  // Interval schedule: due once the interval has elapsed (null last_tick_at =
-  // first tick fires immediately). Prefer the synced column; fall back to config.
-  const interval = (game.ap_interval_minutes ?? game.config?.apIntervalMinutes ?? 2) * 60_000;
-  if (!game.last_tick_at) return true;
-  return Date.now() - new Date(game.last_tick_at).getTime() >= interval;
+function intervalDue(spec: { intervalMinutes?: number; lastAt: string | null; fallbackMinutes: number }): boolean {
+  const interval = (spec.intervalMinutes && spec.intervalMinutes > 0 ? spec.intervalMinutes : spec.fallbackMinutes) * 60_000;
+  if (!spec.lastAt) return true;
+  return Date.now() - new Date(spec.lastAt).getTime() >= interval;
 }
 
-async function tickGame(gameId: string): Promise<number> {
+function dueForTick(game: {
+  mode: string; daily_ap_time: string; ap_interval_minutes: number | null;
+  last_tick_at: string | null; last_heart_at: string | null; started_at: string | null;
+  config: Record<string, unknown>;
+}): { ap: boolean; heart: boolean } {
+  const cfg = game.config ?? {};
+  const seed = typeof cfg.seed === 'number' ? cfg.seed : 0;
+
+  // --- AP ---
+  const apMode = resolveApSchedule(cfg, game.mode);
+  let ap: boolean;
+  if (apMode === 'timeOfDay') {
+    ap = timeOfDayDue({
+      timeOfDay: (cfg.apTimeOfDay as string) ?? game.daily_ap_time,
+      timezone: cfg.apTimezone as string | undefined,
+      lastAt: game.last_tick_at,
+    });
+  } else if (apMode === 'random') {
+    ap = randomDue({
+      startedAt: game.started_at, lastAt: game.last_tick_at,
+      periodMinutes: cfg.apPeriodMinutes as number | undefined,
+      seed, key: 'ap',
+    });
+  } else {
+    ap = intervalDue({
+      intervalMinutes: (game.ap_interval_minutes ?? (cfg.apIntervalMinutes as number | undefined)) ?? undefined,
+      lastAt: game.last_tick_at,
+      fallbackMinutes: 2,
+    });
+  }
+
+  // --- hearts ---
+  const heartMode = resolveHeartSchedule(cfg);
+  let heart = false;
+  if (heartMode === 'interval') {
+    heart = intervalDue({
+      intervalMinutes: cfg.heartIntervalMinutes as number | undefined,
+      lastAt: game.last_heart_at,
+      fallbackMinutes: 60,
+    });
+  } else if (heartMode === 'timeOfDay') {
+    heart = timeOfDayDue({
+      timeOfDay: cfg.heartTimeOfDay as string | undefined,
+      timezone: (cfg.heartTimezone as string | undefined) ?? 'UTC',
+      lastAt: game.last_heart_at,
+    });
+  } else if (heartMode === 'random') {
+    heart = randomDue({
+      startedAt: game.started_at, lastAt: game.last_heart_at,
+      periodMinutes: cfg.heartPeriodMinutes as number | undefined,
+      seed, key: 'heart',
+    });
+  }
+
+  return { ap, heart };
+}
+
+async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): Promise<number> {
   const a = admin();
   const { data: game } = await a.from('games').select('*').eq('id', gameId).single();
   if (!game || game.status !== 'active') return 0;
@@ -92,20 +170,41 @@ async function tickGame(gameId: string): Promise<number> {
 
   let appended = 0;
 
-  // 1. AP drip (only if not already ticked for this slot — checked by caller)
-  const apGained = (state.config as { apPerDay?: number }).apPerDay ?? 1;
-  const drip: GameEvent = {
-    seq: state.seq + 1, type: 'daily_tick', actorId: 'system',
-    createdAt: new Date().toISOString(), payload: { apGained, elapsedMinutes: game.mode === 'test' ? (game.ap_interval_minutes ?? 2) : 1440 },
-  };
-  state = applyEvent(state, drip);
-  await a.from('events').insert({
-    game_id: gameId, generation: game.cur_generation, seq: drip.seq,
-    type: drip.type, actor_id: drip.actorId, payload: drip.payload, created_at: drip.createdAt,
-  });
-  appended++;
+  // 1. AP drip (only when the AP schedule is due)
+  if (due.ap) {
+    const apGained = (state.config as { apPerDay?: number }).apPerDay ?? 1;
+    const drip: GameEvent = {
+      seq: state.seq + 1, type: 'daily_tick', actorId: 'system',
+      createdAt: new Date().toISOString(), payload: { apGained, elapsedMinutes: game.mode === 'test' ? (game.ap_interval_minutes ?? 2) : 1440 },
+    };
+    state = applyEvent(state, drip);
+    await a.from('events').insert({
+      game_id: gameId, generation: game.cur_generation, seq: drip.seq,
+      type: drip.type, actor_id: drip.actorId, payload: drip.payload, created_at: drip.createdAt,
+    });
+    appended++;
+  }
 
-  // 2. bot pass: each bot plans one action (loop until no bot wants to act)
+  // 2. heart spawn (only when the heart schedule is due); placed BEFORE the
+  // bot pass so bots can immediately react and claim it
+  if (due.heart) {
+    const pos = heartSpawnPos(state);
+    if (pos) {
+      const spawn: GameEvent = {
+        seq: state.seq + 1, type: 'heart_spawn', actorId: 'system',
+        createdAt: new Date().toISOString(),
+        payload: { x: pos.x, y: pos.y, placement: (state.config as { heartPlacement?: string }).heartPlacement ?? 'random' },
+      };
+      state = applyEvent(state, spawn);
+      await a.from('events').insert({
+        game_id: gameId, generation: game.cur_generation, seq: spawn.seq,
+        type: spawn.type, actor_id: spawn.actorId, payload: spawn.payload, created_at: spawn.createdAt,
+      });
+      appended++;
+    }
+  }
+
+  // 3. bot pass: each bot plans one action (loop until no bot wants to act)
   const botIds = Object.values(state.players).filter(p => p.isBot && p.hp > 0).map(p => p.id);
   for (let pass = 0; pass < 8; pass++) {
     let acted = 0;
@@ -155,22 +254,27 @@ Deno.serve(async (req) => {
   try {
     const a = admin();
     const { data: activeGames } = await a.from('games')
-      .select('id, mode, daily_ap_time, ap_interval_minutes, last_tick_at, config')
+      .select('id, mode, daily_ap_time, ap_interval_minutes, last_tick_at, last_heart_at, started_at, config')
       .eq('status', 'active');
 
     let total = 0;
     const ticked: string[] = [];
+    const hearted: string[] = [];
     for (const game of activeGames ?? []) {
-      if (dueForTick(game)) {
-        const n = await tickGame(game.id);
-        if (n > 0) {
-          await a.from('games').update({ last_tick_at: new Date().toISOString() }).eq('id', game.id);
-          total += n;
-          ticked.push(game.id);
-        }
+      const due = dueForTick(game);
+      if (!due.ap && !due.heart) continue;
+      const n = await tickGame(game.id, due);
+      if (n > 0) {
+        const patch: Record<string, string> = {};
+        if (due.ap) patch.last_tick_at = new Date().toISOString();
+        if (due.heart) patch.last_heart_at = new Date().toISOString();
+        await a.from('games').update(patch).eq('id', game.id);
+        total += n;
+        ticked.push(game.id);
+        if (due.heart) hearted.push(game.id);
       }
     }
-    return json({ ok: true, ticked, eventsAppended: total });
+    return json({ ok: true, ticked, hearted, eventsAppended: total });
   } catch (e) {
     return json({ error: `tick failed: ${e instanceof Error ? e.message : 'unknown'}` }, 500);
   }

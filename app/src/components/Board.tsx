@@ -3,7 +3,7 @@ import type { GameEvent, GameState, Vec } from '@ttt/engine';
 import { manhattan, occupantAt } from '@ttt/engine';
 import { flagUrl } from '../lib/flags';
 
-export type BoardMode = 'none' | 'move' | 'attack' | 'give_ap';
+export type BoardMode = 'none' | 'move' | 'attack' | 'give_ap' | 'give_heart';
 
 interface BoardProps {
   state: GameState;
@@ -89,6 +89,16 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
       // attack needs a living enemy in range; give needs anyone in range
       return inRange(p) && (selectedMode === 'give_ap' || occ.hp > 0);
     }
+    if (selectedMode === 'give_heart') {
+      // occupantAt only sees the living — scan all players so graves are
+      // targetable too (a gift to a grave revives when the option is on)
+      const target = Object.values(state.players).find(
+        (q) => q.pos.x === p.x && q.pos.y === p.y && q.id !== own.id,
+      );
+      if (!target || !inRange(p)) return false;
+      if (target.hp > 0) return target.hp < state.config.startingHp; // heal: room to gain
+      return !!state.config.revives; // revive: only when the option is on
+    }
     return false;
   };
 
@@ -132,9 +142,48 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
             />
           );
         })}
+        {/* gravestone layer: one non-blocking marker per DEAD player —
+            a tombstone glyph plus their name. Tanks drive over graves. */}
+        {Object.values(state.players).filter((p) => p.hp <= 0).map((p) => (
+          <g
+            key={p.id}
+            data-testid={`grave-${p.id}`}
+            className="grave"
+            style={{ transform: `translate(${p.pos.x * CELL}px, ${p.pos.y * CELL}px)` }}
+          >
+            <path
+              d={`M${CELL * 0.28} ${CELL * 0.86}
+                  V ${CELL * 0.42}
+                  A ${CELL * 0.22},${CELL * 0.22} 0 0 1 ${CELL * 0.72} ${CELL * 0.42}
+                  V ${CELL * 0.86} Z`}
+              className="grave-stone"
+            />
+            <text x={CELL / 2} y={CELL - 3} textAnchor="middle" className="grave-name">
+              {p.name}
+            </text>
+          </g>
+        ))}
+        {/* heart tile: the unclaimed board heart (spawned by the tick loop,
+            claimed by moving onto it). Sits under the tank layer. */}
+        {state.heart && (
+          <g
+            data-testid="heart-tile"
+            className="heart-tile"
+            style={{ transform: `translate(${state.heart.x * CELL}px, ${state.heart.y * CELL}px)` }}
+          >
+            <path
+              d={`M${CELL / 2} ${CELL * 0.82}
+                  C ${CELL * 0.18} ${CELL * 0.58}, ${CELL * 0.08} ${CELL * 0.34}, ${CELL * 0.26} ${CELL * 0.2}
+                  C ${CELL * 0.36} ${CELL * 0.12}, ${CELL / 2} ${CELL * 0.2}, ${CELL / 2} ${CELL * 0.32}
+                  C ${CELL / 2} ${CELL * 0.2}, ${CELL * 0.64} ${CELL * 0.12}, ${CELL * 0.74} ${CELL * 0.2}
+                  C ${CELL * 0.92} ${CELL * 0.34}, ${CELL * 0.82} ${CELL * 0.58}, ${CELL / 2} ${CELL * 0.82} Z`}
+              className="heart-shape"
+            />
+          </g>
+        )}
         {/* tank layer: one keyed <g> per ALIVE player, translated by position.
-            Moves mutate the transform (CSS slides it); dead tanks aren't drawn
-            (but still block moves via occupantAt in legal()). */}
+            Moves mutate the transform (CSS slides it); dead tanks are drawn
+            as gravestones instead (below) and no longer block moves. */}
         {Object.values(state.players).filter((p) => p.hp > 0).map((p) => (
           <g key={p.id} data-testid={`tank-${p.id}`}
              className={`tank ${p.id === me ? 'own' : 'enemy'}`}

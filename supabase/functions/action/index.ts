@@ -12,7 +12,7 @@ interface GameRow {
   created_by: string; cur_generation: number; fork_seq: number | null;
 }
 
-const ACTION_TYPES = new Set(['move', 'attack', 'give_ap', 'upgrade_range', 'jury_vote', 'fork']);
+const ACTION_TYPES = new Set(['move', 'attack', 'give_ap', 'give_heart', 'upgrade_range', 'jury_vote', 'fork']);
 
 // PlayerSpecs for a deterministic replay, from the live state's player list
 // (ids are stable across fork generations; names only affect log text).

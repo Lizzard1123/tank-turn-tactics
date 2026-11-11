@@ -52,3 +52,10 @@ export const trashSvg = svg(`
   <line x1="10" y1="11" x2="10" y2="17" />
   <line x1="14" y1="11" x2="14" y2="17" />
 `);
+export const clipboardSvg = svg(`
+  <rect x="5" y="4" width="14" height="17" rx="2" />
+  <path d="M9 4a2 2 0 0 1 6 0" />
+  <line x1="9" y1="10" x2="15" y2="10" />
+  <line x1="9" y1="14" x2="15" y2="14" />
+  <line x1="9" y1="18" x2="13" y2="18" />
+`);

@@ -1,9 +1,12 @@
 import { EngineError } from './errors';
 import { inRange, occupantAt } from './geom';
-import type { GameEvent, GameState, PlayerState, Vec } from './types';
+import type { GameEvent, GameState, LogKind, PlayerId, PlayerState, Vec } from './types';
 
-const requiredAp = (type: string, config: GameState['config']) =>
-  type === 'upgrade_range' ? config.upgradeCost : 1;
+const requiredAp = (type: string, config: GameState['config']) => {
+  if (type === 'upgrade_range') return config.upgradeCost;
+  if (type === 'give_heart') return 0; // costs 1 of the giver's HP instead
+  return 1;
+};
 
 function assertAlive(s: GameState, id: string): PlayerState {
   const p = s.players[id];
@@ -12,45 +15,71 @@ function assertAlive(s: GameState, id: string): PlayerState {
   return p;
 }
 
-function logLine(s: GameState, actorId: string, type: string, payload: Record<string, unknown>): string {
+function logLine(
+  s: GameState, pre: GameState, actorId: string, type: string, payload: Record<string, unknown>,
+): { text: string; kind?: LogKind } {
   const name = (id: string) => s.players[id]?.name ?? id;
   switch (type) {
     case 'move': {
       const to = payload.to as Vec;
-      return `${name(actorId)} moved to (${to.x},${to.y})`;
+      const base = `${name(actorId)} moved to (${to.x},${to.y})`;
+      const claimed = pre.heart && pre.heart.x === to.x && pre.heart.y === to.y;
+      if (!claimed) return { text: base };
+      const before = s.players[actorId].hp - 1; // hp before the pickup bonus
+      const gained = Math.max(1, Math.min(before + 1, s.config.startingHp) - before);
+      return { text: `${base} and found a heart (+${gained} hp)` };
     }
     case 'attack': {
       const targetId = payload.targetId as string;
-      return `${name(actorId)} attacked ${name(targetId)} for 1 damage`;
+      const killed = (pre.players[targetId]?.hp ?? 1) - 1 <= 0;
+      return { text: `${name(actorId)} attacked ${name(targetId)} for 1 damage`, kind: killed ? 'kill' : undefined };
     }
     case 'give_ap': {
       const targetId = payload.targetId as string;
-      return `${name(actorId)} gave ${name(targetId)} 1 AP`;
+      return { text: `${name(actorId)} gave ${name(targetId)} 1 AP` };
+    }
+    case 'give_heart': {
+      const targetId = payload.targetId as string;
+      const revived = (pre.players[targetId]?.hp ?? 1) <= 0;
+      return revived
+        ? { text: `${name(actorId)} revived ${name(targetId)} with a heart!`, kind: 'revive' }
+        : { text: `${name(actorId)} gave ${name(targetId)} a heart` };
     }
     case 'upgrade_range':
-      return `${name(actorId)} upgraded range to ${s.players[actorId].range + 1}`;
+      return { text: `${name(actorId)} upgraded range to ${s.players[actorId].range + 1}` };
     case 'daily_tick': {
       const day = s.day + 1;
       const bonus = countBonusVotes(s.pendingVotes);
       const names = Object.keys(bonus).length
         ? ` (+1 jury AP to ${Object.keys(bonus).map(name).join(', ')})` : '';
-      return `Day ${day}: all alive players gain ${payload.apGained ?? 1} AP${names}`;
+      const hauntNote = s.haunted && s.players[s.haunted]?.hp > 0
+        ? `, ${name(s.haunted)} is haunted (no AP)` : '';
+      return { text: `Day ${day}: all alive players gain ${payload.apGained ?? 1} AP${names}${hauntNote}` };
     }
     case 'jury_vote': {
       const candidateId = payload.candidateId as string;
-      return `Jury member ${name(actorId)} voted for ${name(candidateId)}`;
+      return { text: `Jury member ${name(actorId)} voted for ${name(candidateId)}` };
     }
     case 'fork':
-      return `Game forked/rewound to event ${payload.toSeq}`;
-    case 'bot_action':
-      return `${name(actorId)} acted (bot)`;
+      return { text: `Game forked/rewound to event ${payload.toSeq}` };
+    case 'bot_action': {
+      // unwrap kills so the live battle log shows bot final blows too
+      const inner = payload.inner as { type: string; payload: { targetId?: string } } | undefined;
+      const targetId = inner?.type === 'attack' ? inner.payload?.targetId : undefined;
+      const killed = !!targetId && ((pre.players[targetId]?.hp ?? 1) - 1 <= 0);
+      return { text: `${name(actorId)} acted (bot)`, kind: killed ? 'kill' : undefined };
+    }
     case 'join': {
       const joined = payload.playerId as string;
       const at = s.players[joined]?.pos;
-      return at ? `${payload.name ?? joined} joined the war at (${at.x},${at.y})` : `${joined} joined the war`;
+      return { text: at ? `${payload.name ?? joined} joined the war at (${at.x},${at.y})` : `${joined} joined the war` };
+    }
+    case 'heart_spawn': {
+      const at = payload as unknown as Vec;
+      return { text: `A heart appeared at (${at.x},${at.y})`, kind: 'heart_spawn' };
     }
     default:
-      return `${actorId} did ${type}`;
+      return { text: `${actorId} did ${type}` };
   }
 }
 
@@ -71,7 +100,15 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
       if (dx + dy !== 1) throw new EngineError('move must be 1 orthogonal square');
       if (to.x < 0 || to.y < 0 || to.x >= s.config.board || to.y >= s.config.board) throw new EngineError('outside board');
       if (occupantAt(s.players, to)) throw new EngineError('cell occupied');
-      return { ...s, players: { ...s.players, [actorId]: { ...actor, pos: to, ap: actor.ap - 1 } } };
+      // stepping onto the heart claims it: +1 hp capped at startingHp, heart
+      // consumed regardless (even at full hp — deterministic, no waste check)
+      let players = { ...s.players, [actorId]: { ...actor, pos: to, ap: actor.ap - 1 } };
+      let heart = s.heart;
+      if (heart && heart.x === to.x && heart.y === to.y) {
+        players[actorId] = { ...players[actorId], hp: Math.min(players[actorId].hp + 1, s.config.startingHp) };
+        heart = null;
+      }
+      return { ...s, players, heart };
     }
     case 'attack': {
       const targetId = payload.targetId as string;
@@ -79,10 +116,15 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
       const target = assertAlive(s, targetId);
       if (!inRange(actor.pos, target.pos, actor.range)) throw new EngineError('target out of range');
       const hp = target.hp - 1;
-      const players = { ...s.players, [actorId]: { ...actor, ap: actor.ap - 1 },
-        [target.id]: { ...target, hp } };
       let jury = s.jury, winner = s.winner;
-      if (hp <= 0) {
+      // AP steal on kill: the killer loots the victim's stash on the final
+      // blow. Only then is the victim's AP zeroed (looted, not destroyed).
+      const killed = hp <= 0;
+      const steal = killed && s.config.apStealOnKill ? target.ap : 0;
+      const players = { ...s.players,
+        [actorId]: { ...actor, ap: actor.ap - 1 + steal },
+        [target.id]: { ...target, hp, ap: steal > 0 ? 0 : target.ap } };
+      if (killed) {
         jury = [...s.jury, target.id];
         const alive = Object.values(players).filter(p => p.hp > 0);
         if (alive.length === 1) winner = alive[0].id;
@@ -96,6 +138,28 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
       return { ...s, players: { ...s.players,
         [actorId]: { ...actor, ap: actor.ap - 1 },
         [target.id]: { ...target, ap: target.ap + 1 } } };
+    }
+    case 'give_heart': {
+      // costs 1 of the GIVER's hp (never the last one), not AP
+      const targetId = payload.targetId as string;
+      if (targetId === actorId) throw new EngineError('cannot gift yourself');
+      const target = s.players[targetId];
+      if (!target) throw new EngineError('unknown player');
+      if (!inRange(actor.pos, target.pos, actor.range)) throw new EngineError('target out of range');
+      if (actor.hp < 2) throw new EngineError('need at least 2 hp to give a heart');
+      if (target.hp > 0) {
+        if (target.hp >= s.config.startingHp) throw new EngineError('target at max hp');
+        return { ...s, players: { ...s.players,
+          [actorId]: { ...actor, hp: actor.hp - 1 },
+          [target.id]: { ...target, hp: target.hp + 1 } } };
+      }
+      // revive: dead target returns at 1 hp / 0 AP and leaves the jury
+      if (!s.config.revives) throw new EngineError('revives are disabled');
+      return { ...s,
+        players: { ...s.players,
+          [actorId]: { ...actor, hp: actor.hp - 1 },
+          [target.id]: { ...target, hp: 1, ap: 0 } },
+        jury: s.jury.filter(id => id !== targetId) };
     }
     case 'upgrade_range': {
       return { ...s, players: { ...s.players,
@@ -117,9 +181,22 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     s = applyAction(s, event.actorId, inner.type, inner.payload ?? {});
   } else if (event.type === 'daily_tick') {
     const apGained = (event.payload.apGained as number) ?? s.config.apPerDay;
+    // jury haunt: the strictly-most-voted candidate (>0 votes; a tie haunts
+    // nobody) loses this tick's drip. Jury bonus AP is unaffected.
+    let lastHaunted: PlayerId | null = null;
+    if (s.config.juryHaunt && s.pendingVotes.length > 0) {
+      const tally: Record<string, number> = {};
+      for (const v of s.pendingVotes) tally[v.candidateId] = (tally[v.candidateId] ?? 0) + 1;
+      let bestId: string | null = null, bestN = 0, tie = false;
+      for (const [id, n] of Object.entries(tally)) {
+        if (n > bestN) { bestN = n; bestId = id; tie = false; }
+        else if (n === bestN) tie = true;
+      }
+      if (bestId && !tie) lastHaunted = bestId;
+    }
     const players = { ...s.players };
     for (const p of Object.values(players)) {
-      if (p.hp > 0) players[p.id] = { ...p, ap: p.ap + apGained };
+      if (p.hp > 0 && p.id !== lastHaunted) players[p.id] = { ...p, ap: p.ap + apGained };
     }
     // jury bonus: candidates with >= 3 pending votes get +1
     const bonus = countBonusVotes(s.pendingVotes);
@@ -129,7 +206,17 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     }
     const elapsed = (event.payload.elapsedMinutes as number) ?? 0;
     s = { ...s, day: s.day + 1, tickClockMinutes: s.tickClockMinutes + elapsed,
-      players, pendingVotes: [] };
+      players, pendingVotes: [], haunted: lastHaunted };
+  } else if (event.type === 'heart_spawn') {
+    // system-only event (the tick function mints it): place/replace the
+    // board heart. The square must be free of ALIVE players (graves are ok).
+    const at = event.payload as unknown as Vec;
+    if (typeof at.x !== 'number' || typeof at.y !== 'number'
+      || at.x < 0 || at.y < 0 || at.x >= s.config.board || at.y >= s.config.board) {
+      throw new EngineError('heart_spawn outside board');
+    }
+    if (occupantAt(s.players, at)) throw new EngineError('heart_spawn on an occupied square');
+    s = { ...s, heart: { x: at.x, y: at.y, seq: event.seq } };
   } else if (event.type === 'jury_vote') {
     const voter = s.players[event.actorId];
     if (!voter) throw new EngineError('unknown player');
@@ -170,6 +257,8 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     s = applyAction(s, event.actorId, event.type, event.payload);
   }
 
-  const entry = { seq: event.seq, text: logLine(s, event.actorId, event.type, event.payload) };
+  const line = logLine(s, state, event.actorId, event.type, event.payload);
+  const entry: { seq: number; text: string; kind?: LogKind } = { seq: event.seq, text: line.text };
+  if (line.kind) entry.kind = line.kind;
   return { ...s, seq: event.seq, log: [...s.log, entry] };
 }

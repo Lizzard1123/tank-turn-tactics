@@ -69,6 +69,8 @@ Deno.serve(async (req) => {
         status: 'active',
         // play mode: day clock starts now; test mode: due for an immediate tick
         last_tick_at: game.mode === 'play' ? new Date().toISOString() : null,
+        // period anchor for 'random' schedule modes (AP + hearts)
+        started_at: new Date().toISOString(),
       }).eq('id', gameId);
     if (statusErr) return json({ error: 'start failed' }, 500);
 

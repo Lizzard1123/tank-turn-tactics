@@ -61,12 +61,43 @@ beforeEach(() => {
 });
 
 describe('Game page', () => {
-  test('renders status bar, action bar, feed', () => {
+  test('renders status bar and action bar; full feed is post-game only', () => {
     setup();
     expect(screen.getByTestId('board')).toBeInTheDocument();
     expect(screen.getByTestId('ap-counter')).toBeInTheDocument();
-    expect(screen.getByTestId('event-feed')).toBeInTheDocument();
     expect(screen.getByText(/day 1/i)).toBeInTheDocument();
+    // during play the full event feed is hidden (post-game only) and the
+    // battle log is absent while there are no kill/revive entries yet
+    expect(screen.queryByTestId('event-feed')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('battle-log')).not.toBeInTheDocument();
+  });
+
+  test('live battle log shows only kills/revives during play', () => {
+    setup({
+      state: {
+        ...STATE,
+        log: [
+          { seq: 1, text: 'game started' },
+          { seq: 2, text: 'foe attacked me for 1 damage' },
+          { seq: 3, text: 'me attacked foe for 1 damage', kind: 'kill' },
+          { seq: 4, text: 'me revived foe with a heart!', kind: 'revive' },
+        ],
+      },
+    });
+    const log = screen.getByTestId('battle-log');
+    const lines = within(log).getAllByRole('listitem').map((li) => li.textContent);
+    expect(lines).toHaveLength(2); // kind-less rows are filtered out
+    expect(lines[0]).toMatch(/revived/); // newest first
+    expect(lines.some((t) => t?.includes('attacked me'))).toBe(false);
+    // full feed stays post-game
+    expect(screen.queryByTestId('event-feed')).not.toBeInTheDocument();
+  });
+
+  test('random AP schedule shows no countdown', () => {
+    setup({
+      state: { ...STATE, config: { ...STATE.config, apSchedule: 'random', apPeriodMinutes: 60 } },
+    });
+    expect(screen.queryByTestId('ap-timer')).not.toBeInTheDocument();
   });
 
   test('move: select move mode then tap legal cell posts action', async () => {
@@ -108,21 +139,20 @@ describe('Game page', () => {
     await waitFor(() => expect(screen.getByTestId('ap-counter')).toHaveTextContent('1 AP'));
   });
 
-  test('AP countdown keeps ticking through history scrubbing (does not reset)', async () => {
+  test('AP countdown ticks down from the server lastTickAt without resetting', async () => {
     try {
       vi.useFakeTimers();
+      // server granted 10s ago → 110s remain on a 2-minute interval
+      const serverTick = new Date(Date.now() - 10_000).toISOString();
       setup({
+        detail: { id: 'g1', name: 'g', mode: 'test', status: 'active', config: STATE.config, createdBy: 'p1', inviteCode: 'i', generation: 1, forkSeq: null, lastTickAt: serverTick },
         history: [
-          { seq: 1, type: 'daily_tick', actorId: 'system', createdAt: 't', payload: { apGained: 1, elapsedMinutes: 1 }, generation: 1 },
+          { seq: 1, type: 'daily_tick', actorId: 'system', createdAt: serverTick, payload: { apGained: 1, elapsedMinutes: 1 }, generation: 1 },
         ],
       });
-      // live state: 2-minute interval → 120s countdown
-      expect(screen.getByTestId('ap-timer')).toHaveTextContent(/120/);
-      // scrub to the ticked state (its clock says 1 minute elapsed → a buggy
-      // displayState-derived countdown would reset to 60)
-      fireEvent.click(screen.getByRole('button', { name: /view state after event 1/i }));
-      act(() => { vi.advanceTimersByTime(10_000); });
       expect(screen.getByTestId('ap-timer')).toHaveTextContent(/110/);
+      act(() => { vi.advanceTimersByTime(10_000); });
+      expect(screen.getByTestId('ap-timer')).toHaveTextContent(/100/);
     } finally {
       vi.useRealTimers();
     }
@@ -157,6 +187,7 @@ describe('Game page', () => {
     vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4, state: STATE });
     const refresh = vi.fn();
     setup({
+      state: { ...STATE, winner: 'p1' }, // full feed is post-game only
       history: [
         { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
         { seq: 2, type: 'move', actorId: 'p2', createdAt: 't', payload: { to: { x: 4, y: 4 } }, generation: 1 },
@@ -188,6 +219,7 @@ describe('Game page', () => {
 
   test('View scrubs while keeping later entries visible, Back to live exits', async () => {
     setup({
+      state: { ...STATE, winner: 'p1' }, // full feed is post-game only
       history: [
         { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
         { seq: 2, type: 'move', actorId: 'p2', createdAt: 't', payload: { to: { x: 4, y: 4 } }, generation: 1 },
@@ -202,11 +234,16 @@ describe('Game page', () => {
     expect(items[1].className).toContain('active');
     expect(screen.getByTestId('back-to-live')).toBeInTheDocument();
     fireEvent.click(screen.getByTestId('back-to-live'));
-    expect(screen.getByTestId('action-bar')).toBeInTheDocument();
+    // scrub exited: feed returns to live mode and the back button is gone.
+    // The action bar stays hidden — the game is over (winner set), so
+    // post-game has no actions regardless of scrub state.
+    expect(screen.queryByTestId('back-to-live')).not.toBeInTheDocument();
+    expect(screen.getByTestId('event-feed')).toBeInTheDocument();
   });
 
   test('View addresses rows by INDEX: with duplicate seqs the clicked (newer) row is highlighted, not its older twin', () => {
     setup({
+      state: { ...STATE, winner: 'p1' }, // full feed is post-game only
       history: [
         { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
         { seq: 2, type: 'move', actorId: 'p2', createdAt: 't', payload: { to: { x: 4, y: 4 } }, generation: 1 },
@@ -231,6 +268,7 @@ describe('Game page', () => {
 
   test('replay/scrub feeds the stepped event to Board as lastEvent', () => {
     setup({
+      state: { ...STATE, winner: 'p1' }, // full feed is post-game only
       history: [
         { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
         { seq: 2, type: 'attack', actorId: 'p2', createdAt: 't', payload: { targetId: 'p1' }, generation: 1 },

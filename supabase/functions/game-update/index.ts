@@ -31,34 +31,114 @@ Deno.serve(async (req) => {
     if (typeof next.apPerDay !== 'number' || next.apPerDay < 0 || next.apPerDay > 10) return json({ error: 'apPerDay must be 0-10' }, 400);
     if (typeof next.upgradeCost !== 'number' || next.upgradeCost < 1 || next.upgradeCost > 10) return json({ error: 'upgradeCost must be 1-10' }, 400);
     if (typeof next.apIntervalMinutes !== 'number' || next.apIntervalMinutes < 0 || next.apIntervalMinutes > 1440) return json({ error: 'invalid apIntervalMinutes' }, 400);
+    for (const k of ['heartIntervalMinutes', 'apPeriodMinutes', 'heartPeriodMinutes']) {
+      const v = (next as Record<string, unknown>)[k];
+      if (v === undefined) continue; // the schedule branch enforces required-ness
+      if (typeof v !== 'number' || v < 1 || v > 1440) return json({ error: `${k} must be 1-1440` }, 400);
+    }
 
-    // AP schedule: either interval (minutes between grants) or time-of-day
-    // ("HH:mm" wall-clock in an IANA timezone). Exactly one is active.
-    let apTimeOfDay: string | null = null;
-    let apTimezone: string | null = null;
-    if (typeof next.apTimeOfDay === 'string' && /^\d{2}:\d{2}$/.test(next.apTimeOfDay)) {
-      const [h, m] = next.apTimeOfDay.split(':').map(Number);
-      if (h > 23 || m > 59) return json({ error: 'apTimeOfDay must be HH:mm' }, 400);
-      apTimeOfDay = next.apTimeOfDay;
-      if (typeof next.apTimezone === 'string' && next.apTimezone) {
-        try {
-          new Intl.DateTimeFormat('en-US', { timeZone: next.apTimezone });
-          apTimezone = next.apTimezone;
-        } catch {
-          return json({ error: 'invalid apTimezone (IANA id required)' }, 400);
-        }
+    // Schedule groups: AP and hearts each have one active schedule shape
+    // (interval | timeOfDay | random) with mutually exclusive fields — a
+    // patch switching shapes deletes the fields of the abandoned one.
+    const SCHEDULES = ['interval', 'timeOfDay', 'random'];
+    const patchRec = config as Record<string, unknown>;
+    const nextRec = next as Record<string, unknown>;
+
+    // new-rule toggles: booleans only (type error if a patch sends garbage;
+    // fields the patch omits keep their current value)
+    for (const k of ['apStealOnKill', 'heartGifts', 'revives', 'juryHaunt', 'heartSpawn']) {
+      const v = patchRec[k];
+      if (v === undefined) continue;
+      if (typeof v !== 'boolean') return json({ error: `${k} must be a boolean` }, 400);
+      nextRec[k] = v;
+    }
+
+    const pick = (key: string): unknown => (key in patchRec ? patchRec[key] : nextRec[key]);
+
+    function resolveSchedule(group: 'ap' | 'heart'): string {
+      const schedKey = group === 'ap' ? 'apSchedule' : 'heartSchedule';
+      const patchSched = patchRec[schedKey];
+      if (patchSched !== undefined) {
+        if (typeof patchSched !== 'string' || !SCHEDULES.includes(patchSched))
+          throw new Error(`invalid ${schedKey}`);
+        nextRec[schedKey] = patchSched;
+        return patchSched;
       }
-      if (apTimeOfDay && !apTimezone) apTimezone = 'UTC';
-    } else if (next.apTimeOfDay != null) {
-      return json({ error: 'apTimeOfDay must be HH:mm' }, 400);
+      if (typeof nextRec[schedKey] === 'string' && SCHEDULES.includes(nextRec[schedKey] as string))
+        return nextRec[schedKey] as string;
+      // legacy: any time-of-day field (patch or current) means timeOfDay
+      const todKey = group === 'ap' ? 'apTimeOfDay' : 'heartTimeOfDay';
+      return (patchRec[todKey] ?? nextRec[todKey]) ? 'timeOfDay' : 'interval';
     }
-    if (apTimeOfDay) {
-      next.apTimeOfDay = apTimeOfDay;
-      next.apTimezone = apTimezone;
-    } else {
-      delete next.apTimeOfDay;
-      delete next.apTimezone;
+
+    function applySchedule(group: 'ap' | 'heart'): void {
+      const schedKey = group === 'ap' ? 'apSchedule' : 'heartSchedule';
+      const todKey = group === 'ap' ? 'apTimeOfDay' : 'heartTimeOfDay';
+      const tzKey = group === 'ap' ? 'apTimezone' : 'heartTimezone';
+      const intervalKey = group === 'ap' ? 'apIntervalMinutes' : 'heartIntervalMinutes';
+      const periodKey = group === 'ap' ? 'apPeriodMinutes' : 'heartPeriodMinutes';
+      const schedule = resolveSchedule(group);
+
+      // hearts: schedule fields are meaningless while spawning is off
+      if (group === 'heart' && !nextRec.heartSpawn) {
+        for (const k of [schedKey, todKey, tzKey, intervalKey, periodKey]) delete nextRec[k];
+        return;
+      }
+
+      if (schedule === 'timeOfDay') {
+        const tod = pick(todKey);
+        if (tod !== undefined && tod !== null) {
+          if (typeof tod !== 'string' || !/^\d{2}:\d{2}$/.test(tod)) throw new Error(`${todKey} must be HH:mm`);
+          const [h, m] = tod.split(':').map(Number);
+          if (h > 23 || m > 59) throw new Error(`${todKey} must be HH:mm`);
+          nextRec[todKey] = tod;
+          const tz = pick(tzKey);
+          if (tz !== undefined && tz !== null) {
+            if (typeof tz !== 'string' || !tz) throw new Error(`invalid ${tzKey} (IANA id required)`);
+            try {
+              new Intl.DateTimeFormat('en-US', { timeZone: tz });
+              nextRec[tzKey] = tz;
+            } catch {
+              throw new Error(`invalid ${tzKey} (IANA id required)`);
+            }
+          } else {
+            nextRec[tzKey] = 'UTC';
+          }
+        } else {
+          // no wall-clock configured: tick falls back to the daily_ap_time
+          // column (AP only); drop any stale tz
+          delete nextRec[todKey];
+          delete nextRec[tzKey];
+        }
+        delete nextRec[periodKey];
+      } else if (schedule === 'random') {
+        const period = pick(periodKey);
+        if (typeof period !== 'number' || period < 1 || period > 1440)
+          throw new Error(`${periodKey} must be 1-1440`);
+        nextRec[periodKey] = period;
+        delete nextRec[todKey];
+        delete nextRec[tzKey];
+      } else {
+        // interval: the interval number is validated by the shared check above
+        delete nextRec[todKey];
+        delete nextRec[tzKey];
+        delete nextRec[periodKey];
+      }
     }
+
+    try {
+      applySchedule('ap');
+      applySchedule('heart');
+    } catch (e) {
+      return json({ error: e instanceof Error ? e.message : 'invalid schedule' }, 400);
+    }
+
+    const hp = patchRec.heartPlacement;
+    if (hp !== undefined) {
+      if (hp !== 'random' && hp !== 'smart') return json({ error: 'invalid heartPlacement' }, 400);
+      nextRec.heartPlacement = hp;
+    }
+    if (nextRec.heartSpawn !== true) delete nextRec.heartPlacement;
 
     const bots = Array.isArray(next.bots) ? next.bots : [];
     if (bots.length > 8) return json({ error: 'max 8 bots' }, 400);
@@ -67,11 +147,14 @@ Deno.serve(async (req) => {
         return json({ error: 'invalid bot difficulty' }, 400);
     }
 
-    // Keep the tick column in sync: tick reads ap_interval_minutes, so a
-    // config-only edit never took effect for the drip cadence.
-    const intervalCol = apTimeOfDay
-      ? null // time-of-day games don't drip on an interval
-      : (next.apIntervalMinutes > 0 ? next.apIntervalMinutes : null);
+    // Keep the tick column in sync: tick reads ap_interval_minutes for the
+    // interval schedule only; timeOfDay/random resolve from config alone.
+    const effApSchedule = (next.apSchedule && ['interval', 'timeOfDay', 'random'].includes(next.apSchedule))
+      ? next.apSchedule
+      : (next.apTimeOfDay ? 'timeOfDay' : 'interval');
+    const intervalCol = effApSchedule === 'interval'
+      ? (next.apIntervalMinutes > 0 ? next.apIntervalMinutes : null)
+      : null;
 
     const { error } = await a.from('games').update({ config: next, ap_interval_minutes: intervalCol }).eq('id', gameId);
     if (error) return json({ error: 'update failed' }, 500);
