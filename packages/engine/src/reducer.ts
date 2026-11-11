@@ -143,7 +143,12 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     // deterministic, so replays reconstruct the same position)
     const playerId = event.payload.playerId as string;
     const name = (event.payload.name as string) ?? playerId;
-    if (s.players[playerId]) throw new EngineError(`player ${playerId} already in game`);
+    // Idempotent: if the player is already in the state (e.g. from createInitialState
+    // during history scrubbing), treat as no-op so the scrubbing loop does not break.
+    if (s.players[playerId]) {
+      const entry = { seq: event.seq, text: `${name} joined the war` };
+      return { ...s, seq: event.seq, log: [...s.log, entry] };
+    }
     let spawn: Vec | null = null;
     outer: for (let y = 0; y < s.config.board; y++) {
       for (let x = 0; x < s.config.board; x++) {

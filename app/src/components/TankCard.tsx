@@ -1,5 +1,5 @@
 import type { PlayerState } from '@ttt/engine';
-import { Icon, heartSvg, boltSvg, targetSvg, robotSvg, skullSvg } from '../lib/icons';
+import { Icon, heartSvg, targetSvg, robotSvg, skullSvg } from '../lib/icons';
 
 interface TankCardProps {
   player: PlayerState;
@@ -7,7 +7,7 @@ interface TankCardProps {
   onTap?: () => void;
 }
 
-// Compact stat card: HP / AP / range, tap to select as target.
+// Compact stat card: HP / range only (AP is private per video rules).
 // Emojis replaced with inline SVG icons.
 export default function TankCard({ player, isMe, onTap }: TankCardProps) {
   return (
@@ -19,7 +19,6 @@ export default function TankCard({ player, isMe, onTap }: TankCardProps) {
       </span>
       <span className="tank-card-stats">
         <Icon html={heartSvg} className="tank-card-icon" width={13} height={13} /> {player.hp} &middot;
-        <Icon html={boltSvg} className="tank-card-icon" width={13} height={13} /> {player.ap} &middot;
         <Icon html={targetSvg} className="tank-card-icon" width={13} height={13} /> {player.range}
       </span>
     </button>

@@ -189,42 +189,21 @@ function LocalGameView() {
         }}
       />
 
-      {!scrubbing && !state.winner && mine && mine.hp > 0 && (
-        <section className="card" aria-label="Your tank">
-          <h2>Your tank</h2>
-          <TankCard player={mine} isMe />
+      {/* Event feed is post-game only — actions are hidden until the game ends */}
+      {(state.winner || scrubbing) && (
+        <section className="card" aria-label="Events">
+          <h2>Events{scrubbing ? ' (History)' : ' (Post-Game)'}</h2>
+          <EventFeed
+            entries={feedEntries(game.history, state)}
+            activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, game.history.length) - 1}
+            live={!scrubbing}
+            onView={viewEvent}
+            onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
+            onStop={exitScrub}
+            replaying={replaying}
+          />
         </section>
       )}
-
-      {!scrubbing && !state.winner && inRangePlayers.length > 0 && mine && mine.hp > 0 && (
-        <section className="card" aria-label="In range">
-          <h2>In range</h2>
-          {inRangePlayers.map((p) => (
-            <TankCard
-              key={p.id}
-              player={p}
-              isMe={false}
-              onTap={() => {
-                if (mode === 'attack') void doAction('attack', { targetId: p.id });
-                else if (mode === 'give_ap') void doAction('give_ap', { targetId: p.id, amount: 1 });
-              }}
-            />
-          ))}
-        </section>
-      )}
-
-      <section className="card" aria-label="Events">
-        <h2>Events</h2>
-        <EventFeed
-          entries={feedEntries(game.history, state)}
-          activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, game.history.length) - 1}
-          live={!scrubbing}
-          onView={viewEvent}
-          onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
-          onStop={exitScrub}
-          replaying={replaying}
-        />
-      </section>
     </main>
   );
 }
@@ -313,6 +292,9 @@ function DbGameView({ gameId }: DbGameProps) {
   // (0) has no client-visible schedule, so the timer hides.
   // Derived from the LIVE state (never the scrubbed display state) so
   // scrubbing through history does not reset the countdown.
+  // Use a ref to detect server ticks: when tickClockMinutes jumps, the
+  // countdown recalculates from the new base so it doesn't drift to 0.
+  const lastTickClockRef = useRef<number | null>(null);
   const apIntervalMinutes = state?.config.apIntervalMinutes ?? 0;
   const liveClockMinutes = state?.tickClockMinutes ?? 0;
   // A won game (winner in state) or a server-marked finished game stops the
@@ -329,6 +311,15 @@ function DbGameView({ gameId }: DbGameProps) {
       return;
     }
     const intervalSeconds = apIntervalMinutes * 60;
+    const prev = lastTickClockRef.current;
+    // tickClockMinutes jumped? recalculate from the new base.
+    if (prev !== null && liveClockMinutes !== prev) {
+      lastTickClockRef.current = liveClockMinutes;
+      const remaining = intervalSeconds - (liveClockMinutes * 60) % intervalSeconds;
+      setApRemaining(remaining <= 0 ? intervalSeconds : remaining);
+      return;
+    }
+    lastTickClockRef.current = liveClockMinutes;
     let remaining = intervalSeconds - (liveClockMinutes * 60) % intervalSeconds;
     if (remaining <= 0) remaining = intervalSeconds;
     setApRemaining(remaining);
@@ -475,40 +466,26 @@ function DbGameView({ gameId }: DbGameProps) {
         </section>
       )}
 
-      {!scrubbing && inRangePlayers.length > 0 && mine && mine.hp > 0 && (
-        <section className="card" aria-label="In range">
-          <h2>In range</h2>
-          {inRangePlayers.map((p) => (
-            <TankCard
-              key={p.id}
-              player={p}
-              isMe={false}
-              onTap={() => {
-                if (mode === 'attack') void doAction('attack', { targetId: p.id });
-                else if (mode === 'give_ap') void doAction('give_ap', { targetId: p.id, amount: 1 });
-              }}
-            />
-          ))}
+      {/* Event feed is post-game only — actions are hidden until the game ends */}
+      {(displayState.winner || scrubbing) && (
+        <section className="card" aria-label="Events">
+          <h2>Events{scrubbing ? ' (History)' : ' (Post-Game)'}</h2>
+          <EventFeed
+            entries={feedEntries(history, state)}
+            activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, history.length) - 1}
+            live={!scrubbing}
+            onView={viewEvent}
+            onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
+            onStop={exitScrub}
+            replaying={replaying}
+            canFork={canFork}
+            onFork={(idx) => {
+              const seq = history[idx]?.seq;
+              if (seq !== undefined) void forkTo(seq);
+            }}
+          />
         </section>
       )}
-
-      <section className="card" aria-label="Events">
-        <h2>Events</h2>
-        <EventFeed
-          entries={feedEntries(history, state)}
-          activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, history.length) - 1}
-          live={!scrubbing}
-          onView={viewEvent}
-          onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
-          onStop={exitScrub}
-          replaying={replaying}
-          canFork={canFork}
-          onFork={(idx) => {
-            const seq = history[idx]?.seq;
-            if (seq !== undefined) void forkTo(seq);
-          }}
-        />
-      </section>
     </main>
   );
 }

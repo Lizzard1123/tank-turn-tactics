@@ -347,7 +347,7 @@ input[type='radio'] {
 /* ---------- the tactical map (board) ---------- */
 
 .board {
-  overflow-x: auto;
+  overflow: hidden;
   border: 2px solid var(--ink);
   border-radius: var(--radius);
   box-shadow: var(--shadow);

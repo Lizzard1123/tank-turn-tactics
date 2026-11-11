@@ -61,9 +61,13 @@ describe('join event (mid-game late join)', () => {
     expect(() => applyEvent(s0, joinEvent(s0, 'p9', 'Newbie'))).toThrow(/full/i);
   });
 
-  it('throws on duplicate player id', () => {
+  it('is idempotent: re-joining an existing player is a no-op', () => {
     const s0 = createInitialState(cfg(), specs(2));
-    expect(() => applyEvent(s0, joinEvent(s0, 'p1', 'Impostor'))).toThrow(/already/i);
+    const seqBefore = s0.seq;
+    const s1 = applyEvent(s0, joinEvent(s0, 'p1', 'Impostor'));
+    // player unchanged, seq only advanced by 1 (the log entry)
+    expect(s1.players['p1']?.name).toBe('P1');
+    expect(s1.seq).toBe(seqBefore + 1);
   });
 
   it('does not mutate the previous state', () => {
