@@ -1,4 +1,5 @@
-import { useParams } from 'react-router-dom';
+import { useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import Board from '../components/Board';
 import EventFeed from '../components/EventFeed';
 import TankCard from '../components/TankCard';
@@ -10,7 +11,16 @@ import { ErrorScreen, Loading } from '../components/Status';
 // Screen for eliminated players: watch the board, vote on AP bonuses.
 export default function Jury() {
   const { gameId } = useParams<{ gameId: string }>();
+  const navigate = useNavigate();
   const { state, me, avatars, refresh } = useGameEvents(gameId);
+
+  // revived (or game over while here): back to the game screen — the jury
+  // board is read-only, so a revived player stuck here could not move
+  useEffect(() => {
+    if (state && me && state.players[me] && state.players[me].hp > 0) {
+      navigate(`/game/${gameId}`, { replace: true });
+    }
+  }, [state, me, gameId, navigate]);
 
   if (!state || !me) {
     return state

@@ -82,4 +82,23 @@ describe('Jury screen', () => {
     const { container: container2 } = setup();
     expect(container2.querySelector('[data-testid="card-p2"] .tank-card-stats')).not.toBeNull();
   });
+
+  test('a revived player leaves the jury for the game screen', () => {
+    const revived = { ...STATE, players: { ...STATE.players, p1: { ...STATE.players.p1, hp: 1 } } };
+    vi.mocked(useGameEvents).mockReturnValue({
+      state: revived, events: [], me: 'p1',
+      detail: { id: 'g1', name: 'g', mode: 'test', status: 'active', config: revived.config, createdBy: 'p1', inviteCode: 'i', generation: 1, forkSeq: null },
+      loading: false, error: null, refresh: vi.fn(),
+    } as never);
+    render(
+      <MemoryRouter initialEntries={['/game/g1/jury']}>
+        <Routes>
+          <Route path="/game/:gameId/jury" element={<Jury />} />
+          <Route path="/game/:gameId" element={<div>game-screen</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    expect(screen.getByText('game-screen')).toBeInTheDocument();
+    expect(screen.queryByTestId('vote-p2')).not.toBeInTheDocument();
+  });
 });
