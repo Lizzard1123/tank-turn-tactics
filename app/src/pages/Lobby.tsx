@@ -94,7 +94,8 @@ export default function Lobby() {
 
   const { game } = detail;
   const started = game.status !== 'lobby';
-  const editable = isHost && !started && game.mode === 'test';
+  // host can edit config in both test and play mode lobbies
+  const editable = isHost && !started;
 
   const num = (v: string) => parseInt(v, 10) || 0;
 

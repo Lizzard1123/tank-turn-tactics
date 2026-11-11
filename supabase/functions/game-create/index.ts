@@ -43,6 +43,18 @@ Deno.serve(async (req) => {
     const config = validateConfig(body.config ?? {});
     if (typeof config === 'string') return json({ error: config }, 400);
 
+    // bots are allowed in play mode (async lobbies with pre-filled bots)
+    if (mode === 'play') {
+      const bots = Array.isArray(body.config?.bots) ? body.config.bots : [];
+      if (bots.length > 0) {
+        for (const b of bots) {
+          if (b && typeof b === 'object' && !['easy', 'medium', 'hard'].includes((b as { difficulty: string }).difficulty))
+            return json({ error: 'invalid bot difficulty' }, 400);
+        }
+        (config as { bots?: { difficulty: string }[] }).bots = bots as { difficulty: string }[];
+      }
+    }
+
     if (config.seed === 0) config.seed = Math.floor(Math.random() * 2 ** 31);
 
     let dailyApTime = '09:00';

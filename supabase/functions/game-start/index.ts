@@ -30,7 +30,7 @@ Deno.serve(async (req) => {
     const total = humans.length + bots.length;
     if (total > config.board * config.board)
       return json({ error: `too many players (${total}) for board ${config.board}x${config.board}` }, 400);
-    if (total < 2) return json({ error: 'need at least 2 players (add bots in test mode)' }, 400);
+    if (total < 2) return json({ error: 'need at least 2 players (add bots or invite friends)' }, 400);
 
     const specs = [
       ...humans.map(m => ({ id: m.player_id as string, name: '', isBot: false, botDifficulty: null as null })),

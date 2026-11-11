@@ -3,7 +3,7 @@ import { admin } from '../_shared/client.ts';
 import { getPlayer } from '../_shared/auth.ts';
 
 // Creator-only config update while the game is still in the lobby.
-// Test-mode lobbies tweak knobs here; play-mode games keep their create-time config.
+// Both test and play mode lobbies can tweak knobs before starting.
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'POST required' }, 405);
@@ -20,7 +20,6 @@ Deno.serve(async (req) => {
     if (!game) return json({ error: 'game not found' }, 404);
     if (game.created_by !== me.id) return json({ error: 'only the host can update config' }, 403);
     if (game.status !== 'lobby') return json({ error: 'game already started' }, 409);
-    if (game.mode !== 'test') return json({ error: 'config edits only in test mode' }, 403);
 
     const cur = game.config as Record<string, unknown>;
     const next = { ...cur, ...config, seed: cur.seed, bots: config.bots ?? cur.bots };
