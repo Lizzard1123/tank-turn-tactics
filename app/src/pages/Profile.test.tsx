@@ -102,4 +102,26 @@ describe('Profile (avatar upload)', () => {
     expect(await screen.findByAltText('your avatar')).toHaveAttribute('src', 'https://cdn.example/existing.jpg');
     expect(screen.queryByTestId('player-flag')).not.toBeInTheDocument();
   });
+
+  test('uploads GIFs untouched (no downscale) so they keep animating', async () => {
+    // no createImageBitmap/canvas mocks: the GIF path must not touch them
+    const gif = new File([new Uint8Array([1, 2, 3])], 'me.gif', { type: 'image/gif' });
+    render(<MemoryRouter><Profile /></MemoryRouter>);
+    fireEvent.change(screen.getByTestId('avatar-input'), { target: { files: [gif] } });
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent(/saved/i));
+    expect(mocks.upload).toHaveBeenCalledTimes(1);
+    const [path, blob, opts] = mocks.upload.mock.calls[0];
+    expect(path).toMatch(/^pid-1\/\d+\.gif$/);
+    expect(blob).toBe(gif); // original bytes, not a canvas re-encode
+    expect(opts).toEqual({ contentType: 'image/gif', upsert: false });
+  });
+
+  test('rejects GIFs over the 2 MB cap', async () => {
+    const big = new File([new Uint8Array(2 * 1024 * 1024 + 1)], 'big.gif', { type: 'image/gif' });
+    render(<MemoryRouter><Profile /></MemoryRouter>);
+    fireEvent.change(screen.getByTestId('avatar-input'), { target: { files: [big] } });
+    const alert = await screen.findByRole('alert');
+    expect(alert).toHaveTextContent(/under 2 MB/i);
+    expect(mocks.upload).not.toHaveBeenCalled();
+  });
 });

@@ -5,11 +5,15 @@ import { supabase } from '../lib/supabaseClient';
 import { flagUrl } from '../lib/flags';
 
 const MAX_DIM = 256; // downscale target: board circles are tiny; 256px is plenty
+// GIFs are stored as-is so they keep animating (canvas downscaling would
+// flatten them to one static frame) — cap them by bytes instead.
+const MAX_GIF_BYTES = 2 * 1024 * 1024;
 
-// /profile — upload a profile picture. It is downscaled client-side, pushed
-// to the avatars storage bucket under the player's own folder (storage RLS
-// checks auth.uid() against the folder name), and persisted on the players
-// row via the players_update_own policy.
+// /profile — upload a profile picture (your "character card"). Photos are
+// downscaled client-side; animated GIFs are stored as-is so they play on your
+// tank and card. Files are pushed to the avatars storage bucket under the
+// player's own folder (storage RLS checks auth.uid() against the folder
+// name), and persisted on the players row via the players_update_own policy.
 export default function Profile() {
   const { player, token } = useAuth();
   const fileInput = useRef<HTMLInputElement>(null);
@@ -41,13 +45,22 @@ export default function Profile() {
     setDone(false);
     setBusy(true);
     try {
-      const blob = await downscale(file);
-      const path = `${player.id}/${Date.now()}.jpg`;
+      const isGif = file.type === 'image/gif';
+      let blob: Blob;
+      let path: string;
+      if (isGif) {
+        if (file.size > MAX_GIF_BYTES) throw new Error('GIF must be under 2 MB');
+        blob = file;
+        path = `${player.id}/${Date.now()}.gif`;
+      } else {
+        blob = await downscale(file);
+        path = `${player.id}/${Date.now()}.jpg`;
+      }
       // supabase-js attaches the GoTrue session token automatically, so
       // storage RLS resolves auth.uid() to the uploader
       const { error: upErr } = await supabase.storage
         .from('avatars')
-        .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+        .upload(path, blob, { contentType: isGif ? 'image/gif' : 'image/jpeg', upsert: false });
       if (upErr) throw upErr;
       const { data } = supabase.storage.from('avatars').getPublicUrl(path);
       const { error: dbErr } = await supabase
@@ -115,6 +128,7 @@ export default function Profile() {
           : <span className="avatar-placeholder" aria-hidden>?</span>}
         <span className="avatar-frame-hint">{busy ? 'Uploading…' : 'Change picture'}</span>
       </button>
+      <p className="avatar-hint">JPG/PNG get downscaled; animated GIFs (≤ 2 MB) play as your character card.</p>
       <input
         ref={fileInput}
         type="file"

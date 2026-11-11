@@ -667,6 +667,12 @@ input[type='radio'] {
   color: var(--olive);
 }
 
+.avatar-hint {
+  font-size: 0.85rem;
+  color: var(--olive);
+  margin: 4px 0 0;
+}
+
 .flag-badge {
   display: flex;
   flex-direction: column;
