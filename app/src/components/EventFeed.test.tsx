@@ -1,5 +1,5 @@
 import { describe, test, expect, vi } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import EventFeed, { type FeedEntry } from './EventFeed';
 
@@ -59,19 +59,8 @@ describe('EventFeed', () => {
     expect(screen.queryByTestId('replay-btn')).not.toBeInTheDocument();
   });
 
-  test('Rewind game to here lives in the Details dropdown when allowed', async () => {
-    const user = userEvent.setup();
-    const onFork = vi.fn();
-    render(<EventFeed {...base({ canFork: true, onFork })} />);
-    const items = screen.getAllByRole('listitem').filter((li) => !li.className.includes('empty'));
-    // open the details of the newest event (seq 3, index 2)
-    await user.click(within(items[0]).getByText(/details/i));
-    await user.click(within(items[0]).getByRole('button', { name: /rewind game to here/i }));
-    expect(onFork).toHaveBeenCalledWith(2);
-  });
-
-  test('no rewind control without canFork', () => {
-    render(<EventFeed {...base({ canFork: false })} />);
+  test('no rewind control (fork removed — both modes behave the same)', () => {
+    render(<EventFeed {...base({})} />);
     expect(screen.queryAllByRole('button', { name: /rewind/i })).toHaveLength(0);
   });
 

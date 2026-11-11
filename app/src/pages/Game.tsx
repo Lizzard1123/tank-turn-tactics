@@ -231,22 +231,22 @@ function LocalGameView() {
         </section>
       )}
 
-      {/* Local (test) games keep the full event feed during play — it is the
-          scrub/replay/fork tooling test mode exists for. Play games (the
-          database view) get the filtered battle log instead, with the full
-          feed unlocked post-game. */}
-      <section className="card" aria-label="Events">
-        <h2>Events{scrubbing ? ' (History)' : ''}</h2>
-        <EventFeed
-          entries={feedEntries(game.history, state)}
-          activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, game.history.length) - 1}
-          live={!scrubbing}
-          onView={viewEvent}
-          onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
-          onStop={exitScrub}
-          replaying={replaying}
-        />
-      </section>
+      {/* Event feed is post-game only — identical to the database view so
+          both modes behave the same; actions are hidden until the game ends */}
+      {(state.winner || scrubbing) && (
+        <section className="card" aria-label="Events">
+          <h2>Events{scrubbing ? ' (History)' : ' (Post-Game)'}</h2>
+          <EventFeed
+            entries={feedEntries(game.history, state)}
+            activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, game.history.length) - 1}
+            live={!scrubbing}
+            onView={viewEvent}
+            onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
+            onStop={exitScrub}
+            replaying={replaying}
+          />
+        </section>
+      )}
     </main>
   );
 }
@@ -292,7 +292,7 @@ function DbGameView({ gameId }: DbGameProps) {
     [baseHistory, pending],
   );
 
-  // --- history scrubbing / recap (any mode; test mode also forks) ---
+  // --- history scrubbing / recap (post-game in both modes) ---
   // Scrub position counts events from the very start of the game. Event seqs
   // are contiguous across fork generations (a fork continues at toSeq+1), so
   // replaying from the initial state over history[0..n] is always valid —
@@ -451,26 +451,11 @@ function DbGameView({ gameId }: DbGameProps) {
     }
   }, [gameId, state, me, refresh]);
 
-  async function forkTo(seq: number) {
-    if (!gameId) return;
-    const token = localStorage.getItem('ttt_token');
-    if (!token) return;
-    try {
-      await action(token, gameId, 'fork', { toSeq: seq });
-      exitScrub();
-      await refresh();
-    } catch (e) {
-      setToast(e instanceof Error ? e.message : 'rewind failed');
-      setTimeout(() => setToast(null), 4000);
-    }
-  }
-
   if (loading) return <main className="page"><p>Loading game…</p></main>;
   if (error) return <main className="page"><p className="error" role="alert">{error}</p></main>;
   if (!state || !me || !displayState) return <main className="page"><p>No game data.</p></main>;
 
   const mine = state.players[me];
-  const canFork = detail?.mode === 'test' && detail.createdBy === me;
 
   // Newest applied event, or (while scrubbing/replaying) the event at the scrub
   // position — Board plays its fx for this event. scrubIdx is the index ONE
@@ -562,11 +547,6 @@ function DbGameView({ gameId }: DbGameProps) {
             onReplay={() => { if (scrubIdx === null) setScrubIdx(0); setReplaying(true); }}
             onStop={exitScrub}
             replaying={replaying}
-            canFork={canFork}
-            onFork={(idx) => {
-              const seq = history[idx]?.seq;
-              if (seq !== undefined) void forkTo(seq);
-            }}
           />
         </section>
       )}

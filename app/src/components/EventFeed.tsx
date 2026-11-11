@@ -21,9 +21,6 @@ interface EventFeedProps {
   onView?: (index: number) => void;
   onReplay?: () => void;
   onStop?: () => void;
-  /** test-mode hosts can rewind the actual game to any event */
-  onFork?: (index: number) => void;
-  canFork?: boolean;
 }
 
 function formatTime(iso: string): string {
@@ -36,7 +33,7 @@ function formatTime(iso: string): string {
 // after it stay visible but dimmed. Controls (replay / back to live) live in
 // the card header; per-event metadata lives in a Details dropdown.
 export default function EventFeed({
-  entries, activeIndex, live, replaying, onView, onReplay, onStop, onFork, canFork = false,
+  entries, activeIndex, live, replaying, onView, onReplay, onStop,
 }: EventFeedProps) {
   // The plan's contract: always the FULL list (this feed is the only history
   // surface — there is no scrubber to reach older events through). Rows keep
@@ -108,15 +105,6 @@ export default function EventFeed({
                     {e.actorId && (<><dt>Actor</dt><dd>{e.actorId}</dd></>)}
                     {e.type && (<><dt>Type</dt><dd>{e.type}</dd></>)}
                   </dl>
-                  {canFork && onFork && (
-                    <button
-                      type="button"
-                      className="danger"
-                      onClick={() => onFork(i)}
-                    >
-                      Rewind game to here
-                    </button>
-                  )}
                 </details>
               )}
             </li>

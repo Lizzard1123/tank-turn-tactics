@@ -183,38 +183,17 @@ describe('Game page', () => {
     expect(screen.getByText('JURY PAGE')).toBeInTheDocument();
   });
 
-  test('event feed shows the full history and Rewind lives in the entry details (host test game)', async () => {
-    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4, state: STATE });
-    const refresh = vi.fn();
+  test('event feed shows the full history post-game (host test game)', async () => {
     setup({
       state: { ...STATE, winner: 'p1' }, // full feed is post-game only
       history: [
         { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
         { seq: 2, type: 'move', actorId: 'p2', createdAt: 't', payload: { to: { x: 4, y: 4 } }, generation: 1 },
       ],
-      refresh,
     });
     // both events visible in the feed, newest first
     const texts = screen.getAllByRole('listitem').map((li) => li.querySelector('.feed-text')?.textContent);
     expect(texts.length).toBe(2);
-    // rewind to the first event from its Details dropdown
-    const firstRow = screen.getAllByRole('listitem')[1]; // seq 1 is the second (oldest) row
-    fireEvent.click(within(firstRow).getByText(/details/i));
-    fireEvent.click(within(firstRow).getByRole('button', { name: /rewind game to here/i }));
-    await waitFor(() =>
-      expect(vi.mocked(api.action)).toHaveBeenCalledWith('tok-1', 'g1', 'fork', { toSeq: 1 }),
-    );
-    expect(refresh).toHaveBeenCalled();
-  });
-
-  test('no rewind control for non-creators', () => {
-    setup({
-      detail: { id: 'g1', name: 'g', mode: 'test', status: 'active', config: STATE.config, createdBy: 'other', inviteCode: 'i', generation: 1, forkSeq: null },
-      history: [
-        { seq: 1, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 },
-      ],
-    });
-    expect(screen.queryAllByRole('button', { name: /rewind/i })).toHaveLength(0);
   });
 
   test('View scrubs while keeping later entries visible, Back to live exits', async () => {

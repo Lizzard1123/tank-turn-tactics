@@ -1,5 +1,5 @@
 import { test, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act, fireEvent } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import TestMode from './TestMode';
 import Game from './Game';
@@ -79,7 +79,7 @@ test('guest sign-in starts a local game (no DB game) and the 30s AP drip increme
   expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
 });
 
-test('event feed View scrubs the board and Replay animates back to live', async () => {
+test('during play the full feed is hidden and no fork/rewind exists (same as play mode)', async () => {
   vi.useFakeTimers();
   render(
     <LocalGameProvider>
@@ -101,20 +101,9 @@ test('event feed View scrubs the board and Replay animates back to live', async 
   act(() => { vi.advanceTimersByTime(30_000); });
   expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
 
-  // clicking View on that event enters scrub mode: ActionBar hidden,
-  // replay progress shows in the feed
-  fireEvent.click(screen.getByRole('button', { name: /view state after event 1/i }));
-  expect(screen.queryByTestId('action-bar')).not.toBeInTheDocument();
-  expect(screen.getByTestId('back-to-live')).toBeInTheDocument();
-
-  // "Replay from here" animates: one 1s step replays the remaining event
-  // and exits scrub back to live
-  fireEvent.click(screen.getByTestId('replay-btn'));
-  expect(screen.getByTestId('stop-replay-btn')).toBeInTheDocument();
-  await act(async () => {
-    vi.advanceTimersByTime(1000);
-  });
-  expect(screen.queryByTestId('stop-replay-btn')).not.toBeInTheDocument();
-  expect(screen.getByTestId('action-bar')).toBeInTheDocument();
-  expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
+  // parity with database games: full event feed is post-game only, and the
+  // fork/rewind control is gone everywhere (both modes behave the same)
+  expect(screen.queryByTestId('event-feed')).not.toBeInTheDocument();
+  expect(screen.queryAllByRole('button', { name: /rewind/i })).toHaveLength(0);
+  expect(screen.queryAllByRole('button', { name: /view state after event/i })).toHaveLength(0);
 });
