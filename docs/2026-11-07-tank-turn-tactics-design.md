@@ -27,9 +27,10 @@ history scrubber) doubles as the dev playground.
   - **Give AP** — transfer 1 AP to a player within range per 1 AP spent.
   - **Upgrade range** — +1 range per 2 AP (configurable cost).
 - **Jury**: dead players vote daily; living players with 3+ jury votes
-  receive +1 bonus AP. Non-votes are wasted. (With revives off, dead players
-  also see the board and the event feed; with revives on they see neither —
-  just the jury vote and the wait for a heart.)
+  receive +1 bonus AP. Non-votes are wasted. Jury members always spectate
+  the board; with revives off they also see the live event feed, with
+  revives on the feed stays hidden (just the vote, the board, and the wait
+  for a heart).
 - **Win**: last tank standing.
 - Coordination happens off-board (Discord/iMessage); no in-game chat in v1.
 

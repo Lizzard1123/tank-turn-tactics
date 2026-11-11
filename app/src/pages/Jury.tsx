@@ -76,21 +76,20 @@ export default function Jury() {
         </p>
       )}
 
-      {/* with revives on, dead players must not see the board or the feed —
-          they can only wait for a gifted heart to come back */}
+      {/* the board is always visible — jury members spectate the war. With
+          revives on, the live event feed stays hidden (the board is all a
+          dead player sees); with revives off, the feed is shown too. */}
+      <Board state={state} selectedMode="none" me={me} avatars={avatars} onCellTap={() => {}} />
+
       {state.config.revives ? (
         <p className="banner" data-testid="revive-waiting">
           Waiting for a heart… a living player can revive you by giving you one.
         </p>
       ) : (
-        <>
-          <Board state={state} selectedMode="none" me={me} avatars={avatars} onCellTap={() => {}} />
-
-          <section className="card" aria-label="Events">
-            <h2>Events</h2>
-            <EventFeed entries={state.log.map((l) => ({ seq: l.seq, text: l.text }))} activeIndex={null} live replaying={false} />
-          </section>
-        </>
+        <section className="card" aria-label="Events">
+          <h2>Events</h2>
+          <EventFeed entries={state.log.map((l) => ({ seq: l.seq, text: l.text }))} activeIndex={null} live replaying={false} />
+        </section>
       )}
     </main>
   );

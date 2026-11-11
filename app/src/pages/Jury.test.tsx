@@ -68,4 +68,10 @@ describe('Jury screen', () => {
     expect(screen.getByTestId('vote-p3')).toBeDisabled();
     expect(screen.getByText(/you voted/i)).toBeInTheDocument();
   });
+
+  test('jury spectates: the board renders even with revives on', () => {
+    setup({ ...STATE, config: { ...STATE.config, revives: true } });
+    expect(screen.getAllByTestId('board').length).toBeGreaterThan(0);
+    expect(screen.getByTestId('revive-waiting')).toBeInTheDocument();
+  });
 });
