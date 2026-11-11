@@ -235,13 +235,16 @@ describe('heart spawn + claim', () => {
     expect(s.heart).toBeNull();
     expect(s.log[s.log.length - 1].text).toContain('found a heart');
   });
-  it('claiming at full hp consumes the heart with no gain', () => {
+  it('claiming at full hp converts the heart to +2 AP', () => {
     let s = applyEvent(base, ev(base, 'system', 'heart_spawn', { x: 2, y: 1 }));
     const p1 = s.players.p1;
+    const apBefore = p1.ap;
     s = { ...s, players: { ...s.players, p1: { ...p1, pos: { x: 2, y: 2 } } } }; // hp 3 = full
     s = applyEvent(s, ev(s, 'p1', 'move', { to: { x: 2, y: 1 } }));
     expect(s.players.p1.hp).toBe(3);
+    expect(s.players.p1.ap).toBe(apBefore - 1 + 2); // move cost, then +2 AP
     expect(s.heart).toBeNull();
+    expect(s.log[s.log.length - 1].text).toContain('+2 AP');
   });
 });
 

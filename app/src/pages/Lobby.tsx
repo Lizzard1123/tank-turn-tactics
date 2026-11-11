@@ -44,6 +44,7 @@ export default function Lobby() {
   const [heartTimeOfDay, setHeartTimeOfDay] = useState('12:00');
   const [heartTimezone, setHeartTimezone] = useState(() => Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC');
   const [heartPeriodMinutes, setHeartPeriodMinutes] = useState(360);
+  const [heartSpawnDelayMinutes, setHeartSpawnDelayMinutes] = useState(0);
   const [heartPlacement, setHeartPlacement] = useState<'random' | 'smart'>('random');
 
   const isHost = detail?.game.createdBy === player?.id;
@@ -86,6 +87,7 @@ export default function Lobby() {
         setHeartTimeOfDay(c.heartTimeOfDay ?? '12:00');
         setHeartTimezone(c.heartTimezone ?? (Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'));
         setHeartPeriodMinutes(c.heartPeriodMinutes ?? 360);
+        setHeartSpawnDelayMinutes(c.heartSpawnDelayMinutes ?? 0);
         setHeartPlacement(c.heartPlacement ?? 'random');
       }
     } catch (e) {
@@ -130,6 +132,7 @@ export default function Lobby() {
           heartTimeOfDay: heartSpawn && heartSchedule === 'timeOfDay' ? heartTimeOfDay : undefined,
           heartTimezone: heartSpawn && heartSchedule === 'timeOfDay' ? heartTimezone : undefined,
           heartPeriodMinutes: heartSpawn && heartSchedule === 'random' ? heartPeriodMinutes : undefined,
+          heartSpawnDelayMinutes: heartSpawn ? heartSpawnDelayMinutes : undefined,
           heartPlacement: heartSpawn ? heartPlacement : undefined,
           bots,
         });
@@ -295,6 +298,9 @@ export default function Lobby() {
                       onChange={(e) => setHeartPeriodMinutes(Math.max(1, num(e.target.value)))} />
                   </>
                 )}
+                <label htmlFor="knob-heartdelay">Spawn delay (minutes, 0 = immediately)</label>
+                <input id="knob-heartdelay" type="number" min={0} max={1440} value={heartSpawnDelayMinutes}
+                  onChange={(e) => setHeartSpawnDelayMinutes(Math.max(0, num(e.target.value)))} />
                 <label htmlFor="knob-heartplace">Placement</label>
                 <select id="knob-heartplace" value={heartPlacement}
                   onChange={(e) => setHeartPlacement(e.target.value as 'random' | 'smart')}>
@@ -302,7 +308,7 @@ export default function Lobby() {
                   <option value="smart">Smart (far from everyone)</option>
                 </select>
               </div>
-              <p className="hint">Spawn times are secret — move onto a heart to claim it (+1 HP, capped at your starting HP).</p>
+              <p className="hint">Spawn times are secret — move onto a heart to claim it (+1 HP, capped at your starting HP; at full HP it converts to +2 AP). The spawn delay keeps the early game heart-free.</p>
             </>
           )}
 

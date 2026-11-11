@@ -77,6 +77,7 @@ export interface GameConfig {
   heartTimeOfDay?: string;       // 'timeOfDay' mode, "HH:mm"
   heartTimezone?: string;        // IANA tz, defaults 'UTC'
   heartPeriodMinutes?: number;   // 'random' mode period length, 1..1440
+  heartSpawnDelayMinutes?: number; // no spawns until this long after start (0 = immediately)
   heartPlacement?: 'random' | 'smart'; // smart = distance-field maximization
 }
 

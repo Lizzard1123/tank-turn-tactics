@@ -173,10 +173,13 @@ export default function Instructions() {
           <h2>Heart spawns (host-configurable)</h2>
           <p>Game hosts can enable collectible hearts that appear on the board
           on their own schedule (fixed interval, daily time, or a secret random
-          minute inside a period — spawn times are never shown).</p>
+          minute inside a period — spawn times are never shown). A configurable
+          <strong> spawn delay</strong> keeps the early game heart-free: no
+          hearts appear until the chosen time after the game starts.</p>
           <p><strong>Claiming:</strong> move onto a heart to pick it up —
-          +1 HP, capped at your starting HP. A new spawn replaces an unclaimed
-          heart.</p>
+          +1 HP, capped at your starting HP. At full HP the heart converts to
+          <strong> +2 AP</strong> instead — a heart is never wasted. A new
+          spawn replaces an unclaimed heart.</p>
           <p><strong>Placement:</strong> <em>Random</em> scatters hearts
           anywhere free; <em>Smart</em> places each heart as far away from
           every living player (and the previous heart) as possible — expect a

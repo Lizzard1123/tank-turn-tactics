@@ -25,8 +25,11 @@ function logLine(
       const base = `${name(actorId)} moved to (${to.x},${to.y})`;
       const claimed = pre.heart && pre.heart.x === to.x && pre.heart.y === to.y;
       if (!claimed) return { text: base };
-      const before = s.players[actorId].hp - 1; // hp before the pickup bonus
-      const gained = Math.max(1, Math.min(before + 1, s.config.startingHp) - before);
+      // at full hp the heart converts to +2 AP instead of healing
+      if ((pre.players[actorId]?.hp ?? 0) >= s.config.startingHp)
+        return { text: `${base} and found a heart (+2 AP)` };
+      const before = pre.players[actorId]?.hp ?? 0;
+      const gained = Math.min(before + 1, s.config.startingHp) - before;
       return { text: `${base} and found a heart (+${gained} hp)` };
     }
     case 'attack': {
@@ -100,12 +103,14 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
       if (dx + dy !== 1) throw new EngineError('move must be 1 orthogonal square');
       if (to.x < 0 || to.y < 0 || to.x >= s.config.board || to.y >= s.config.board) throw new EngineError('outside board');
       if (occupantAt(s.players, to)) throw new EngineError('cell occupied');
-      // stepping onto the heart claims it: +1 hp capped at startingHp, heart
-      // consumed regardless (even at full hp — deterministic, no waste check)
+      // stepping onto the heart claims it: +1 hp, OR — at full hp — the
+      // heart converts to +2 AP instead (never wasted)
       let players = { ...s.players, [actorId]: { ...actor, pos: to, ap: actor.ap - 1 } };
       let heart = s.heart;
       if (heart && heart.x === to.x && heart.y === to.y) {
-        players[actorId] = { ...players[actorId], hp: Math.min(players[actorId].hp + 1, s.config.startingHp) };
+        players[actorId] = players[actorId].hp >= s.config.startingHp
+          ? { ...players[actorId], ap: players[actorId].ap + 2 }
+          : { ...players[actorId], hp: players[actorId].hp + 1 };
         heart = null;
       }
       return { ...s, players, heart };

@@ -135,6 +135,8 @@ export default function ConfigView() {
                     <><span>Period</span><span>{cfg.heartPeriodMinutes} min</span></>
                   )}
                   <span>Placement</span><span>{cfg.heartPlacement ?? 'random'}</span>
+                  <span>Spawn delay</span>
+                  <span>{cfg.heartSpawnDelayMinutes ? `${cfg.heartSpawnDelayMinutes} min` : 'none'}</span>
                 </>
               )}
             </div>

@@ -134,21 +134,31 @@ function dueForTick(game: {
   }
 
   // --- hearts ---
+  // spawn delay: no hearts at all until heartSpawnDelayMinutes after
+  // started_at (0/unset = hearts eligible immediately) — keeps the early
+  // game heart-free regardless of schedule shape
+  const delayMinutes = (cfg.heartSpawnDelayMinutes as number | undefined) ?? 0;
+  let heartDelayOk = true;
+  if (delayMinutes > 0) {
+    heartDelayOk = !!game.started_at
+      && Date.now() - new Date(game.started_at).getTime() >= delayMinutes * 60_000;
+  }
+
   const heartMode = resolveHeartSchedule(cfg);
   let heart = false;
-  if (heartMode === 'interval') {
+  if (heartDelayOk && heartMode === 'interval') {
     heart = intervalDue({
       intervalMinutes: cfg.heartIntervalMinutes as number | undefined,
       lastAt: game.last_heart_at,
       fallbackMinutes: 60,
     });
-  } else if (heartMode === 'timeOfDay') {
+  } else if (heartDelayOk && heartMode === 'timeOfDay') {
     heart = timeOfDayDue({
       timeOfDay: cfg.heartTimeOfDay as string | undefined,
       timezone: (cfg.heartTimezone as string | undefined) ?? 'UTC',
       lastAt: game.last_heart_at,
     });
-  } else if (heartMode === 'random') {
+  } else if (heartDelayOk && heartMode === 'random') {
     heart = randomDue({
       startedAt: game.started_at, lastAt: game.last_heart_at,
       periodMinutes: cfg.heartPeriodMinutes as number | undefined,

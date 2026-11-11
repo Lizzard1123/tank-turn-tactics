@@ -26,10 +26,39 @@ history scrubber) doubles as the dev playground.
     at 0 HP the player dies and joins the Jury.
   - **Give AP** — transfer 1 AP to a player within range per 1 AP spent.
   - **Upgrade range** — +1 range per 2 AP (configurable cost).
-- **Jury**: dead players see the board and vote daily; living players with 3+
-  jury votes receive +1 bonus AP. Non-votes are wasted.
+- **Jury**: dead players vote daily; living players with 3+ jury votes
+  receive +1 bonus AP. Non-votes are wasted. (With revives off, dead players
+  also see the board and the event feed; with revives on they see neither —
+  just the jury vote and the wait for a heart.)
 - **Win**: last tank standing.
 - Coordination happens off-board (Discord/iMessage); no in-game chat in v1.
+
+### Configurable rules (v2 — all host checkboxes, default off)
+
+- **Steal AP on kill** (`apStealOnKill`) — the final blow transfers the
+  victim's entire AP stash to the killer; off, the victim's AP stays theirs.
+- **Heart gifts** (`heartGifts`) — give a heart to a player in range. Costs
+  1 of the giver's own HP (never the last one), no AP. A living target below
+  max HP gains 1 HP; a dead target **revives** when `revives` is on, at
+  1 HP / 0 AP, off the jury. Log entries carry `kind` markers (`kill`,
+  `revive`, `heart_spawn`) that drive the live battle feed.
+- **Jury haunt** (`juryHaunt`) — the strictly-most-voted living player is
+  "haunted": they receive no AP on the next tick. A tie haunts nobody; the
+  3-vote jury bonus still applies to the haunted player.
+- **Board hearts** (`heartSpawn`) — hearts appear per `heartSchedule`
+  (interval / time-of-day / random — same three shapes as AP, independently
+  configured, no public timer), optionally delayed by
+  `heartSpawnDelayMinutes` after `started_at` to keep the early game
+  heart-free. Placement is `random` or `smart` (seeded distance-field
+  maximization away from all living players and the current heart).
+  Moving onto a heart claims it: +1 HP capped at starting HP, or at full HP
+  +2 AP. A new spawn replaces an unclaimed heart.
+- **Gravestones** — dead players stay on the board as named, non-blocking
+  markers: tanks drive over graves, hearts may spawn on grave squares,
+  bots path through them. `occupantAt` counts living players only.
+- **Event log** — during play only final blows and revives are shown (the
+  live battle log); the full event feed unlocks post-game (both modes), with
+  scrub/replay. No fork UI (backend support stays dormant).
 
 ## Architecture
 
@@ -90,7 +119,7 @@ client and server code paths:
 |---|---|---|
 | `players` | id, name UNIQUE, password_hash, created_at | bcrypt hashes only |
 | `sessions` | token, player_id, expires_at | opaque bearer tokens |
-| `games` | id, name, mode ('play'\|'test'), config JSONB, status ('lobby'\|'active'\|'finished'), created_by, daily_ap_time | config holds all knobs |
+| `games` | id, name, mode ('play'\|'test'), config JSONB, status ('lobby'\|'active'\|'finished'), created_by, daily_ap_time, ap_interval_minutes, last_tick_at, last_heart_at, started_at | config holds all knobs; started_at anchors 'random' periods (0012) |
 | `game_players` | game_id, player_id, is_bot, bot_difficulty, joined_at | |
 | `events` | game_id, seq, type, actor_id, payload JSONB, created_at | append-only; UNIQUE (game_id, seq) |
 | `game_state` | game_id, seq, state JSONB | materialized replay cache |
@@ -99,10 +128,18 @@ client and server code paths:
 board size, starting-position count, starting HP/AP, AP per day, range
 upgrade cost, base range, tick time-of-day, bot count, bot difficulties.
 
-**Tick-speed override:** real (`mode='play'`) games drip AP daily via
-pg_cron. Test (`mode='test'`) games instead set `ap_interval_minutes`
-(e.g. 2), and the same hourly cron job grants AP to any test game whose
-interval has elapsed since its last tick — one job serves both modes.
+`games.config` JSONB optional fields (v2 rules): `apSchedule`
+('interval'\|'timeOfDay'\|'random'), `apPeriodMinutes`, `apStealOnKill`,
+`heartGifts`, `revives`, `juryHaunt`, `heartSpawn`, `heartSchedule`,
+`heartIntervalMinutes`, `heartTimeOfDay`/`heartTimezone`,
+`heartPeriodMinutes`, `heartSpawnDelayMinutes`, `heartPlacement`
+('random'\|'smart') — all validated by game-create/game-update, which
+delete the fields of an abandoned schedule shape.
+
+**Tick-speed override:** play games resolve their AP schedule per above
+(legacy play = daily time-of-day). Test games set `ap_interval_minutes`
+(e.g. 2), and the same every-minute cron grants AP to any test game whose
+interval has elapsed — one job serves both modes.
 
 ## Accounts & security
 
@@ -124,14 +161,31 @@ interval has elapsed since its last tick — one job serves both modes.
   no one can move another player's tank or read private game data. Correct
   level of security for a friends-and-bots game without a custom server.
 
-### Daily AP drip
+### AP + heart scheduling
 
-`pg_cron` runs an hourly job that **invokes the `tick` Edge Function** (via
-pg_net — cron can't run the TS engine itself). The function finds `active`
-games whose `daily_ap_time` matches the current hour (and, for test games,
-whose `ap_interval_minutes` has elapsed), appends a `daily_tick` event
-(+1 AP to all alive players) through the engine, and resolves pending jury
-votes. One scheduled job, no external scheduler.
+`pg_cron` fires **every minute** (0003 hourly → 0010 `* * * * *`; 0011 moved
+the cron secret from the unset GUC into the `app_settings` table) and
+invokes the `tick` Edge Function, which per active game evaluates two
+independent due-checks — AP (`daily_tick` event) and hearts
+(`heart_spawn` event) — over three schedule shapes:
+
+- **interval** — due once `ap_interval_minutes` (the column, kept in sync
+  with config by game-update) has elapsed since the last grant.
+- **timeOfDay** — due in the first invocation at/after the configured
+  wall-clock time (config `apTimeOfDay`/`apTimezone`, falling back to the
+  `daily_ap_time` column) that is on a LATER local day than the last grant:
+  at most once/day, downtime catches up exactly once.
+- **random** — one grant minute per period of length P anchored at
+  `started_at`, derived deterministically from the game seed:
+  `offset(i) = floor(mulberry32(hashSeed(seed:ap:i))() * P)`; due iff now is
+  past that minute and the last grant happened before it. No public
+  countdown (the client hides the timer in this mode).
+
+Hearts run the same three shapes off `heartSchedule` with their own
+`last_heart_at` column and a seeded rng (`seed:heart:<period>`); spawn
+position comes from the engine's `heartSpawnPos(state)`. Bots act after the
+drip/spawn. Legacy configs (no `apSchedule`) keep the old resolution: play
+mode → timeOfDay, test mode → interval.
 
 ## Frontend
 

@@ -35,6 +35,9 @@ function validateConfig(input: Record<string, unknown>): typeof CONFIG_DEFAULTS 
     if (v === undefined) continue;
     if (typeof v !== 'number' || v < 1 || v > 1440) return `${k} must be 1-1440`;
   }
+  // spawn delay allows 0 (= hearts eligible immediately)
+  const hsd = (c as Record<string, unknown>).heartSpawnDelayMinutes;
+  if (hsd !== undefined && (typeof hsd !== 'number' || hsd < 0 || hsd > 1440)) return 'heartSpawnDelayMinutes must be 0-1440';
   const hp = (c as Record<string, unknown>).heartPlacement;
   if (hp !== undefined && hp !== 'random' && hp !== 'smart') return 'invalid heartPlacement';
   const bots = Array.isArray(input.bots) ? input.bots : [];
@@ -82,9 +85,17 @@ Deno.serve(async (req) => {
       dailyApTime = body.dailyApTime;
     }
 
+    const cfgRec = config as Record<string, unknown>;
+
+    // hearts off: delay/placement/schedule fields are meaningless
+    if (cfgRec.heartSpawn !== true) {
+      delete cfgRec.heartSpawnDelayMinutes;
+      delete cfgRec.heartPlacement;
+      delete cfgRec.heartSchedule;
+    }
+
     // time-of-day fields ("HH:mm" + IANA tz, defaulting UTC) — AP and hearts
     // each carry their own pair; invalid values are rejected, not dropped.
-    const cfgRec = config as Record<string, unknown>;
     for (const [todKey, tzKey] of [['apTimeOfDay', 'apTimezone'], ['heartTimeOfDay', 'heartTimezone']]) {
       const v = cfgRec[todKey];
       if (v === undefined || v === null) { delete cfgRec[todKey]; delete cfgRec[tzKey]; continue; }

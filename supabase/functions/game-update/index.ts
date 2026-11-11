@@ -36,6 +36,12 @@ Deno.serve(async (req) => {
       if (v === undefined) continue; // the schedule branch enforces required-ness
       if (typeof v !== 'number' || v < 1 || v > 1440) return json({ error: `${k} must be 1-1440` }, 400);
     }
+    // spawn delay allows 0 (= hearts eligible immediately)
+    {
+      const v = (next as Record<string, unknown>).heartSpawnDelayMinutes;
+      if (v !== undefined && (typeof v !== 'number' || v < 0 || v > 1440))
+        return json({ error: 'heartSpawnDelayMinutes must be 0-1440' }, 400);
+    }
 
     // Schedule groups: AP and hearts each have one active schedule shape
     // (interval | timeOfDay | random) with mutually exclusive fields — a
@@ -82,6 +88,8 @@ Deno.serve(async (req) => {
       // hearts: schedule fields are meaningless while spawning is off
       if (group === 'heart' && !nextRec.heartSpawn) {
         for (const k of [schedKey, todKey, tzKey, intervalKey, periodKey]) delete nextRec[k];
+        delete nextRec.heartSpawnDelayMinutes;
+        delete nextRec.heartPlacement;
         return;
       }
 
