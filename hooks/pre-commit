@@ -1,0 +1,14 @@
+#!/bin/sh
+# Version bump: every commit increments the root VERSION file by 1 and stages
+# it, so each commit carries its own version number (version N = Nth commit).
+# Seeded with the repo's commit count when the system was added, so the
+# version stays equal to `git rev-list --count HEAD` from then on.
+#
+# Runs from the repo top-level working tree. Skips merge commits (git runs
+# pre-commit again on the finalized merge commit — bumping twice is noise).
+# Bypass with `git commit --no-verify`.
+[ -f .git/MERGE_HEAD ] && exit 0
+
+n=$(cat VERSION 2>/dev/null || echo 0)
+echo $((n + 1)) > VERSION
+git add VERSION

@@ -140,6 +140,8 @@ export default function Profile() {
       {done && <p role="status">Picture saved.</p>}
       {error && <p className="error" role="alert">{error}</p>}
       <p><Link to="/games" className="link-button btn">Back to games</Link></p>
+      {/* build version: commit counter from the repo-root VERSION file */}
+      <footer className="version-footer" data-testid="app-version">v{__APP_VERSION__}</footer>
     </main>
   );
 }

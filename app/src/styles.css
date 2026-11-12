@@ -678,6 +678,15 @@ input[type='radio'] {
   margin: 4px 0 0;
 }
 
+/* build version footer (profile page bottom) */
+.version-footer {
+  margin-top: 24px;
+  font-size: 0.75rem;
+  color: var(--olive);
+  opacity: 0.7;
+  text-align: center;
+}
+
 .flag-badge {
   display: flex;
   flex-direction: column;

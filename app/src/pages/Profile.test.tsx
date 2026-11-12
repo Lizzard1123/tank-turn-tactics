@@ -96,6 +96,14 @@ describe('Profile (avatar upload)', () => {
     expect(screen.getByTestId('player-flag')).toBeInTheDocument();
   });
 
+  test('shows the build version at the bottom of the page', () => {
+    render(<MemoryRouter><Profile /></MemoryRouter>);
+    // __APP_VERSION__ is injected by vite define from the repo-root VERSION file
+    const v = screen.getByTestId('app-version');
+    expect(v).toHaveTextContent(/^v\d+$/);
+    expect(v).toHaveTextContent(`v${__APP_VERSION__}`);
+  });
+
   test('shows the persisted avatar image when the player row has one', async () => {
     mocks.single.mockResolvedValue({ data: { avatar_url: 'https://cdn.example/existing.jpg' } });
     render(<MemoryRouter><Profile /></MemoryRouter>);
