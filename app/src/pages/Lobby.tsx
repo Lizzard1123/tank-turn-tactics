@@ -51,7 +51,67 @@ export default function Lobby() {
   // display option: name plates on tank tiles (default on)
   const [showPlayerNames, setShowPlayerNames] = useState(true);
 
-  const isHost = detail?.game.createdBy === player?.id;
+  const TZ_OPTIONS = [
+  { value: 'America/New_York', label: 'Eastern (EST/EDT)' },
+  { value: 'America/Chicago', label: 'Central (CST/CDT)' },
+  { value: 'America/Denver', label: 'Mountain (MST/MDT)' },
+  { value: 'America/Los_Angeles', label: 'Pacific (PST/PDT)' },
+  { value: 'UTC', label: 'UTC' },
+];
+
+// Timezone picker: dropdown for the common US zones, plus a validated
+// free-text "Other (IANA)…" entry for anywhere else.
+function TzPicker({ id, value, onChange }: { id: string; value: string; onChange: (v: string) => void }) {
+  const [other, setOther] = useState(!TZ_OPTIONS.some((o) => o.value === value));
+  const [draft, setDraft] = useState(value);
+  const draftValid = draft === '' || isValidTz(draft);
+  return (
+    <>
+      <select
+        id={id}
+        value={other ? '__other' : value}
+        onChange={(e) => {
+          if (e.target.value === '__other') {
+            setOther(true);
+            setDraft('');
+          } else {
+            setOther(false);
+            onChange(e.target.value);
+          }
+        }}
+      >
+        {TZ_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+        <option value="__other">Other (IANA)…</option>
+      </select>
+      {other && (
+        <>
+          <label htmlFor={`${id}-tz`}>Timezone (IANA)</label>
+          <input
+            id={`${id}-tz`}
+            type="text"
+            value={draft}
+            placeholder="e.g. Europe/Berlin"
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={() => { if (isValidTz(draft)) onChange(draft); }}
+          />
+          <span className="hint">{draft === '' ? 'Enter an IANA zone (e.g. Europe/Berlin)' : draftValid ? 'Valid IANA timezone' : 'Not a valid IANA timezone'}</span>
+        </>
+      )}
+    </>
+  );
+}
+
+function isValidTz(tz: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en', { timeZone: tz });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const isHost = detail?.game.createdBy === player?.id;
+
 
   // knobs sync from the server config ONCE — the 4s lobby poll re-runs load()
   // and must not clobber unsaved host edits (bots included: wiping the bots
@@ -230,9 +290,8 @@ export default function Lobby() {
                 <label htmlFor="knob-aptod">AP time (HH:mm)</label>
                 <input id="knob-aptod" type="time" value={apTimeOfDay}
                   onChange={(e) => setApTimeOfDay(e.target.value)} />
-                <label htmlFor="knob-aptz">Timezone (IANA)</label>
-                <input id="knob-aptz" type="text" value={apTimezone} placeholder="e.g. America/New_York"
-                  onChange={(e) => setApTimezone(e.target.value)} />
+                <label htmlFor="knob-aptz">Timezone</label>
+                <TzPicker id="knob-aptz" value={apTimezone} onChange={setApTimezone} />
               </>
             )}
             {apSchedule === 'random' && (
@@ -316,9 +375,8 @@ export default function Lobby() {
                     <label htmlFor="knob-hearttod">Spawn time (HH:mm)</label>
                     <input id="knob-hearttod" type="time" value={heartTimeOfDay}
                       onChange={(e) => setHeartTimeOfDay(e.target.value)} />
-                    <label htmlFor="knob-hearttz">Timezone (IANA)</label>
-                    <input id="knob-hearttz" type="text" value={heartTimezone} placeholder="e.g. Europe/Berlin"
-                      onChange={(e) => setHeartTimezone(e.target.value)} />
+                    <label htmlFor="knob-hearttz">Timezone</label>
+                    <TzPicker id="knob-hearttz" value={heartTimezone} onChange={setHeartTimezone} />
                   </>
                 )}
                 {heartSchedule === 'random' && (
