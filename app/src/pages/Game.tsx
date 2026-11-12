@@ -16,6 +16,22 @@ import { action } from '../lib/api';
 
 const BOT_NAMES: Record<string, string> = { easy: 'Easy Bot', medium: 'Medium Bot', hard: 'Hard Bot' };
 
+// Countdown format: "1d 8h 32m 5s", largest nonzero units first, seconds
+// always shown (so a sub-minute timer still ticks visibly).
+export function formatCountdown(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const d = Math.floor(s / 86_400);
+  const h = Math.floor((s % 86_400) / 3_600);
+  const m = Math.floor((s % 3_600) / 60);
+  const sec = s % 60;
+  const parts: string[] = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (d > 0 || h > 0) parts.push(`${h}h`);
+  if (d > 0 || h > 0 || m > 0) parts.push(`${m}m`);
+  parts.push(`${sec}s`);
+  return parts.join(' ');
+}
+
 // readable fallback for events without a log line (log lines win when present)
 const EVENT_FALLBACK_TEXT: Record<string, string> = {
   move: 'moved',
@@ -178,7 +194,7 @@ function LocalGameView() {
         <span>Day {displayState.day}</span>
         <span className="mode-badge">TEST{scrubbing ? ' · HISTORY' : ''}</span>
         {!state.winner && state.config.apSchedule !== 'random' && (
-          <span className="timer" data-testid="ap-timer">Next AP in {apRemaining}s</span>
+          <span className="timer" data-testid="ap-timer">Next AP in {formatCountdown(apRemaining ?? 0)}</span>
         )}
         <Link to="/games" className="link-button btn">Exit</Link>
       </header>
@@ -376,22 +392,39 @@ function DbGameView({ gameId }: DbGameProps) {
     const compute = (): number | null => {
       const now = Date.now();
       if (apTimeOfDay) {
-        // next slot at/after now, in the schedule's timezone (UTC fallback)
+        // next slot at/after now, in the schedule's timezone (UTC fallback).
+        // tz→UTC conversion iterates to convergence — the naive "tz wallclock
+        // minus UTC wallclock" offset breaks when the tz's calendar date
+        // differs from UTC's (evening US time read the offset as +19h instead
+        // of −5h and pushed the countdown a full day out: "1d 8h" to a 3pm
+        // slot that was really ~19h away).
         const [h, m] = apTimeOfDay.split(':').map(Number);
+        const tz = apTimezone || 'UTC';
         const fmt = new Intl.DateTimeFormat('en-GB', {
-          timeZone: apTimezone || 'UTC', year: 'numeric', month: '2-digit',
+          timeZone: tz, year: 'numeric', month: '2-digit',
           day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
         });
-        const p = fmt.formatToParts(new Date(now));
-        const get = (t: string) => Number(p.find((x) => x.type === t)?.value);
-        const slotToday = Date.UTC(get('year'), get('month') - 1, get('day'), h, m);
-        // tz "now" in UTC-terms: shift now by (tzWallclock - utcWallclock)
-        const offsetMin = (get('hour') % 24) * 60 + get('minute') - (new Date(now).getUTCHours() * 60 + new Date(now).getUTCMinutes());
-        const tzNow = new Date(now + offsetMin * 60_000);
-        const tzSlotToday = slotToday + offsetMin * 60_000;
-        if (tzNow.getTime() < tzSlotToday) return Math.round((tzSlotToday - now) / 1000);
-        // tomorrow's slot
-        return Math.round((tzSlotToday + 86_400_000 - now) / 1000);
+        const partsOf = (d: Date) => {
+          const p = fmt.formatToParts(d);
+          const get = (t: string) => Number(p.find((x) => x.type === t)?.value);
+          return { y: get('year'), mo: get('month'), day: get('day'), hh: get('hour') % 24, mi: get('minute') };
+        };
+        // UTC instant whose wall clock in tz reads (tz-today + dayOffset) at
+        // HH:MM. Guess UTC-first, then correct by the wallclock error — two
+        // iterations converge except across a DST edge, where three land it.
+        const np = partsOf(new Date(now));
+        const zonedToUtc = (dayOffset: number): number => {
+          const targetUTC = Date.UTC(np.y, np.mo - 1, np.day + dayOffset, h, m);
+          let g = targetUTC;
+          for (let i = 0; i < 3; i++) {
+            const w = partsOf(new Date(g));
+            g += targetUTC - Date.UTC(w.y, w.mo - 1, w.day, w.hh, w.mi);
+          }
+          return g;
+        };
+        const today = zonedToUtc(0);
+        const target = today > now ? today : zonedToUtc(1);
+        return Math.max(0, Math.round((target - now) / 1000));
       }
       // interval: base = last server tick. With none yet, the server grants
       // immediately on its next cron fire, so the first countdown runs to the
@@ -479,7 +512,7 @@ function DbGameView({ gameId }: DbGameProps) {
         </span>
         {!gameFinished && apRemaining != null && (
           <span className="timer" data-testid="ap-timer">
-            Next AP in {apRemaining}s
+            Next AP in {formatCountdown(apRemaining)}
           </span>
         )}
         <Link to="/games" className="link-button btn">Exit</Link>

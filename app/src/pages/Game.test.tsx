@@ -190,9 +190,28 @@ describe('Game page', () => {
           { seq: 1, type: 'daily_tick', actorId: 'system', createdAt: serverTick, payload: { apGained: 1, elapsedMinutes: 1 }, generation: 1 },
         ],
       });
-      expect(screen.getByTestId('ap-timer')).toHaveTextContent(/110/);
+      expect(screen.getByTestId('ap-timer')).toHaveTextContent(/1m 50s/);
       act(() => { vi.advanceTimersByTime(10_000); });
-      expect(screen.getByTestId('ap-timer')).toHaveTextContent(/100/);
+      expect(screen.getByTestId('ap-timer')).toHaveTextContent(/1m 40s/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('time-of-day countdown targets the next local slot across the UTC day boundary', () => {
+    try {
+      vi.useFakeTimers();
+      // 01:10 UTC = 20:10 EST Nov 11 — the tz's calendar day differs from
+      // UTC's, which used to corrupt the offset and push the countdown a full
+      // day out. Next 15:00 EST = 20:00 UTC Nov 12 → 18h 50m away.
+      vi.setSystemTime(new Date('2026-11-12T01:10:00Z'));
+      setup({
+        state: {
+          ...STATE,
+          config: { ...STATE.config, apSchedule: 'timeOfDay', apTimeOfDay: '15:00', apTimezone: 'America/New_York' },
+        },
+      });
+      expect(screen.getByTestId('ap-timer')).toHaveTextContent(/18h 50m/);
     } finally {
       vi.useRealTimers();
     }
