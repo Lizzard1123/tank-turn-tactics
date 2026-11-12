@@ -69,6 +69,13 @@ export interface GameCreateInput {
 async function fn<T>(path: string, body?: unknown, token?: string, method = 'POST'): Promise<T> {
   const res = await fetch(`${BASE}/functions/v1/${path}`, {
     method,
+    // AbortSignal.timeout: edge calls should settle in seconds. Without this,
+    // one hung connection (mobile network handoff, half-open socket) leaves a
+    // pending fetch for minutes — and anything awaiting it (the poller's
+    // single-flight guard in useGameEvents) wedges, so the UI freezes with
+    // stale state until the browser kills the request. Hit-or-miss refreshes,
+    // self-healing at random later times.
+    signal: AbortSignal.timeout(15_000),
     headers: {
       'Content-Type': 'application/json',
       apikey: KEY,
