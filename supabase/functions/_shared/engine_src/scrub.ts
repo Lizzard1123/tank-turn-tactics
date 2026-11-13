@@ -1,4 +1,4 @@
-import type { GameEvent, GameState, LogEntry, PlayerId } from './types';
+import type { GameEvent, GameState, LogEntry, PlayerId } from './types.ts';
 
 // Server-side secrecy scrubbing. The wire must never carry information the
 // viewer is not entitled to: the RNG seed (it predicts every future heart
