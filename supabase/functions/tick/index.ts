@@ -7,9 +7,10 @@ import { applyEvent, planBotAction, heartSpawnPos, normalizeHeartState, mulberry
 //     (the anchor for 'random' periods).
 //   - interval: due once the interval has elapsed since the last grant
 //     (the COLUMN, which game-update keeps in sync with config).
-//   - timeOfDay: due in the first invocation at/after the configured local
-//     wall-clock time that is on a LATER local day than the last grant —
-//     grants at most once/day; downtime catches up exactly once.
+//   - timeOfDay: due in the first invocation at/after the slot's local
+//     wall-clock instant when that instant is strictly AFTER the last grant —
+//     one grant per slot; a game seeded at start (before its slot, same local
+//     day) still grants at today's slot; downtime catches up exactly once.
 //   - random: each period of length P (anchored at started_at) has ONE grant
 //     minute, derived deterministically from the game seed:
 //       offset(i) = floor(mulberry32(hashSeed(`${seed}:${key}:${i}`))() * P)
@@ -70,30 +71,48 @@ function randomDue(spec: { startedAt: string | null; lastAt: string | null; peri
   return true;
 }
 
+// UTC instant of the slot (h:m) on the local (tz) calendar day of `now`.
+// Iterative correction: a naive UTC guess renders back to a DIFFERENT local
+// wall-clock across DST boundaries, so format the guess in the tz and nudge
+// until its wall-clock equals the target (converges in ≤2 steps).
+function slotInstantUTC(tz: string, h: number, m: number, now: Date): number | null {
+  const p = tzParts(now, tz);
+  if (!p) return null;
+  const target = Date.UTC(p.y, p.mo - 1, p.day, h, m);
+  let g = target;
+  for (let i = 0; i < 3; i++) {
+    const w = tzParts(new Date(g), tz);
+    if (!w) return null;
+    g += target - Date.UTC(w.y, w.mo - 1, w.day, w.hh, w.mi);
+  }
+  return g;
+}
+
 function timeOfDayDue(spec: { timeOfDay?: string; timezone?: string; lastAt: string | null }): boolean {
   const tod = spec.timeOfDay ?? '09:00';
   const [h, m] = tod.split(':').map(Number);
   if (!Number.isFinite(h) || !Number.isFinite(m)) return false;
 
   const now = new Date();
-  const tz = spec.timezone;
-  if (tz) {
-    const nowP = tzParts(now, tz);
-    if (!nowP) return false;
-    if (nowP.hh * 60 + nowP.mi < h * 60 + m) return false; // before today's slot
-    if (!spec.lastAt) return true;                          // never granted
-    const lastP = tzParts(new Date(spec.lastAt), tz);
-    if (!lastP) return false;
-    // due only if the last grant was on a PREVIOUS local day
-    return Date.UTC(lastP.y, lastP.mo, lastP.day) < Date.UTC(nowP.y, nowP.mo, nowP.day);
+  const nowMs = now.getTime();
+  // Instant-based, not day-based: due once now is past TODAY's slot AND that
+  // slot instant is strictly after the last grant. The previous day-comparison
+  // ("last grant on an earlier local day") broke games seeded at start on the
+  // SAME local day as their slot but before it — the seed counted as today's
+  // grant and the whole day was skipped. Grant time lands a second or two
+  // after the slot instant, so `slot > lastAt` stays false after granting —
+  // exactly one grant per slot.
+  if (spec.timezone) {
+    const slot = slotInstantUTC(spec.timezone, h, m, now);
+    if (slot === null) return false; // unknown tz id — not due, never silently UTC
+    if (nowMs < slot) return false;  // before today's slot
+    if (!spec.lastAt) return true;   // never granted
+    return slot > new Date(spec.lastAt).getTime();
   }
-  const utcMinutes = now.getUTCHours() * 60 + now.getUTCMinutes();
-  if (utcMinutes < h * 60 + m) return false;
+  const S = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), h, m);
+  if (nowMs < S) return false;
   if (!spec.lastAt) return true;
-  const last = new Date(spec.lastAt);
-  const lastDay = Date.UTC(last.getUTCFullYear(), last.getUTCMonth(), last.getUTCDate());
-  const todayDay = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  return lastDay < todayDay;
+  return S > new Date(spec.lastAt).getTime();
 }
 
 function intervalDue(spec: { intervalMinutes?: number; lastAt: string | null; fallbackMinutes: number }): boolean {
