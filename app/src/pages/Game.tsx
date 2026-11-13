@@ -319,9 +319,14 @@ function DbGameView({ gameId }: DbGameProps) {
   // are contiguous across fork generations (a fork continues at toSeq+1), so
   // replaying from the initial state over history[0..n] is always valid —
   // filtering to the current generation would hit a seq gap after a fork.
+  // The starting state comes from the server (`detail.initial` — exact, and
+  // lets the wire stay seed-free); the client-side createInitialState path
+  // remains as a fallback for older responses.
   const scrubbedState: GameState | null = useMemo(() => {
     if (scrubIdx === null || !state || !detail) return null;
-    let s = createInitialState(state.config, specsFromDetail(state));
+    let s = detail.initial
+      ? (structuredClone(detail.initial) as GameState)
+      : createInitialState(state.config, specsFromDetail(state));
     for (const e of history.slice(0, scrubIdx)) {
       try { s = applyEvent(s, e); } catch { break; }
     }

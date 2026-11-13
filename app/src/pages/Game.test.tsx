@@ -15,8 +15,8 @@ vi.mock('../lib/useGameEvents', () => ({
 import { useGameEvents } from '../lib/useGameEvents';
 
 vi.mock('../components/Board', () => ({
-  default: ({ onCellTap, lastEvent }: { onCellTap: (p: { x: number; y: number }) => void; lastEvent?: { type: string } | null }) => (
-    <div data-testid="board" data-last-event={lastEvent?.type ?? ''}>
+  default: ({ onCellTap, lastEvent, state }: { onCellTap: (p: { x: number; y: number }) => void; lastEvent?: { type: string } | null; state: { seq: number; day: number } }) => (
+    <div data-testid="board" data-last-event={lastEvent?.type ?? ''} data-seq={state.seq} data-day={state.day}>
       <button data-testid="tap-legal" onClick={() => onCellTap({ x: 1, y: 0 })}>tap</button>
     </div>
   ),
@@ -101,7 +101,7 @@ describe('Game page', () => {
   });
 
   test('move: select move mode then tap legal cell posts action', async () => {
-    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4, state: STATE });
+    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4 });
     setup();
     fireEvent.click(screen.getByTestId('btn-move'));
     fireEvent.click(screen.getByTestId('tap-legal'));
@@ -111,7 +111,7 @@ describe('Game page', () => {
   });
 
   test('move: tapping a square with a grave on it commits the move (graves passable)', async () => {
-    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4, state: STATE });
+    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4 });
     setup({
       state: {
         ...STATE,
@@ -131,7 +131,7 @@ describe('Game page', () => {
   });
 
   test('give heart: tapping a grave commits the revive gift (revives on)', async () => {
-    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4, state: STATE });
+    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4 });
     setup({
       state: {
         ...STATE,
@@ -316,5 +316,32 @@ describe('Game page', () => {
     expect(screen.getByTestId('board')).toHaveAttribute('data-last-event', 'attack');
     fireEvent.click(screen.getByTestId('back-to-live'));
     expect(screen.getByTestId('board')).toHaveAttribute('data-last-event', 'attack'); // newest event
+  });
+
+  test('scrubber replays from the server-sent initial state when present (day 7 marker distinguishes it from the createInitialState fallback)', () => {
+    setup({
+      state: { ...STATE, winner: 'p1' },
+      detail: { id: 'g1', name: 'g', mode: 'test', status: 'finished', config: STATE.config, createdBy: 'p1', inviteCode: 'i', generation: 1, forkSeq: null, initial: { ...STATE, seq: 0, day: 7, log: [] } },
+      history: [
+        { seq: 1, type: 'daily_tick', actorId: 'system', createdAt: 't', payload: { apGained: 1, elapsedMinutes: 2 }, generation: 1 },
+      ],
+    });
+    // scrub to event 1: the tick applied on top of the server initial
+    fireEvent.click(screen.getAllByRole('button', { name: /view state after event 1/i })[0]);
+    expect(screen.getByTestId('board')).toHaveAttribute('data-day', '8');
+    expect(screen.getByTestId('board')).toHaveAttribute('data-seq', '1');
+  });
+
+  test('scrubber fallback (no server initial) still builds from config', () => {
+    setup({
+      state: { ...STATE, winner: 'p1' },
+      history: [
+        { seq: 1, type: 'daily_tick', actorId: 'system', createdAt: 't', payload: { apGained: 1, elapsedMinutes: 2 }, generation: 1 },
+      ],
+    });
+    fireEvent.click(screen.getAllByRole('button', { name: /view state after event 1/i })[0]);
+    // fallback path: day 1 from createInitialState, tick bumps it to day 2
+    expect(screen.getByTestId('board')).toHaveAttribute('data-day', '2');
+    expect(screen.getByTestId('board')).toHaveAttribute('data-seq', '1');
   });
 });

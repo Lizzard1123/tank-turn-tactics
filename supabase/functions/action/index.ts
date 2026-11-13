@@ -14,6 +14,28 @@ interface GameRow {
 
 const ACTION_TYPES = new Set(['move', 'attack', 'give_ap', 'give_heart', 'upgrade_range', 'jury_vote', 'fork']);
 
+// Payload whitelist per action type. Everything else — including any `anon`
+// flag (the engine's masked-attack replay marker, which would let a client
+// attack without paying AP) — is stripped before the payload reaches the
+// engine or the events table.
+const ALLOWED_KEYS: Record<string, string[]> = {
+  move: ['to'],
+  attack: ['targetId'],
+  give_ap: ['targetId'],
+  give_heart: ['targetId'],
+  upgrade_range: [],
+  jury_vote: ['candidateId'],
+  fork: ['toSeq'],
+};
+
+function sanitizePayload(type: string, payload: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of ALLOWED_KEYS[type] ?? []) {
+    if (key in payload) out[key] = payload[key];
+  }
+  return out;
+}
+
 // PlayerSpecs for a deterministic replay, from the live state's player list
 // (ids are stable across fork generations; names only affect log text).
 function specsFromState(state: GameState): PlayerSpec[] {
@@ -62,8 +84,9 @@ Deno.serve(async (req) => {
     const me = await getPlayer(a, req);
     if (!me) return json({ error: 'unauthorized' }, 401);
 
-    const { gameId, type, payload = {} } = await req.json();
+    const { gameId, type, payload: rawPayload = {} } = await req.json();
     if (!gameId || !ACTION_TYPES.has(type)) return json({ error: 'invalid request' }, 400);
+    const payload = sanitizePayload(type, rawPayload);
 
     const loaded = await loadAuthoritativeState(gameId);
     if (!loaded || !loaded.state) return json({ error: 'game not started' }, 404);
@@ -162,11 +185,18 @@ Deno.serve(async (req) => {
       game_id: gameId, seq: next.seq, state: next, updated_at: new Date().toISOString(),
     });
 
+    // realtime refetch trigger (members subscribe to `activity` — they can no
+    // longer read `events` rows directly, which carried full attack attribution)
+    await a.from('activity').upsert({ game_id: gameId, seq: event.seq }, { onConflict: 'game_id' });
+
     if (next.winner) {
       await a.from('games').update({ status: 'finished' }).eq('id', gameId);
     }
 
-    return json({ ok: true, seq: next.seq, state: next });
+    // No state in the response: the full state (seed, everyone's AP, the real
+    // log) must not ride on any client-facing payload, and the app only ever
+    // reads `seq` before its authoritative refetch.
+    return json({ ok: true, seq: next.seq });
   } catch (e) {
     return json({ error: `bad request: ${e instanceof Error ? e.message : 'unknown'}` }, 400);
   }

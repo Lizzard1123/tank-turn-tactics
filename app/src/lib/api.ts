@@ -121,6 +121,9 @@ export interface GameDetail {
     /** server AP schedule: interval base (ISO) and/or daily wall-clock slot */
     lastTickAt?: string | null;
     dailyApTime?: string | null;
+    /** server-computed starting state for the scrubber (seed-scrubbed copy of
+        the game's true initial state) — replaces client-side createInitialState */
+    initial?: unknown;
   };
   state: unknown | null;
   events: unknown[];
@@ -154,7 +157,6 @@ export function gameUpdate(
 export interface ActionResponse {
   ok: true;
   seq: number;
-  state: unknown;
 }
 
 export function action(

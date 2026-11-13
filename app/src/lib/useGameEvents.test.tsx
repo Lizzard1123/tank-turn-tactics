@@ -90,9 +90,12 @@ describe('useGameEvents', () => {
     expect(h.channelSubscribe).toHaveBeenCalled();
     expect(h.setAuth).toHaveBeenCalledWith('tok-test'); // token attached for RLS
 
-    // fire the INSERT callback the wiring registered
+    // fire the activity-row callback the wiring registered (the realtime
+    // trigger moved from `events` INSERT to `activity` INSERT/UPDATE —
+    // secrecy: members must not read raw event rows)
     const call = h.channelOn.mock.calls.find(c => c[0] === 'postgres_changes');
     expect(call).toBeTruthy();
+    expect(call![1]).toMatchObject({ event: '*', table: 'activity', filter: 'game_id=eq.g1' });
     const cb = call![2] as (payload: unknown) => void;
 
     const callsBefore = vi.mocked(api.gameGet).mock.calls.length;

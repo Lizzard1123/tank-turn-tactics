@@ -78,9 +78,13 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
     return () => { aliveRef.current = false; };
   }, [refresh]);
 
-  // realtime: any INSERT on this game's events triggers a refetch+replay.
-  // postgres_changes applies events-table RLS with the connection's JWT, so
-  // the session token is attached before subscribing.
+  // realtime: any activity row change for this game triggers a refetch+replay.
+  // The payload is never read — this is a pure "something happened" signal.
+  // `activity` replaced `events` as the trigger table (secrecy): members must
+  // not read raw event rows (they carry attack attribution), so the events
+  // SELECT policy was dropped and this minimal table carries the signal.
+  // postgres_changes applies activity RLS with the connection's JWT, so the
+  // session token is attached before subscribing.
   useEffect(() => {
     if (!gameId) return;
     const token = localStorage.getItem('ttt_token');
@@ -89,7 +93,7 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
       .channel(`events:${gameId}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'events', filter: `game_id=eq.${gameId}` },
+        { event: '*', schema: 'public', table: 'activity', filter: `game_id=eq.${gameId}` },
         () => { void refreshThrottled(); },
       )
       .subscribe();

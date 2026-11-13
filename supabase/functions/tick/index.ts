@@ -274,6 +274,12 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
     game_id: gameId, seq: state.seq, state, updated_at: new Date().toISOString(),
   });
 
+  // realtime refetch trigger (members subscribe to `activity`; they cannot
+  // read `events` rows, which carry attack attribution)
+  if (appended > 0) {
+    await a.from('activity').upsert({ game_id: gameId, seq: state.seq }, { onConflict: 'game_id' });
+  }
+
   if (state.winner) {
     await a.from('games').update({ status: 'finished' }).eq('id', gameId);
   }

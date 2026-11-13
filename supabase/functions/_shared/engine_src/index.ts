@@ -6,4 +6,5 @@ export * from './reducer.ts';
 export * from './replay.ts';
 export * from './bots.ts';
 export * from './pickup.ts';
+export * from './scrub.ts';
 export * from './errors.ts';

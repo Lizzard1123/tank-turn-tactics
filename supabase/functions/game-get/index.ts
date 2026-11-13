@@ -1,7 +1,11 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import { getPlayer } from '../_shared/auth.ts';
-import { applyEvent, type GameEvent } from '../_shared/engine.ts';
+import {
+  applyEvent, createInitialState,
+  attackMask, attackActors, maskEvents, maskLog, scrubState, scrubConfig,
+  type GameEvent, type GameState,
+} from '../_shared/engine.ts';
 import { canonicalHistory, effectiveForks, type ForkPoint } from '../_shared/history.ts';
 
 Deno.serve(async (req) => {
@@ -80,19 +84,46 @@ Deno.serve(async (req) => {
           seq: e.seq, type: e.type, actorId: e.actor_id,
           createdAt: e.created_at, payload: e.payload ?? {},
         }));
+
+      // --- secrecy scrub (per viewer) ---
+      // The seed and other players' AP never go on the wire, and attack
+      // events lose their actor except each victim's most recent damage.
+      // See engine/scrub.ts. Masking is computed over the canonical timeline
+      // (which includes the tail), then applied to what we SEND — the
+      // database keeps the truth.
+      const rawConfig = game.config as GameState['config'];
+      const mask = attackMask(history);
+      const actors = attackActors(history);
+      const stateForViewer: GameState = {
+        ...scrubState(state, me.id),
+        log: maskLog(state.log, actors, me.id, mask, (id) => state.players[id]?.name ?? id),
+      };
+      // the scrubber's starting point, computed server-side with the real
+      // seed (createInitialState is seed-deterministic, so this is exact).
+      // Player order comes from state.order — JSONB does not preserve the
+      // players record's key order, and spawn placement is order-sensitive.
+      let initial = createInitialState(rawConfig, state.order.map((id) => {
+        const p = state.players[id];
+        return { id: p.id, name: p.name, isBot: p.isBot, botDifficulty: p.botDifficulty };
+      }));
+      initial = { ...initial, config: { ...initial.config, seed: 0 } };
+
       return json({
         game: {
           id: game.id, name: game.name, mode: game.mode, status: game.status,
-          config: game.config, createdBy: game.created_by,
+          config: scrubConfig(game.config as Record<string, unknown>), createdBy: game.created_by,
           inviteCode: game.invite_code, generation: game.cur_generation,
           forkSeq: game.fork_seq,
           // server AP schedule — the client derives its countdown from these,
           // never from a client-side guess, so refreshes stay in sync
           lastTickAt: game.last_tick_at, dailyApTime: game.daily_ap_time,
+          // server-computed starting state for the client scrubber
+          // (seed-scrubbed copy of the game's true initial state)
+          initial,
         },
-        state,
-        events: tail,       // authoritative tail (applied)
-        history,            // full event record for the scrubber
+        state: stateForViewer,
+        events: maskEvents(tail, me.id, mask),  // authoritative tail (applied)
+        history: maskEvents(history, me.id, mask), // full event record for the scrubber
         members,
         avatars,
         names,              // playerId -> display name (lobby shows real names)

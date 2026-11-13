@@ -6,4 +6,5 @@ export * from './reducer';
 export * from './replay';
 export * from './bots';
 export * from './pickup';
+export * from './scrub';
 export * from './errors';

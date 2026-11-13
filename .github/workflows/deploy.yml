@@ -31,6 +31,9 @@ jobs:
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      # obfuscate the deployed bundle (deterrent against reverse-engineering
+      # the client; enforcement is server-side) — must stay before upload
+      - run: node app/scripts/obfuscate.mjs
       - uses: actions/upload-pages-artifact@v3
         with:
           path: app/dist

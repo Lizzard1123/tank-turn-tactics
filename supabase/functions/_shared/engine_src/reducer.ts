@@ -37,6 +37,9 @@ function logLine(
     case 'attack': {
       const targetId = payload.targetId as string;
       const killed = (pre.players[targetId]?.hp ?? 1) - 1 <= 0;
+      if (payload.anon === true) {
+        return { text: `Someone attacked ${name(targetId)} for 1 damage`, kind: killed ? 'kill' : undefined };
+      }
       return { text: `${name(actorId)} attacked ${name(targetId)} for 1 damage`, kind: killed ? 'kill' : undefined };
     }
     case 'give_ap': {
@@ -286,6 +289,29 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
   } else if (event.type === 'fork') {
     // log-only; no state change (defense-in-depth: fork is realized by the
     // caller replaying a truncated event list, not by mutating state here)
+  } else if (event.type === 'attack' && event.payload.anon === true) {
+    // Masked attack (server-scrubbed replays only — the action endpoint strips
+    // `anon` from client payloads): the target takes 1 damage exactly like a
+    // real attack, but the attacker's identity is withheld, so the actor id is
+    // never asserted and no AP is charged to anyone. Replayed states therefore
+    // show the real attacker's ap inflated by their hidden attacks — ap is
+    // never displayed for other players, and a higher ap can only loosen
+    // later replay validation, never fail it. Victim-side state (hp, steal
+    // zeroing, jury, winner) stays exact.
+    const targetId = event.payload.targetId as string;
+    const target = assertAlive(s, targetId);
+    const hp = target.hp - 1;
+    let jury = s.jury, winner = s.winner;
+    const killed = hp <= 0;
+    const steal = killed && s.config.apStealOnKill ? target.ap : 0;
+    const players = { ...s.players,
+      [target.id]: { ...target, hp, ap: steal > 0 ? 0 : target.ap } };
+    if (killed) {
+      jury = [...s.jury, target.id];
+      const alive = Object.values(players).filter(p => p.hp > 0);
+      if (alive.length === 1) winner = alive[0].id;
+    }
+    s = { ...s, players, jury, winner };
   } else {
     s = applyAction(s, event.actorId, event.type, event.payload);
   }

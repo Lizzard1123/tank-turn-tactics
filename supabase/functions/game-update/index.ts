@@ -1,6 +1,7 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import { getPlayer } from '../_shared/auth.ts';
+import { scrubConfig } from '../_shared/engine.ts';
 
 // Creator-only config update while the game is still in the lobby.
 // Both test and play mode lobbies can tweak knobs before starting.
@@ -180,7 +181,9 @@ Deno.serve(async (req) => {
 
     const { error } = await a.from('games').update({ config: next, ap_interval_minutes: intervalCol }).eq('id', gameId);
     if (error) return json({ error: 'update failed' }, 500);
-    return json({ ok: true, config: next });
+    // the seed never goes on the wire (Lobby always sends seed 0; the server
+    // generates the real one in game-create)
+    return json({ ok: true, config: scrubConfig(next) });
   } catch (e) {
     return json({ error: `bad request: ${e instanceof Error ? e.message : 'unknown'}` }, 400);
   }

@@ -54,7 +54,7 @@ describe('Jury screen', () => {
   });
 
   test('vote button posts jury_vote with candidateId', async () => {
-    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 9, state: STATE });
+    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 9 });
     setup();
     fireEvent.click(screen.getByTestId('vote-p2'));
     await waitFor(() =>
