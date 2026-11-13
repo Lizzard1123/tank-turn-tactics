@@ -43,16 +43,35 @@ const BASE_STATE = {
   order: ['p1', 'p2'], pendingVotes: [], jury: [], winner: null, log: [],
 };
 
-function HookProbe() {
+function detail(over: Record<string, unknown> = {}) {
+  return {
+    game: { id: 'g1', name: 'n', mode: 'play' as const, status: 'active' as const, config: BASE_STATE.config, createdBy: 'p1', inviteCode: 'i', generation: 1, forkSeq: null, lastTickAt: null, dailyApTime: '09:00', ...over },
+    members: [],
+    avatars: {},
+    names: {},
+    me: 'p1',
+  };
+}
+
+function HookProbe({ expose }: { expose?: (g: ReturnType<typeof useGameEvents>) => void }) {
   const g = useGameEvents('g1');
+  expose?.(g);
   return (
     <div>
       <div data-testid="seq">{g.state?.seq ?? 'none'}</div>
       <div data-testid="error">{g.error ?? ''}</div>
       <div data-testid="loading">{String(g.loading)}</div>
+      <div data-testid="status">{g.detail?.status ?? ''}</div>
+      <div data-testid="histlen">{g.history.length}</div>
       <button onClick={() => g.refresh()}>refresh</button>
     </div>
   );
+}
+
+function realtimeCallback(): (payload: unknown) => void {
+  const call = h.channelOn.mock.calls.find(c => c[0] === 'postgres_changes');
+  if (!call) throw new Error('no postgres_changes wiring');
+  return call[2] as (payload: unknown) => void;
 }
 
 describe('useGameEvents', () => {
@@ -62,12 +81,10 @@ describe('useGameEvents', () => {
       seq, type: 'move', actorId: 'p1', createdAt: 't', payload: { to },
     });
     vi.mocked(api.gameGet).mockResolvedValue({
-      game: { id: 'g1', name: 'n', mode: 'play', status: 'active', config: BASE_STATE.config, createdBy: 'p1', inviteCode: 'i', generation: 1, forkSeq: null },
+      ...detail(),
       state: { ...BASE_STATE, seq: 5 },
       events: [ev(6, { x: 1, y: 0 }), ev(7, { x: 1, y: 1 })],
       history: [],
-      members: [],
-      me: 'p1',
     });
     render(<HookProbe />);
     // after replay of the tail onto the snapshot, seq = 7
@@ -75,32 +92,151 @@ describe('useGameEvents', () => {
     expect(screen.getByTestId('loading')).toHaveTextContent('false');
   });
 
-  test('realtime INSERT triggers refresh', async () => {
+  test('subscribes to player_activity and applies the row directly', async () => {
     vi.mocked(api.gameGet).mockResolvedValue({
-      game: { id: 'g1', name: 'n', mode: 'play', status: 'active', config: BASE_STATE.config, createdBy: 'p1', inviteCode: 'i', generation: 1, forkSeq: null },
-      state: { ...BASE_STATE, seq: 0 },
+      ...detail(),
+      state: { ...BASE_STATE, seq: 5 },
       events: [],
       history: [],
-      members: [],
-      me: 'p1',
     });
     render(<HookProbe />);
     await screen.findByTestId('seq');
-    expect(h.channelMock).toHaveBeenCalledWith(`events:g1`);
+    expect(h.channelMock).toHaveBeenCalledWith(`state:g1`);
     expect(h.channelSubscribe).toHaveBeenCalled();
     expect(h.setAuth).toHaveBeenCalledWith('tok-test'); // token attached for RLS
 
-    // fire the activity-row callback the wiring registered (the realtime
-    // trigger moved from `events` INSERT to `activity` INSERT/UPDATE —
-    // secrecy: members must not read raw event rows)
     const call = h.channelOn.mock.calls.find(c => c[0] === 'postgres_changes');
     expect(call).toBeTruthy();
-    expect(call![1]).toMatchObject({ event: '*', table: 'activity', filter: 'game_id=eq.g1' });
-    const cb = call![2] as (payload: unknown) => void;
+    expect(call![1]).toMatchObject({ event: '*', table: 'player_activity', filter: 'game_id=eq.g1' });
 
+    // a realtime row applies DIRECTLY — no refetch
     const callsBefore = vi.mocked(api.gameGet).mock.calls.length;
-    act(() => cb({}));
+    act(() => realtimeCallback()({
+      new: {
+        game_id: 'g1', player_id: 'p1', seq: 6,
+        state: { ...BASE_STATE, seq: 6, day: 2 },
+        events: [{ seq: 6, type: 'daily_tick', actorId: 'system', createdAt: 't', payload: {}, generation: 1 }],
+        game_patch: { lastTickAt: '2026-01-01T00:00:00Z' },
+      },
+    }));
     await act(async () => {});
-    expect(vi.mocked(api.gameGet).mock.calls.length).toBeGreaterThan(callsBefore);
+    expect(screen.getByTestId('seq')).toHaveTextContent('6');
+    expect(screen.getByTestId('histlen')).toHaveTextContent('1');
+    expect(vi.mocked(api.gameGet).mock.calls.length).toBe(callsBefore); // no refetch
+  });
+
+  test('stale and foreign rows are ignored', async () => {
+    vi.mocked(api.gameGet).mockResolvedValue({
+      ...detail(),
+      state: { ...BASE_STATE, seq: 5 },
+      events: [],
+      history: [],
+    });
+    render(<HookProbe />);
+    await screen.findByTestId('seq');
+
+    // foreign member row (RLS should prevent it — belt and braces)
+    act(() => realtimeCallback()({
+      new: { game_id: 'g1', player_id: 'p2', seq: 9, state: { ...BASE_STATE, seq: 9 } },
+    }));
+    expect(screen.getByTestId('seq')).toHaveTextContent('5');
+
+    // out-of-order / stale row for this member
+    act(() => realtimeCallback()({
+      new: { game_id: 'g1', player_id: 'p1', seq: 4, state: { ...BASE_STATE, seq: 4 } },
+    }));
+    expect(screen.getByTestId('seq')).toHaveTextContent('5');
+
+    // wrong game (the subscription is filtered, but the handler guards too)
+    act(() => realtimeCallback()({
+      new: { game_id: 'other', player_id: 'p1', seq: 9, state: { ...BASE_STATE, seq: 9 } },
+    }));
+    expect(screen.getByTestId('seq')).toHaveTextContent('5');
+  });
+
+  test('history append dedupes against refreshed history', async () => {
+    const move6 = { seq: 6, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } }, generation: 1 };
+    vi.mocked(api.gameGet).mockResolvedValue({
+      ...detail(),
+      state: { ...BASE_STATE, seq: 5 },
+      events: [],
+      history: [],
+    });
+    let hook: ReturnType<typeof useGameEvents> | undefined;
+    render(<HookProbe expose={(g) => { hook = g; }} />);
+    await screen.findByTestId('seq');
+
+    act(() => realtimeCallback()({
+      new: { game_id: 'g1', player_id: 'p1', seq: 6, state: { ...BASE_STATE, seq: 6 }, events: [move6] },
+    }));
+    expect(screen.getByTestId('histlen')).toHaveTextContent('1');
+
+    // a refresh that lands afterwards carries the same event — appending it
+    // again must not duplicate the row
+    vi.mocked(api.gameGet).mockResolvedValue({
+      ...detail(),
+      state: { ...BASE_STATE, seq: 6 },
+      events: [],
+      history: [move6],
+    });
+    await act(async () => { await hook!.refresh(); });
+    expect(screen.getByTestId('histlen')).toHaveTextContent('1');
+
+    // and the realtime row replaying the same seq is dropped by the seq guard
+    act(() => realtimeCallback()({
+      new: { game_id: 'g1', player_id: 'p1', seq: 6, state: { ...BASE_STATE, seq: 6 }, events: [move6] },
+    }));
+    expect(screen.getByTestId('histlen')).toHaveTextContent('1');
+  });
+
+  test('game_patch merges into detail without a refetch', async () => {
+    vi.mocked(api.gameGet).mockResolvedValue({
+      ...detail(),
+      state: { ...BASE_STATE, seq: 5 },
+      events: [],
+      history: [],
+    });
+    render(<HookProbe />);
+    await screen.findByTestId('seq');
+    expect(screen.getByTestId('status')).toHaveTextContent('active');
+
+    act(() => realtimeCallback()({
+      new: {
+        game_id: 'g1', player_id: 'p1', seq: 6,
+        state: { ...BASE_STATE, seq: 6, winner: 'p2' },
+        game_patch: { status: 'finished' },
+      },
+    }));
+    expect(screen.getByTestId('status')).toHaveTextContent('finished');
+    const callsBefore = vi.mocked(api.gameGet).mock.calls.length;
+    expect(callsBefore).toBeGreaterThan(0);
+  });
+
+  test('a refresh that raced a direct-apply does not drag the board back', async () => {
+    vi.mocked(api.gameGet).mockResolvedValue({
+      ...detail(),
+      state: { ...BASE_STATE, seq: 5 },
+      events: [],
+      history: [],
+    });
+    let hook: ReturnType<typeof useGameEvents> | undefined;
+    render(<HookProbe expose={(g) => { hook = g; }} />);
+    await screen.findByTestId('seq');
+
+    // realtime row lands at seq 8
+    act(() => realtimeCallback()({
+      new: { game_id: 'g1', player_id: 'p1', seq: 8, state: { ...BASE_STATE, seq: 8 } },
+    }));
+    expect(screen.getByTestId('seq')).toHaveTextContent('8');
+
+    // an in-flight fetch that started before the commit resolves with seq 7
+    vi.mocked(api.gameGet).mockResolvedValue({
+      ...detail(),
+      state: { ...BASE_STATE, seq: 7 },
+      events: [],
+      history: [],
+    });
+    await act(async () => { await hook!.refresh(); });
+    expect(screen.getByTestId('seq')).toHaveTextContent('8'); // not dragged back
   });
 });

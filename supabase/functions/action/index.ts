@@ -1,15 +1,46 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
-import { getPlayer } from '../_shared/auth.ts';
+import { getAuthUserId } from '../_shared/auth.ts';
 import {
-  applyEvent, EngineError, scrubState,
+  applyEvent, EngineError, scrubState, attackMask, attackActors, maskEvents, maskLog,
   type GameConfig, type GameEvent, type GameState, type PlayerSpec,
 } from '../_shared/engine.ts';
-import { rebuildStateAt, type ForkPoint } from '../_shared/history.ts';
+import { rebuildStateAt, canonicalHistory, effectiveForks, type ForkPoint, type HistoryRow } from '../_shared/history.ts';
 
 interface GameRow {
   id: string; mode: string; status: string; config: GameConfig;
   created_by: string; cur_generation: number; fork_seq: number | null;
+}
+
+// shape returned by load_game_detail (migration 0016)
+interface Detail {
+  player: { id: string; name: string } | null;
+  game: GameRow | null;
+  members: Array<{ player_id: string }>;
+  snap: { seq: number; state: GameState } | null;
+  tail: RawEventRow[];
+  history: RawEventRow[];
+  forks: ForkPoint[];
+  membership: boolean;
+}
+
+interface RawEventRow {
+  seq: number; type: string; actor_id: string;
+  payload: unknown; created_at: string; generation?: number;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function toEvent(r: RawEventRow): GameEvent {
+  return {
+    seq: r.seq, type: r.type as GameEvent['type'], actorId: r.actor_id,
+    createdAt: r.created_at, payload: (r.payload ?? {}) as GameEvent['payload'],
+  };
+}
+
+// history rows always carry their generation (events.generation is not null)
+function toHistoryEvent(r: RawEventRow): GameEvent & HistoryRow {
+  return { ...toEvent(r), generation: r.generation as number };
 }
 
 const ACTION_TYPES = new Set(['move', 'attack', 'give_ap', 'give_heart', 'upgrade_range', 'jury_vote', 'fork']);
@@ -49,42 +80,38 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'POST required' }, 405);
   try {
     const a = admin();
-    // Start auth and body-parse concurrently, but keep the old error
-    // precedence: an unauthorized caller gets 401 even if the body is
-    // malformed (auth resolves first; the parse result is awaited after).
-    const meP = getPlayer(a, req);
-    const bodyP = req.json();
-    const me = await meP;
-    if (!me) return json({ error: 'unauthorized' }, 401);
-
-    const { gameId, type, payload: rawPayload = {} } = await bodyP;
+    // Local JWT verification (no round trip), then body parse — same error
+    // precedence as before: 401 for a missing/expired token, then 400 for a
+    // malformed body.
+    const userId = await getAuthUserId(req);
+    const { gameId, type, payload: rawPayload = {} } = await req.json();
+    if (!userId) return json({ error: 'unauthorized' }, 401);
     if (!gameId || !ACTION_TYPES.has(type)) return json({ error: 'invalid request' }, 400);
     const payload = sanitizePayload(type, rawPayload);
 
-    // Parallel reads (previously three sequential round trips): the game row
-    // and the snapshot are independent; the tail query needs both.
-    const [gameRes, snapRes] = await Promise.all([
-      a.from('games').select('*').eq('id', gameId).single(),
-      a.from('game_state').select('seq, state').eq('game_id', gameId).single(),
-    ]);
-    const game = gameRes.data as GameRow | null;
+    // ONE round trip for every read the action needs (migration 0016):
+    // player row, game, snapshot, tail, canonical-history inputs, forks,
+    // members, membership.
+    const { data: d, error: loadErr } = await a.rpc('load_game_detail', {
+      p_game_id: gameId, p_player_id: userId,
+    });
+    if (loadErr) throw new Error(`load failed: ${loadErr.message}`);
+    const detail = d as unknown as Detail;
+    // A valid token whose players row is gone (auth.users drift) is still an
+    // unauthorized caller — checked here, after the load that carries it.
+    if (!detail.player) return json({ error: 'unauthorized' }, 401);
+    const me = detail.player;
+    const game = detail.game;
     if (!game) return json({ error: 'game not started' }, 404);
-    const snap = snapRes.data as { seq: number; state: GameState } | null;
+    const snap = detail.snap;
     if (!snap) return json({ error: 'game not started' }, 404);
 
-    const { data: tail } = await a.from('events')
-      .select('seq, type, actor_id, payload, created_at')
-      .eq('game_id', gameId)
-      .eq('generation', game.cur_generation)
-      .gt('seq', snap.seq)
-      .order('seq');
-
+    // replay the tail onto the snapshot (always empty in practice — the
+    // commit RPC updates the snapshot atomically — but correct if it ever
+    // ships raw snapshots again)
     let state = snap.state;
-    for (const e of tail ?? []) {
-      state = applyEvent(state, {
-        seq: e.seq, type: e.type, actorId: e.actor_id,
-        createdAt: e.created_at, payload: e.payload ?? {},
-      });
+    for (const r of detail.tail ?? []) {
+      state = applyEvent(state, toEvent(r));
     }
 
     if (type === 'fork') {
@@ -97,23 +124,12 @@ Deno.serve(async (req) => {
       // the seeded initial state. The materialized snapshot carries the tail
       // the rewind abandons; starting from it would leave gen-2 continuing
       // at snapshot.seq + 1 — a seq gap the engine rejects — instead of
-      // toSeq + 1.
+      // toSeq + 1. The detail load already carried history and fork points.
       let forkState = state;
       if (state.seq !== toSeq) {
         try {
-          const [histRes, forkRes] = await Promise.all([
-            a.from('events')
-              .select('seq, type, actor_id, payload, created_at, generation')
-              .eq('game_id', gameId)
-              .lte('generation', game.cur_generation),
-            a.from('game_forks')
-              .select('parent_generation, to_seq').eq('game_id', gameId),
-          ]);
-          const rows = (histRes.data ?? []).map((r) => ({
-            seq: r.seq, type: r.type, actorId: r.actor_id,
-            createdAt: r.created_at, payload: r.payload ?? {}, generation: r.generation,
-          }));
-          forkState = rebuildStateAt(rows, (forkRes.data ?? []) as ForkPoint[],
+          const rows = (detail.history ?? []).map(toHistoryEvent);
+          forkState = rebuildStateAt(rows, detail.forks ?? [],
             game.config, specsFromState(state), toSeq);
           if (forkState.seq !== toSeq) {
             return json({ error: 'fork state rebuild failed' }, 500);
@@ -145,7 +161,9 @@ Deno.serve(async (req) => {
       });
       // scrubbed like every other client-facing payload: no client reads this
       // response (the UI refetches), but the real seed and others' ap/range
-      // must not ride the wire for an API poke either.
+      // must not ride the wire for an API poke either. Members' realtime rows
+      // are deliberately not rewritten here — a fork is test-mode-only and
+      // the poller reconciles members onto the new generation.
       return json({ ok: true, forked: true, state: scrubState(forkState, me.id) });
     }
 
@@ -168,22 +186,50 @@ Deno.serve(async (req) => {
       throw e;
     }
 
-    // Atomic single-round-trip commit (migration 0015): events insert +
-    // snapshot upsert + activity trigger + winner status, previously three
-    // sequential writes (and non-transactional — a crash between them left
-    // the event appended with a stale snapshot). Same ordering, same effect;
-    // any failure now rolls back the whole commit.
-    const { error: commitErr } = await a.rpc('append_action_event', {
+    // Per-member realtime rows (migration 0016): each member's own
+    // pre-scrubbed view of `next` plus the masked new event, computed over
+    // the canonical timeline INCLUDING the new event — so the fresh attack
+    // is attributed (it is each victim's last hit) exactly as game-get would
+    // render it, and the log the row carries is mask-rewritten with the same
+    // rules. The event rides in `events` so the recipient's board fx and
+    // scrubber history advance without a refetch.
+    const canonical = canonicalHistory(
+      (detail.history ?? []).map(toHistoryEvent),
+      effectiveForks(detail.forks ?? [], game.cur_generation, game.fork_seq),
+    );
+    const full = [...canonical, event];
+    const mask = attackMask(full);
+    const actors = attackActors(full);
+    const memberStates = (detail.members ?? [])
+      .filter((m) => UUID_RE.test(m.player_id))
+      .map((m) => ({
+        player_id: m.player_id,
+        state: {
+          ...scrubState(next, m.player_id),
+          log: maskLog(next.log, actors, m.player_id, mask, (id) => next.players[id]?.name ?? id),
+        },
+        events: maskEvents([event], m.player_id, mask)
+          .map((e) => ({ ...e, generation: game.cur_generation })),
+        game_patch: next.winner ? { status: 'finished' } : {},
+      }));
+
+    // Atomic single-round-trip commit (migration 0016): events insert +
+    // snapshot upsert + per-member realtime rows + winner status, previously
+    // separate writes (and non-transactional — a crash between them left the
+    // event appended with a stale snapshot). Any failure rolls back the
+    // whole commit.
+    const { error: commitErr } = await a.rpc('commit_game_update', {
       p_game_id: gameId,
       p_generation: game.cur_generation,
-      p_seq: event.seq,
-      p_type: event.type,
-      p_actor_id: event.actorId,
-      p_payload: event.payload,
-      p_created_at: event.createdAt,
+      p_events: [{
+        seq: event.seq, type: event.type, actor_id: event.actorId,
+        payload: event.payload, created_at: event.createdAt,
+      }],
       p_next_seq: next.seq,
       p_next_state: next,
       p_has_winner: !!next.winner,
+      p_member_states: memberStates,
+      p_game_patch: next.winner ? { status: 'finished' } : {},
     });
     if (commitErr) return json({ error: 'event append failed' }, 500);
 

@@ -112,6 +112,18 @@ export async function verifyGoTrueJwt(
 }
 
 /**
+ * Verify the token only — no players-table round trip. Callers whose very
+ * next step is a load_game_detail RPC (which already returns the player
+ * row) use this to keep a whole request at one database round trip.
+ */
+export async function getAuthUserId(req: Request): Promise<string | null> {
+  const token = req.headers.get('Authorization')?.replace('Bearer ', '');
+  if (!token) return null;
+  const me = await verifyGoTrueJwt(token);
+  return me?.sub ?? null;
+}
+
+/**
  * Resolve the player from a GoTrue access token. Players mirror auth.users
  * one-to-one (same id, migration 0006), so `sub` IS the player id.
  */

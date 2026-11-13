@@ -1,84 +1,90 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
-import { getPlayer } from '../_shared/auth.ts';
+import { getAuthUserId } from '../_shared/auth.ts';
 import {
   applyEvent, createInitialState,
   attackMask, attackActors, maskEvents, maskLog, scrubState, scrubConfig,
   type GameEvent, type GameState,
 } from '../_shared/engine.ts';
-import { canonicalHistory, effectiveForks, type ForkPoint } from '../_shared/history.ts';
+import { canonicalHistory, effectiveForks, type ForkPoint, type HistoryRow } from '../_shared/history.ts';
+
+// shape returned by load_game_detail (migration 0016)
+interface RawEventRow {
+  seq: number; type: string; actor_id: string;
+  payload: unknown; created_at: string; generation?: number;
+}
+
+interface Detail {
+  player: { id: string; name: string } | null;
+  game: {
+    id: string; name: string; mode: string; status: string;
+    config: Record<string, unknown>; created_by: string;
+    cur_generation: number; fork_seq: number | null;
+    invite_code: string; last_tick_at: string | null; daily_ap_time: string;
+  } | null;
+  members: Array<{ player_id: string; is_bot: boolean; bot_difficulty: string | null; joined_at: string }>;
+  snap: { seq: number; state: GameState } | null;
+  tail: RawEventRow[];
+  history: RawEventRow[];
+  forks: ForkPoint[];
+  membership: boolean;
+  avatars: Record<string, string>;
+  names: Record<string, string>;
+}
+
+function toEvent(r: RawEventRow): GameEvent {
+  return {
+    seq: r.seq, type: r.type as GameEvent['type'], actorId: r.actor_id,
+    createdAt: r.created_at, payload: (r.payload ?? {}) as GameEvent['payload'],
+  };
+}
+
+// history rows always carry their generation (events.generation is not null)
+function toEventWithGeneration(r: RawEventRow): GameEvent & HistoryRow {
+  return { ...toEvent(r), generation: r.generation as number };
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'GET') return json({ error: 'GET required' }, 405);
   try {
     const a = admin();
-    const me = await getPlayer(a, req);
-    if (!me) return json({ error: 'unauthorized' }, 401);
+    // Local JWT verification (no round trip); the players row rides the
+    // detail load below (401 checked there — same response as before).
+    const userId = await getAuthUserId(req);
+    if (!userId) return json({ error: 'unauthorized' }, 401);
 
     const gameId = new URL(req.url).searchParams.get('gameId');
     if (!gameId) return json({ error: 'gameId required' }, 400);
 
-    // Parallel reads (previously eight sequential round trips). Wave 1:
-    // everything addressable by gameId alone. Wave 2: membership (needs me)
-    // and avatars (needs members). Wave 3: event reads (need
-    // game.cur_generation and the snapshot).
-    const [gameRes, membersRes, snapRes, forkRes] = await Promise.all([
-      a.from('games').select('*').eq('id', gameId).single(),
-      a.from('game_players')
-        .select('player_id, is_bot, bot_difficulty, joined_at').eq('game_id', gameId)
-        .order('joined_at'),
-      a.from('game_state').select('seq, state').eq('game_id', gameId).single(),
-      a.from('game_forks').select('parent_generation, to_seq').eq('game_id', gameId),
-    ]);
-    const game = gameRes.data;
+    // ONE round trip for the whole detail (migration 0016) — previously
+    // eight reads across three sequential waves.
+    const { data: d, error: loadErr } = await a.rpc('load_game_detail', {
+      p_game_id: gameId, p_player_id: userId,
+    });
+    if (loadErr) throw new Error(`load failed: ${loadErr.message}`);
+    const detail = d as unknown as Detail;
+    // A valid token whose players row is gone (auth.users drift) is still an
+    // unauthorized caller — same 401 the players lookup used to produce.
+    if (!detail.player) return json({ error: 'unauthorized' }, 401);
+    const me = detail.player;
+    const game = detail.game;
     if (!game) return json({ error: 'game not found' }, 404);
 
-    const members = membersRes.data;
-    const snap = snapRes.data as { seq: number; state: GameState } | null;
+    const members = detail.members;
+    const snap = detail.snap;
 
-    // avatars ride alongside engine state (engine stays avatar-free):
-    // map of playerId -> public avatar url, from the players table.
-    // Only real players (uuid ids) — bot ids like 'bot-1' would fail the
-    // uuid cast on .in().
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const memberIds = (members ?? []).map(m => m.player_id).filter(id => UUID_RE.test(id));
+    // avatars/names ride alongside engine state (engine stays avatar-free):
+    // maps of playerId -> public avatar url / display name, from the players
+    // table (real players only — bot ids are not uuids).
+    const avatars = detail.avatars ?? {};
+    const names = detail.names ?? {};
 
-    const [membershipRes, avatarRes] = await Promise.all([
-      a.from('game_players')
-        .select('player_id').eq('game_id', gameId).eq('player_id', me.id).single(),
-      a.from('players').select('id, name, avatar_url').in('id', memberIds),
-    ]);
-    const membership = membershipRes.data;
-    if (!membership && game.created_by !== me.id)
+    if (!detail.membership && game.created_by !== me.id)
       return json({ error: 'not a member of this game' }, 403);
 
-    const avatars: Record<string, string> = {};
-    const names: Record<string, string> = {};
-    for (const row of avatarRes.data ?? []) {
-      if (row.avatar_url) avatars[row.id] = row.avatar_url;
-      if (row.name) names[row.id] = row.name;
-    }
-
-    // current-generation events after the snapshot, truncated at fork_seq
-    let tail: GameEvent[] = [];
     if (snap) {
-      const [tailRes, historyRes] = await Promise.all([
-        a.from('events')
-          .select('seq, type, actor_id, payload, created_at')
-          .eq('game_id', gameId)
-          .eq('generation', game.cur_generation)
-          .gt('seq', snap.seq)
-          .order('seq'),
-        a.from('events')
-          .select('seq, type, actor_id, payload, created_at, generation')
-          .eq('game_id', gameId)
-          .lte('generation', game.cur_generation),
-      ]);
-      tail = (tailRes.data ?? []).map(e => ({
-        seq: e.seq, type: e.type, actorId: e.actor_id,
-        createdAt: e.created_at, payload: e.payload ?? {},
-      }));
+      const tail = (detail.tail ?? []).map(toEvent);
       let state = snap.state;
       for (const e of tail) {
         try { state = applyEvent(state, e); } catch { break; }
@@ -87,16 +93,13 @@ Deno.serve(async (req) => {
       // generations — each ancestor generation is cut at the fork that ended
       // it (game_forks), so replaying from the initial state never walks a
       // discarded branch.
-      const forkRows = forkRes.data;
       // Heal the deploy window: a fork performed before fork-row recording
       // shipped set games.fork_seq but wrote no game_forks row — synthesize
       // the newest parent's cut from fork_seq so its discarded tail is cut.
-      const history: GameEvent[] = canonicalHistory(historyRes.data ?? [],
-        effectiveForks((forkRows ?? []) as ForkPoint[], game.cur_generation, game.fork_seq))
-        .map(e => ({
-          seq: e.seq, type: e.type, actorId: e.actor_id,
-          createdAt: e.created_at, payload: e.payload ?? {},
-        }));
+      const history: GameEvent[] = canonicalHistory(
+        (detail.history ?? []).map(toEventWithGeneration),
+        effectiveForks(detail.forks ?? [], game.cur_generation, game.fork_seq),
+      );
 
       // --- secrecy scrub (per viewer) ---
       // The seed and other players' AP never go on the wire, and attack
@@ -104,7 +107,7 @@ Deno.serve(async (req) => {
       // See engine/scrub.ts. Masking is computed over the canonical timeline
       // (which includes the tail), then applied to what we SEND — the
       // database keeps the truth.
-      const rawConfig = game.config as GameState['config'];
+      const rawConfig = game.config as unknown as GameState['config'];
       const mask = attackMask(history);
       const actors = attackActors(history);
       const stateForViewer: GameState = {

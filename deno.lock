@@ -29,6 +29,7 @@
     "packageJson": {
       "dependencies": [
         "npm:@vitest/coverage-v8@^2.1.9",
+        "npm:javascript-obfuscator@4.1.1",
         "npm:typescript@^5.5.0",
         "npm:vitest@^2.1.0"
       ]

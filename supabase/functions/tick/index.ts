@@ -1,6 +1,11 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
-import { applyEvent, planBotAction, heartSpawnPos, normalizeHeartState, mulberry32, hashSeed, type GameEvent, type GameState } from '../_shared/engine.ts';
+import {
+  applyEvent, planBotAction, heartSpawnPos, normalizeHeartState, mulberry32, hashSeed,
+  scrubState, attackMask, attackActors, maskLog,
+  type GameEvent, type GameState,
+} from '../_shared/engine.ts';
+import { canonicalHistory, effectiveForks } from '../_shared/history.ts';
 
 // AP + heart scheduling (both modes, one mechanism, three schedule shapes):
 //   - game-start seeds last_tick_at (play: now, test: null) and started_at
@@ -24,6 +29,25 @@ import { applyEvent, planBotAction, heartSpawnPos, normalizeHeartState, mulberry
 //     intervals and per-minute random granularity.
 
 type ScheduleMode = 'interval' | 'timeOfDay' | 'random';
+
+interface RawEventRow {
+  seq: number; type: string; actor_id: string;
+  payload: unknown; created_at: string; generation?: number;
+}
+
+interface TickDetail {
+  game: {
+    id: string; mode: string; status: string;
+    cur_generation: number; fork_seq: number | null;
+    ap_interval_minutes: number | null;
+  } | null;
+  members: Array<{ player_id: string }>;
+  snap: { seq: number; state: GameState } | null;
+  history: RawEventRow[];
+  forks: Array<{ parent_generation: number; to_seq: number }>;
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function tzParts(d: Date, timeZone: string): { y: number; mo: number; day: number; hh: number; mi: number } | null {
   try {
@@ -195,17 +219,28 @@ function dueForTick(game: {
   return { ap, heart };
 }
 
+// System caller id for the detail RPC — it only gates the `player` field
+// (which tick ignores); the game data itself is what tick reads.
+const SYSTEM_ID = '00000000-0000-0000-0000-000000000000';
+
 async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): Promise<number> {
   const a = admin();
-  const { data: game } = await a.from('games').select('*').eq('id', gameId).single();
+  // ONE read for everything (migration 0016): game, snapshot, canonical-
+  // history inputs, fork points, members (with names via the engine state).
+  const { data: d, error: loadErr } = await a.rpc('load_game_detail', {
+    p_game_id: gameId, p_player_id: SYSTEM_ID,
+  });
+  if (loadErr) throw new Error(`detail load failed: ${loadErr.message}`);
+  const detail = d as unknown as TickDetail;
+  const game = detail.game;
   if (!game || game.status !== 'active') return 0;
-
-  const { data: snap } = await a.from('game_state').select('seq, state').eq('game_id', gameId).single();
+  const snap = detail.snap;
   if (!snap) return 0;
   // legacy snapshots carry a single `heart`; normalize to the `hearts` array
   let state: GameState = normalizeHeartState(snap.state as GameState);
 
-  let appended = 0;
+  // all events this tick appends, committed atomically at the end
+  const newEvents: GameEvent[] = [];
 
   // 1. AP drip (only when the AP schedule is due)
   if (due.ap) {
@@ -215,11 +250,7 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
       createdAt: new Date().toISOString(), payload: { apGained, elapsedMinutes: game.mode === 'test' ? (game.ap_interval_minutes ?? 2) : 1440 },
     };
     state = applyEvent(state, drip);
-    await a.from('events').insert({
-      game_id: gameId, generation: game.cur_generation, seq: drip.seq,
-      type: drip.type, actor_id: drip.actorId, payload: drip.payload, created_at: drip.createdAt,
-    });
-    appended++;
+    newEvents.push(drip);
   }
 
   // 2. heart spawn (only when the heart schedule is due); placed BEFORE the
@@ -236,11 +267,7 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
         payload: { x: pos.x, y: pos.y, placement: (state.config as { heartPlacement?: string }).heartPlacement ?? 'random' },
       };
       state = applyEvent(state, spawn);
-      await a.from('events').insert({
-        game_id: gameId, generation: game.cur_generation, seq: spawn.seq,
-        type: spawn.type, actor_id: spawn.actorId, payload: spawn.payload, created_at: spawn.createdAt,
-      });
-      appended++;
+      newEvents.push(spawn);
     }
   }
 
@@ -260,30 +287,69 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
       } catch {
         continue; // bot tried something illegal (e.g. race); skip it
       }
-      await a.from('events').insert({
-        game_id: gameId, generation: game.cur_generation, seq: ev.seq,
-        type: ev.type, actor_id: ev.actorId, payload: ev.payload, created_at: ev.createdAt,
-      });
+      newEvents.push(ev);
       acted++;
-      appended++;
     }
     if (acted === 0) break;
   }
 
-  await a.from('game_state').upsert({
-    game_id: gameId, seq: state.seq, state, updated_at: new Date().toISOString(),
+  if (newEvents.length === 0) return 0;
+
+  // schedule cursor / winner-status patch for games + the per-member rows
+  // (one transaction, see commit_game_update)
+  const patch: Record<string, string> = {};
+  if (due.ap) patch.lastTickAt = new Date().toISOString();
+  if (due.heart) patch.lastHeartAt = new Date().toISOString();
+  if (state.winner) patch.status = 'finished';
+
+  // Per-member realtime rows (migration 0016): each member's own scrubbed
+  // view of the post-tick state, with the log mask-rewritten over the
+  // canonical timeline INCLUDING the new events. Tick events (system drips,
+  // heart spawns, bot actions) are never identity-masked — only top-level
+  // human attacks are secret — so `events` carries them as-is for the
+  // recipients' board fx and scrubber history.
+  const canonical = canonicalHistory(
+    (detail.history ?? []).map((r) => ({
+      seq: r.seq, type: r.type as GameEvent['type'], actorId: r.actor_id,
+      createdAt: r.created_at, payload: (r.payload ?? {}) as GameEvent['payload'],
+      generation: r.generation as number,
+    })),
+    effectiveForks(detail.forks ?? [], game.cur_generation, game.fork_seq),
+  );
+  const full = [...canonical, ...newEvents];
+  const mask = attackMask(full);
+  const actors = attackActors(full);
+  const memberStates = (detail.members ?? [])
+    .filter((m) => UUID_RE.test(m.player_id))
+    .map((m) => ({
+      player_id: m.player_id,
+      state: {
+        ...scrubState(state, m.player_id),
+        log: maskLog(state.log, actors, m.player_id, mask, (id) => state.players[id]?.name ?? id),
+      },
+      events: newEvents.map((e) => ({ ...e, generation: game.cur_generation })),
+      game_patch: patch,
+    }));
+
+  // Atomic commit (migration 0016): all events + snapshot + per-member
+  // realtime rows + the schedule cursor / winner-status patch in ONE
+  // transaction — previously up to a dozen sequential writes, with a crash
+  // in between leaving partial ticks committed.
+  const { error: commitErr } = await a.rpc('commit_game_update', {
+    p_game_id: gameId,
+    p_generation: game.cur_generation,
+    p_events: newEvents.map((e) => ({
+      seq: e.seq, type: e.type, actor_id: e.actorId,
+      payload: e.payload, created_at: e.createdAt,
+    })),
+    p_next_seq: state.seq,
+    p_next_state: state,
+    p_has_winner: !!state.winner,
+    p_member_states: memberStates,
+    p_game_patch: patch,
   });
-
-  // realtime refetch trigger (members subscribe to `activity`; they cannot
-  // read `events` rows, which carry attack attribution)
-  if (appended > 0) {
-    await a.from('activity').upsert({ game_id: gameId, seq: state.seq }, { onConflict: 'game_id' });
-  }
-
-  if (state.winner) {
-    await a.from('games').update({ status: 'finished' }).eq('id', gameId);
-  }
-  return appended;
+  if (commitErr) throw new Error(`tick commit failed: ${commitErr.message}`);
+  return newEvents.length;
 }
 
 Deno.serve(async (req) => {
@@ -314,12 +380,10 @@ Deno.serve(async (req) => {
       try {
         const due = dueForTick(game);
         if (!due.ap && !due.heart) continue;
+        // last_tick_at / last_heart_at / winner status are patched inside
+        // the same transaction as the events (commit_game_update)
         const n = await tickGame(game.id, due);
         if (n > 0) {
-          const patch: Record<string, string> = {};
-          if (due.ap) patch.last_tick_at = new Date().toISOString();
-          if (due.heart) patch.last_heart_at = new Date().toISOString();
-          await a.from('games').update(patch).eq('id', game.id);
           total += n;
           ticked.push(game.id);
           if (due.heart) hearted.push(game.id);

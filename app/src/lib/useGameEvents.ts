@@ -15,8 +15,26 @@ export interface UseGameEvents {
   refresh: () => Promise<void>;
 }
 
-// Server-authoritative load + client replay of the tail, with a realtime
-// subscription on the events table that triggers a refetch.
+// One row of the per-member realtime table (migration 0016): this viewer's
+// own pre-scrubbed state, the masked new events, and a small patch of game
+// fields (AP schedule cursors / status).
+interface PlayerActivityRow {
+  game_id: string;
+  player_id: string;
+  seq: number;
+  state: GameState | null;
+  events?: Array<GameEvent & { generation?: number }>;
+  game_patch?: Record<string, unknown>;
+}
+
+// Server-authoritative load + client replay of the tail. Realtime no longer
+// triggers a refetch: each commit writes one `player_activity` row per
+// member, pre-scrubbed server-side for that member, and postgres_changes
+// delivers only the viewer's own row (the table's RLS policy filters
+// player_id = auth.uid()). The row is applied DIRECTLY — no refetch — which
+// removes a full game-get from every opponent action's round trip. The 4s
+// poller stays as the reconciler (socket loss, scrubber-history re-masking,
+// and any detail fields the row does not carry).
 export function useGameEvents(gameId: string | undefined): UseGameEvents {
   const [detail, setDetail] = useState<GameDetail['game'] | null>(null);
   const [avatars, setAvatars] = useState<Record<string, string> | undefined>(undefined);
@@ -28,6 +46,12 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
   const [error, setError] = useState<string | null>(null);
   const aliveRef = useRef(true);
 
+  // latest values for the socket handler and the stale-response guard
+  const stateRef = useRef<GameState | null>(null);
+  stateRef.current = state;
+  const meRef = useRef<PlayerId | null>(null);
+  meRef.current = me;
+
   const refresh = useCallback(async () => {
     if (!gameId) return;
     try {
@@ -36,6 +60,12 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
       const d = await gameGet(token, gameId);
       if (!aliveRef.current) return;
       const base = normalizeHeartState(d.state as GameState);
+      // Stale-response guard: a refetch that raced a direct-apply (its fetch
+      // started before the commit it lost to) must not drag the board
+      // backwards. Equal seqs still apply — a fresh authoritative copy also
+      // re-masks the scrubber history the realtime path can only append to.
+      const current = stateRef.current;
+      if (current && base.seq < current.seq) return;
       // game-get ALREADY replays the tail onto the snapshot before returning
       // (`state` is the merged, authoritative state), so re-applying the tail
       // here double-applied event N onto a state with seq N — the "seq gap:
@@ -78,32 +108,55 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
     return () => { aliveRef.current = false; };
   }, [refresh]);
 
-  // realtime: any activity row change for this game triggers a refetch+replay.
-  // The payload is never read — this is a pure "something happened" signal.
-  // `activity` replaced `events` as the trigger table (secrecy): members must
-  // not read raw event rows (they carry attack attribution), so the events
-  // SELECT policy was dropped and this minimal table carries the signal.
-  // postgres_changes applies activity RLS with the connection's JWT, so the
-  // session token is attached before subscribing.
+  // realtime: apply this viewer's own player_activity row directly.
+  // postgres_changes applies the table RLS with the connection's JWT, so the
+  // session token is attached before subscribing and only rows whose
+  // player_id matches the session arrive.
   useEffect(() => {
     if (!gameId) return;
     const token = localStorage.getItem('ttt_token');
     if (token) supabase.realtime.setAuth(token);
+    const applyRow = (msg: { new: unknown }) => {
+      const row = msg.new as PlayerActivityRow | null;
+      if (!row || row.game_id !== gameId || !row.state) return;
+      if (meRef.current && row.player_id !== meRef.current) return; // RLS should make this unreachable
+      const current = stateRef.current;
+      if (current && row.seq <= current.seq) return; // stale / out-of-order
+      const s = normalizeHeartState(row.state);
+      setState(s);
+      // advance the scrubber history (board fx reads the newest entry) —
+      // events ride masked for this viewer, never re-hiding anything it was
+      // previously entitled to see
+      const evs = row.events ?? [];
+      if (evs.length > 0) {
+        setHistory((prev) => {
+          const last = prev.length > 0 ? prev[prev.length - 1].seq : -1;
+          const fresh = evs.filter((e) => e.seq > last);
+          return fresh.length > 0 ? [...prev, ...fresh] : prev;
+        });
+      }
+      // keep the AP countdown / status in sync without a refetch
+      const patch = row.game_patch;
+      if (patch && Object.keys(patch).length > 0) {
+        setDetail((prev) => (prev ? { ...prev, ...(patch as object) } : prev));
+      }
+      setError(null);
+    };
     const channel = supabase
-      .channel(`events:${gameId}`)
+      .channel(`state:${gameId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'activity', filter: `game_id=eq.${gameId}` },
-        () => { void refreshThrottled(); },
+        { event: '*', schema: 'public', table: 'player_activity', filter: `game_id=eq.${gameId}` },
+        (msg: { new: unknown }) => applyRow(msg),
       )
       .subscribe();
     return () => { void supabase.removeChannel(channel); };
-  }, [gameId, refreshThrottled]);
+  }, [gameId]);
 
-  // polling fallback: the tick's AP drip only reaches the client through a
-  // refetch, and a silently-dead realtime socket would otherwise leave the
-  // AP display frozen until the player's next action. Poll on a short cadence
-  // while the tab is visible and the game is still live.
+  // polling fallback: reconciles anything realtime misses (a dropped socket,
+  // masking that must be recomputed over the full history, detail fields the
+  // per-member row does not carry). Poll on a short cadence while the tab is
+  // visible and the game is still live.
   const finished = detail?.status === 'finished' || !!state?.winner;
   useEffect(() => {
     if (finished) return;
