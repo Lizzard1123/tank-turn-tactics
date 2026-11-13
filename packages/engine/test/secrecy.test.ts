@@ -221,12 +221,15 @@ describe('masked replay equivalence', () => {
 // ---------------------------------------------------------------------------
 
 describe('scrubState', () => {
-  it('zeroes the seed and other players’ ap, keeps mine and everything else', () => {
+  it('zeroes the seed and other players’ ap/range to -1, keeps mine and everything else', () => {
     const scrubbed = scrubState(base, 'p2');
     expect(scrubbed.config.seed).toBe(0);
-    expect(scrubbed.players.p1.ap).toBe(0);
-    expect(scrubbed.players.p3.ap).toBe(0);
+    expect(scrubbed.players.p1.ap).toBe(-1);
+    expect(scrubbed.players.p3.ap).toBe(-1);
+    expect(scrubbed.players.p1.range).toBe(-1);
+    expect(scrubbed.players.p3.range).toBe(-1);
     expect(scrubbed.players.p2.ap).toBe(base.players.p2.ap);
+    expect(scrubbed.players.p2.range).toBe(base.players.p2.range);
     expect(scrubbed.players.p1.hp).toBe(base.players.p1.hp);
     expect(scrubbed.players.p1.pos).toEqual(base.players.p1.pos);
     expect(scrubbed.config.startingAp).toBe(cfg.startingAp);

@@ -1,4 +1,4 @@
-import type { GameEvent, GameState, LogEntry, PlayerId } from './types.ts';
+import type { GameEvent, GameState, LogEntry, PlayerId } from './types';
 
 // Server-side secrecy scrubbing. The wire must never carry information the
 // viewer is not entitled to: the RNG seed (it predicts every future heart
@@ -89,7 +89,10 @@ export function attackActors(canonical: GameEvent[]): Map<number, PlayerId> {
 export function scrubState(state: GameState, me: PlayerId): GameState {
   const players: GameState['players'] = {};
   for (const [id, p] of Object.entries(state.players)) {
-    players[id] = id === me ? p : { ...p, ap: 0 };
+    // -1 sentinel (not 0): a scrubbed field must never be mistaken for a real
+    // zero. Others' ap and range are private — the UI renders neither for
+    // non-self players (jury cards show hp only; Board uses own range only).
+    players[id] = id === me ? p : { ...p, ap: -1, range: -1 };
   }
   return { ...state, config: { ...state.config, seed: 0 }, players };
 }

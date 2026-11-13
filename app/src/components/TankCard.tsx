@@ -9,8 +9,9 @@ interface TankCardProps {
   hideStats?: boolean;
 }
 
-// Compact stat card: HP / range only (AP is private per video rules).
-// Emojis replaced with inline SVG icons.
+// Compact stat card. HP is public (damage/kills are visible); range is
+// private — it's scrubbed to -1 on the wire for non-self players, so only
+// your own card renders it (AP is private per video rules).
 export default function TankCard({ player, isMe, onTap, hideStats }: TankCardProps) {
   return (
     <button className="tank-card" data-testid={`card-${player.id}`} onClick={onTap}>
@@ -21,8 +22,13 @@ export default function TankCard({ player, isMe, onTap, hideStats }: TankCardPro
       </span>
       {!hideStats && (
         <span className="tank-card-stats">
-          <Icon html={heartSvg} className="tank-card-icon" width={13} height={13} /> {player.hp} &middot;
-          <Icon html={targetSvg} className="tank-card-icon" width={13} height={13} /> {player.range}
+          <Icon html={heartSvg} className="tank-card-icon" width={13} height={13} /> {player.hp}
+          {isMe && (
+            <>
+              {' '}&middot;
+              <Icon html={targetSvg} className="tank-card-icon" width={13} height={13} /> {player.range}
+            </>
+          )}
         </span>
       )}
     </button>
