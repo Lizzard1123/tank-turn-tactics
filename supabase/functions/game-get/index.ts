@@ -19,17 +19,23 @@ Deno.serve(async (req) => {
     const gameId = new URL(req.url).searchParams.get('gameId');
     if (!gameId) return json({ error: 'gameId required' }, 400);
 
-    const { data: game } = await a.from('games').select('*').eq('id', gameId).single();
+    // Parallel reads (previously eight sequential round trips). Wave 1:
+    // everything addressable by gameId alone. Wave 2: membership (needs me)
+    // and avatars (needs members). Wave 3: event reads (need
+    // game.cur_generation and the snapshot).
+    const [gameRes, membersRes, snapRes, forkRes] = await Promise.all([
+      a.from('games').select('*').eq('id', gameId).single(),
+      a.from('game_players')
+        .select('player_id, is_bot, bot_difficulty, joined_at').eq('game_id', gameId)
+        .order('joined_at'),
+      a.from('game_state').select('seq, state').eq('game_id', gameId).single(),
+      a.from('game_forks').select('parent_generation, to_seq').eq('game_id', gameId),
+    ]);
+    const game = gameRes.data;
     if (!game) return json({ error: 'game not found' }, 404);
 
-    const { data: membership } = await a.from('game_players')
-      .select('player_id').eq('game_id', gameId).eq('player_id', me.id).single();
-    if (!membership && game.created_by !== me.id)
-      return json({ error: 'not a member of this game' }, 403);
-
-    const { data: members } = await a.from('game_players')
-      .select('player_id, is_bot, bot_difficulty, joined_at').eq('game_id', gameId)
-      .order('joined_at');
+    const members = membersRes.data;
+    const snap = snapRes.data as { seq: number; state: GameState } | null;
 
     // avatars ride alongside engine state (engine stays avatar-free):
     // map of playerId -> public avatar url, from the players table.
@@ -37,27 +43,39 @@ Deno.serve(async (req) => {
     // uuid cast on .in().
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     const memberIds = (members ?? []).map(m => m.player_id).filter(id => UUID_RE.test(id));
-    const { data: avatarRows } = await a.from('players')
-      .select('id, name, avatar_url').in('id', memberIds);
+
+    const [membershipRes, avatarRes] = await Promise.all([
+      a.from('game_players')
+        .select('player_id').eq('game_id', gameId).eq('player_id', me.id).single(),
+      a.from('players').select('id, name, avatar_url').in('id', memberIds),
+    ]);
+    const membership = membershipRes.data;
+    if (!membership && game.created_by !== me.id)
+      return json({ error: 'not a member of this game' }, 403);
+
     const avatars: Record<string, string> = {};
     const names: Record<string, string> = {};
-    for (const row of avatarRows ?? []) {
+    for (const row of avatarRes.data ?? []) {
       if (row.avatar_url) avatars[row.id] = row.avatar_url;
       if (row.name) names[row.id] = row.name;
     }
 
-    const { data: snap } = await a.from('game_state').select('seq, state').eq('game_id', gameId).single();
-
     // current-generation events after the snapshot, truncated at fork_seq
     let tail: GameEvent[] = [];
     if (snap) {
-      const { data: tailRows } = await a.from('events')
-        .select('seq, type, actor_id, payload, created_at')
-        .eq('game_id', gameId)
-        .eq('generation', game.cur_generation)
-        .gt('seq', snap.seq)
-        .order('seq');
-      tail = (tailRows ?? []).map(e => ({
+      const [tailRes, historyRes] = await Promise.all([
+        a.from('events')
+          .select('seq, type, actor_id, payload, created_at')
+          .eq('game_id', gameId)
+          .eq('generation', game.cur_generation)
+          .gt('seq', snap.seq)
+          .order('seq'),
+        a.from('events')
+          .select('seq, type, actor_id, payload, created_at, generation')
+          .eq('game_id', gameId)
+          .lte('generation', game.cur_generation),
+      ]);
+      tail = (tailRes.data ?? []).map(e => ({
         seq: e.seq, type: e.type, actorId: e.actor_id,
         createdAt: e.created_at, payload: e.payload ?? {},
       }));
@@ -69,16 +87,11 @@ Deno.serve(async (req) => {
       // generations — each ancestor generation is cut at the fork that ended
       // it (game_forks), so replaying from the initial state never walks a
       // discarded branch.
-      const { data: historyRows } = await a.from('events')
-        .select('seq, type, actor_id, payload, created_at, generation')
-        .eq('game_id', gameId)
-        .lte('generation', game.cur_generation);
-      const { data: forkRows } = await a.from('game_forks')
-        .select('parent_generation, to_seq').eq('game_id', gameId);
+      const forkRows = forkRes.data;
       // Heal the deploy window: a fork performed before fork-row recording
       // shipped set games.fork_seq but wrote no game_forks row — synthesize
       // the newest parent's cut from fork_seq so its discarded tail is cut.
-      const history: GameEvent[] = canonicalHistory(historyRows ?? [],
+      const history: GameEvent[] = canonicalHistory(historyRes.data ?? [],
         effectiveForks((forkRows ?? []) as ForkPoint[], game.cur_generation, game.fork_seq))
         .map(e => ({
           seq: e.seq, type: e.type, actorId: e.actor_id,

@@ -2,7 +2,7 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import { getPlayer } from '../_shared/auth.ts';
 import {
-  applyEvent, EngineError,
+  applyEvent, EngineError, scrubState,
   type GameConfig, type GameEvent, type GameState, type PlayerSpec,
 } from '../_shared/engine.ts';
 import { rebuildStateAt, type ForkPoint } from '../_shared/history.ts';
@@ -44,53 +44,48 @@ function specsFromState(state: GameState): PlayerSpec[] {
   }));
 }
 
-/**
- * Load the authoritative GameState for a game.
- * Strategy: start from the materialized game_state snapshot, then apply any
- * tail events (current generation, seq > snapshot.seq).
- */
-async function loadAuthoritativeState(
-  gameId: string,
-): Promise<{ game: GameRow; state: GameState } | null> {
-  const a = admin();
-  const { data: game } = await a.from('games').select('*').eq('id', gameId).single();
-  if (!game) return null;
-
-  const { data: snap } = await a.from('game_state').select('seq, state').eq('game_id', gameId).single();
-  if (!snap) return { game: game as GameRow, state: null as unknown as GameState };
-
-  const { data: tail } = await a.from('events')
-    .select('seq, type, actor_id, payload, created_at')
-    .eq('game_id', gameId)
-    .eq('generation', game.cur_generation)
-    .gt('seq', snap.seq)
-    .order('seq');
-
-  let state = snap.state as GameState;
-  for (const e of tail ?? []) {
-    state = applyEvent(state, {
-      seq: e.seq, type: e.type, actorId: e.actor_id,
-      createdAt: e.created_at, payload: e.payload ?? {},
-    });
-  }
-  return { game: game as GameRow, state };
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return json({ error: 'POST required' }, 405);
   try {
     const a = admin();
-    const me = await getPlayer(a, req);
+    // Start auth and body-parse concurrently, but keep the old error
+    // precedence: an unauthorized caller gets 401 even if the body is
+    // malformed (auth resolves first; the parse result is awaited after).
+    const meP = getPlayer(a, req);
+    const bodyP = req.json();
+    const me = await meP;
     if (!me) return json({ error: 'unauthorized' }, 401);
 
-    const { gameId, type, payload: rawPayload = {} } = await req.json();
+    const { gameId, type, payload: rawPayload = {} } = await bodyP;
     if (!gameId || !ACTION_TYPES.has(type)) return json({ error: 'invalid request' }, 400);
     const payload = sanitizePayload(type, rawPayload);
 
-    const loaded = await loadAuthoritativeState(gameId);
-    if (!loaded || !loaded.state) return json({ error: 'game not started' }, 404);
-    const { game, state } = loaded;
+    // Parallel reads (previously three sequential round trips): the game row
+    // and the snapshot are independent; the tail query needs both.
+    const [gameRes, snapRes] = await Promise.all([
+      a.from('games').select('*').eq('id', gameId).single(),
+      a.from('game_state').select('seq, state').eq('game_id', gameId).single(),
+    ]);
+    const game = gameRes.data as GameRow | null;
+    if (!game) return json({ error: 'game not started' }, 404);
+    const snap = snapRes.data as { seq: number; state: GameState } | null;
+    if (!snap) return json({ error: 'game not started' }, 404);
+
+    const { data: tail } = await a.from('events')
+      .select('seq, type, actor_id, payload, created_at')
+      .eq('game_id', gameId)
+      .eq('generation', game.cur_generation)
+      .gt('seq', snap.seq)
+      .order('seq');
+
+    let state = snap.state;
+    for (const e of tail ?? []) {
+      state = applyEvent(state, {
+        seq: e.seq, type: e.type, actorId: e.actor_id,
+        createdAt: e.created_at, payload: e.payload ?? {},
+      });
+    }
 
     if (type === 'fork') {
       if (game.mode !== 'test' || game.created_by !== me.id)
@@ -148,7 +143,10 @@ Deno.serve(async (req) => {
         game_id: gameId, seq: forkState.seq, state: forkState,
         updated_at: new Date().toISOString(),
       });
-      return json({ ok: true, forked: true, state: forkState });
+      // scrubbed like every other client-facing payload: no client reads this
+      // response (the UI refetches), but the real seed and others' ap/range
+      // must not ride the wire for an API poke either.
+      return json({ ok: true, forked: true, state: scrubState(forkState, me.id) });
     }
 
     if (game.status !== 'active') return json({ error: 'game not active' }, 409);
@@ -170,28 +168,24 @@ Deno.serve(async (req) => {
       throw e;
     }
 
-    const { error: insertErr } = await a.from('events').insert({
-      game_id: gameId,
-      generation: game.cur_generation,
-      seq: event.seq,
-      type: event.type,
-      actor_id: event.actorId,
-      payload: event.payload,
-      created_at: event.createdAt,
+    // Atomic single-round-trip commit (migration 0015): events insert +
+    // snapshot upsert + activity trigger + winner status, previously three
+    // sequential writes (and non-transactional — a crash between them left
+    // the event appended with a stale snapshot). Same ordering, same effect;
+    // any failure now rolls back the whole commit.
+    const { error: commitErr } = await a.rpc('append_action_event', {
+      p_game_id: gameId,
+      p_generation: game.cur_generation,
+      p_seq: event.seq,
+      p_type: event.type,
+      p_actor_id: event.actorId,
+      p_payload: event.payload,
+      p_created_at: event.createdAt,
+      p_next_seq: next.seq,
+      p_next_state: next,
+      p_has_winner: !!next.winner,
     });
-    if (insertErr) return json({ error: 'event append failed' }, 500);
-
-    await a.from('game_state').upsert({
-      game_id: gameId, seq: next.seq, state: next, updated_at: new Date().toISOString(),
-    });
-
-    // realtime refetch trigger (members subscribe to `activity` — they can no
-    // longer read `events` rows directly, which carried full attack attribution)
-    await a.from('activity').upsert({ game_id: gameId, seq: event.seq }, { onConflict: 'game_id' });
-
-    if (next.winner) {
-      await a.from('games').update({ status: 'finished' }).eq('id', gameId);
-    }
+    if (commitErr) return json({ error: 'event append failed' }, 500);
 
     // No state in the response: the full state (seed, everyone's AP, the real
     // log) must not ride on any client-facing payload, and the app only ever
