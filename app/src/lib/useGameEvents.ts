@@ -44,6 +44,8 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
   const [me, setMe] = useState<PlayerId | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // realtime socket health — drives the poller cadence (4s down / 15s joined)
+  const [socketOk, setSocketOk] = useState(false);
   const aliveRef = useRef(true);
 
   // latest values for the socket handler and the stale-response guard
@@ -149,27 +151,29 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
         { event: '*', schema: 'public', table: 'player_activity', filter: `game_id=eq.${gameId}` },
         (msg: { new: unknown }) => applyRow(msg),
       )
-      .subscribe();
+      .subscribe((status) => setSocketOk(status === 'SUBSCRIBED'));
     return () => { void supabase.removeChannel(channel); };
   }, [gameId]);
 
   // polling fallback: reconciles anything realtime misses (a dropped socket,
   // masking that must be recomputed over the full history, detail fields the
-  // per-member row does not carry). Poll on a short cadence while the tab is
-  // visible and the game is still live.
+  // per-member row does not carry). While the tab is visible and the game is
+  // still live: 15s when the realtime socket is joined, 4s when it is not —
+  // the socket path is authoritative, the poller is only the safety net.
   const finished = detail?.status === 'finished' || !!state?.winner;
   useEffect(() => {
     if (finished) return;
-    const id = setInterval(() => {
+    const tick = () => {
       if (document.visibilityState === 'visible') void refreshThrottled();
-    }, 4000);
+    };
+    const id = setInterval(tick, socketOk ? 15000 : 4000);
     const onVisible = () => { if (document.visibilityState === 'visible') void refreshThrottled(); };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       clearInterval(id);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [finished, refreshThrottled]);
+  }, [finished, refreshThrottled, socketOk]);
 
   return { state, events, history, me, detail, avatars, loading, error, refresh };
 }

@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, waitFor } from '@testing-library/react';
 import { useGameEvents } from './useGameEvents';
 import * as api from './api';
 
@@ -197,8 +197,7 @@ describe('useGameEvents', () => {
       history: [],
     });
     render(<HookProbe />);
-    await screen.findByTestId('seq');
-    expect(screen.getByTestId('status')).toHaveTextContent('active');
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('active'));
 
     act(() => realtimeCallback()({
       new: {
@@ -238,5 +237,46 @@ describe('useGameEvents', () => {
     });
     await act(async () => { await hook!.refresh(); });
     expect(screen.getByTestId('seq')).toHaveTextContent('8'); // not dragged back
+  });
+
+  test('poller cadence: 4s while socket is down, 15s while joined', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(api.gameGet).mockResolvedValue({
+        ...detail(),
+        state: { ...BASE_STATE, seq: 5 },
+        events: [],
+        history: [],
+      });
+      render(<HookProbe />);
+      await act(async () => {}); // initial load: 1 call
+      const calls = () => vi.mocked(api.gameGet).mock.calls.length;
+      expect(calls()).toBe(1);
+
+      // socket NOT joined: 4s cadence (advance in chunks so each tick's
+      // async refresh completes before the next timer fires — the in-flight
+      // dedupe would otherwise swallow the second tick)
+      await act(async () => { vi.advanceTimersByTime(4500); });
+      await act(async () => { vi.advanceTimersByTime(4500); });
+      expect(calls()).toBeGreaterThanOrEqual(3); // polls at ~4s and ~8s
+      const afterUnhealthy = calls();
+
+      // subscribe reports SUBSCRIBED -> back off to 15s
+      const statusCb = h.channelSubscribe.mock.calls.at(-1)?.[0] as ((s: string) => void) | undefined;
+      expect(typeof statusCb).toBe('function');
+      act(() => statusCb!('SUBSCRIBED'));
+      await act(async () => { vi.advanceTimersByTime(14000); });
+      expect(calls()).toBe(afterUnhealthy); // no poll within the first 14s
+      await act(async () => { vi.advanceTimersByTime(2000); });
+      expect(calls()).toBe(afterUnhealthy + 1); // one poll at the 15s mark
+
+      // socket drops -> back to 4s
+      act(() => statusCb!('CHANNEL_ERROR'));
+      await act(async () => { vi.advanceTimersByTime(4500); });
+      await act(async () => { vi.advanceTimersByTime(4500); });
+      expect(calls()).toBeGreaterThanOrEqual(afterUnhealthy + 3); // ~4s and ~8s
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
