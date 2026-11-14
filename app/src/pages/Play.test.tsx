@@ -1,8 +1,9 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Play from './Play';
 import * as api from '../lib/api';
+import * as auth from '../lib/auth';
 
 vi.mock('../lib/api', () => ({
   gameJoin: vi.fn(),

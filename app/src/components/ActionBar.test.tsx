@@ -85,4 +85,5 @@ describe('ActionBar', () => {
     render(<ActionBar {...props(s, 'give_ap')} />);
     expect(screen.getByRole('button', { name: /give ap/i })).toBeDisabled();
   });
+
 });

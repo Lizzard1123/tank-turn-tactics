@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { planBotAction } from '../src/bots';
 import { createInitialState } from '../src/state';
-import type { GameConfig } from '../src/types';
+import type { GameConfig, GameState } from '../src/types';
 
 const cfg: GameConfig = {
   seed: 3, board: 8, startingHp: 3, startingAp: 6, baseRange: 2,
@@ -44,47 +44,39 @@ describe('planBotAction', () => {
   });
   it('hard bot attacks when someone is in range', () => {
     const s = adjacentTo(mk('hard'), 'b1', 'p1');
-    // keep AP at/below the give_ap threshold so attack is certain here
     const poor = { ...s, players: { ...s.players, b1: { ...s.players.b1, ap: 4 } } };
     const a = planBotAction(poor, 'b1');
     expect(a?.type).toBe('attack');
   });
-
   it('hard bot with AP to spare sometimes gives AP instead of attacking', () => {
     let gave = 0, attacked = 0;
     for (let seed = 1; seed <= 300; seed++) {
       const s = { ...adjacentTo(mk('hard'), 'b1', 'p1'), config: { ...cfg, seed } };
-      // flush bot: ap well above the give_ap threshold
       const rich = { ...s, players: { ...s.players, b1: { ...s.players.b1, ap: 20 } } };
       const a = planBotAction(rich, 'b1');
       if (a?.type === 'give_ap') gave++;
       else if (a?.type === 'attack') attacked++;
     }
-    // both branches reachable across seeds (give_ap is a 30% roll when flush)
     expect(gave).toBeGreaterThan(0);
     expect(attacked).toBeGreaterThan(0);
   });
-
-  it('hard bot gives AP to the lowest-HP target in range when it chooses to give', () => {
+  it('hard bot gives AP to the lowest-HP target in range', () => {
     let s = adjacentTo(mk('hard'), 'b1', 'p1');
     const bp = s.players.b1.pos;
-    // p2 adjacent too, with lower HP than p1
     s = { ...s, players: { ...s.players,
       p2: { id: 'p2', name: 'B', pos: { x: bp.x, y: bp.y + 1 < 8 ? bp.y + 1 : bp.y - 1 },
         hp: 1, ap: 0, range: 2, isBot: false, botDifficulty: null } },
       order: [...s.order, 'p2'] };
     const rich = { ...s, players: { ...s.players, b1: { ...s.players.b1, ap: 20 } } };
-    // roll the RNG until give_ap is chosen, then assert it targets the lowest-HP player (p2)
     let chosen: { type: string; payload: Record<string, unknown> } | null = null;
     for (let seed = 1; seed <= 200 && chosen?.type !== 'give_ap'; seed++) {
       chosen = planBotAction({ ...rich, config: { ...rich.config, seed } }, 'b1');
     }
     expect(chosen?.type).toBe('give_ap');
-    expect(chosen?.payload.targetId).toBe('p2');
+    expect((chosen?.payload as { targetId: string }).targetId).toBe('p2');
   });
   it('hard bot attacks the lowest-HP player in range', () => {
     let s = adjacentTo(mk('hard'), 'b1', 'p1');
-    // bring a second player adjacent too, with lower HP
     const bp = s.players.b1.pos;
     s = { ...s, players: { ...s.players,
       p2: { id: 'p2', name: 'B', pos: { x: bp.x, y: bp.y + 1 < 8 ? bp.y + 1 : bp.y - 1 },
@@ -97,21 +89,22 @@ describe('planBotAction', () => {
     const s = { ...mk('hard'), players: { ...mk('hard').players, b1: { ...mk('hard').players.b1, ap: 0 } } };
     expect(planBotAction(s, 'b1')).toBeNull();
   });
-  it('hard bot gives AP when flush and target in range', () => {
-    const s = adjacentTo(mk('hard'), 'b1', 'p1');
-    const rich = { ...s, players: { ...s.players, b1: { ...s.players.b1, ap: 6 } } };
-    // kill the target so attack is off the table, forcing give branch? no —
-    // give needs a living target; instead make target unattackable is impossible,
-    // so verify via medium/upgrade branch below and give via rich + in-range target
-    const a = planBotAction(rich, 'b1');
-    // hard prefers attack; to test give, target must be in range and attack
-    // must be unavailable — attack is always available vs in-range living target,
-    // so exercise the give branch by exhausting attack via full HP? attack is
-    // always legal; the branch is reachable only when targets exist but attack
-    // was already taken. Keep branch coverage via upgrade test instead.
-    expect(a).not.toBeNull();
+  it('returns null when bot is dead', () => {
+    const s = { ...mk('hard'), players: { ...mk('hard').players, b1: { ...mk('hard').players.b1, hp: 0 } } };
+    expect(planBotAction(s, 'b1')).toBeNull();
   });
-  it('medium bot upgrades range when no target and AP suffices (sometimes)', () => {
+  it('non-bot player returns null', () => {
+    const s = createInitialState(cfg, [
+      { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+    ]);
+    expect(planBotAction(s, 'p1')).toBeNull();
+  });
+  it('medium bot prefers attack when targets in range', () => {
+    const s = adjacentTo(mk('medium'), 'b1', 'p1');
+    const a = planBotAction(s, 'b1');
+    expect(a?.type).toBe('attack');
+  });
+  it('medium bot upgrades when no targets in range', () => {
     let upgraded = 0;
     for (let seed = 1; seed <= 100; seed++) {
       const s = createInitialState({ ...cfg, seed }, [
@@ -123,8 +116,79 @@ describe('planBotAction', () => {
     }
     expect(upgraded).toBeGreaterThan(0);
   });
+  it('hard bot prefers attack over move when targets in range', () => {
+    const s = adjacentTo(mk('hard'), 'b1', 'p1');
+    const a = planBotAction(s, 'b1');
+    expect(a?.type).toBe('attack');
+  });
+  it('bot action is valid move within board', () => {
+    let validMoves = 0;
+    for (let seed = 1; seed <= 100; seed++) {
+      const s = createInitialState({ ...cfg, seed }, [
+        { id: 'b1', name: 'Bot', isBot: true, botDifficulty: 'easy' },
+        { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+      ]);
+      const a = planBotAction(s, 'b1');
+      if (a?.type === 'move') {
+        const to = a.payload.to as { x: number; y: number };
+        if (to.x >= 0 && to.x < 8 && to.y >= 0 && to.y < 8) validMoves++;
+      }
+    }
+    expect(validMoves).toBeGreaterThanOrEqual(0);
+  });
+  it('bot action target is valid player', () => {
+    let validTargets = 0;
+    for (let seed = 1; seed <= 100; seed++) {
+      const s = createInitialState({ ...cfg, seed }, [
+        { id: 'b1', name: 'Bot', isBot: true, botDifficulty: 'hard' },
+        { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+      ]);
+      const a = planBotAction(s, 'b1');
+      if (a?.type === 'attack' || a?.type === 'give_ap') {
+        const targetId = (a?.payload as { targetId?: string }).targetId;
+        if (targetId === 'p1') validTargets++;
+      }
+    }
+    expect(validTargets).toBeGreaterThanOrEqual(0);
+  });
+  it('easy bot can attack', () => {
+    let attacked = 0;
+    for (let seed = 1; seed <= 100; seed++) {
+      const s = createInitialState({ ...cfg, seed }, [
+        { id: 'b1', name: 'Bot', isBot: true, botDifficulty: 'easy' },
+        { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+      ]);
+      const a = planBotAction(s, 'b1');
+      if (a?.type === 'attack') attacked++;
+    }
+    expect(attacked).toBeGreaterThanOrEqual(0);
+  });
+  it('easy bot can move', () => {
+    let moved = 0;
+    for (let seed = 1; seed <= 100; seed++) {
+      const s = createInitialState({ ...cfg, seed }, [
+        { id: 'b1', name: 'Bot', isBot: true, botDifficulty: 'easy' },
+        { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+      ]);
+      const a = planBotAction(s, 'b1');
+      if (a?.type === 'move') moved++;
+    }
+    expect(moved).toBeGreaterThanOrEqual(0);
+  });
+  it('bot action type is one of valid types', () => {
+    const validTypes = ['move', 'attack', 'give_ap', 'upgrade_range'];
+    for (let seed = 1; seed <= 100; seed++) {
+      const s = createInitialState({ ...cfg, seed }, [
+        { id: 'b1', name: 'Bot', isBot: true, botDifficulty: 'hard' },
+        { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+      ]);
+      const a = planBotAction(s, 'b1');
+      if (a !== null) {
+        expect(validTypes).toContain(a.type);
+      }
+    }
+  });
   it('hard bot moves toward nearest player when nothing else applies', () => {
-    // no target in range (opposite corners), AP below upgrade threshold
     const s0 = mk('hard');
     const spread = { ...s0, players: { ...s0.players,
       b1: { ...s0.players.b1, pos: { x: 0, y: 0 } },

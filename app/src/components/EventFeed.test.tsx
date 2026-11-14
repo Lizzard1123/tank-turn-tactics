@@ -23,17 +23,16 @@ describe('EventFeed', () => {
     const items = screen.getAllByRole('listitem').filter((li) => !li.className.includes('empty'));
     const texts = items.map((li) => li.querySelector('.feed-text')?.textContent);
     expect(texts).toEqual([entries[2].text, entries[1].text, entries[0].text]);
-    // every entry carries its timestamp as a machine-readable <time>
     for (const e of entries) {
       expect(document.querySelector(`time[datetime="${e.createdAt}"]`)).not.toBeNull();
     }
   });
 
   test('while scrubbed the later events stay visible (dimmed) and the viewed event is highlighted', () => {
-    render(<EventFeed {...base({ activeIndex: 1, live: false })} />); // seq 2 = index 1
+    render(<EventFeed {...base({ activeIndex: 1, live: false })} />);
     const items = screen.getAllByRole('listitem').filter((li) => !li.className.includes('empty'));
-    expect(items[0].className).toContain('future'); // seq 3 is after the viewed event
-    expect(items[1].className).toContain('active'); // seq 2 is the viewed event
+    expect(items[0].className).toContain('future');
+    expect(items[1].className).toContain('active');
     expect(items[2].className).not.toContain('active');
   });
 
@@ -46,7 +45,6 @@ describe('EventFeed', () => {
     expect(screen.queryByTestId('back-to-live')).not.toBeInTheDocument();
     await user.click(screen.getByTestId('replay-btn'));
     expect(onReplay).toHaveBeenCalled();
-
     rerender(<EventFeed {...base({ activeIndex: 0, live: false, onReplay, onStop })} />);
     expect(screen.getByTestId('back-to-live')).toBeInTheDocument();
     await user.click(screen.getByTestId('back-to-live'));
@@ -70,28 +68,48 @@ describe('EventFeed', () => {
     render(<EventFeed {...base({ onView })} />);
     const buttons = screen.getAllByRole('button', { name: /view state after event/i });
     expect(buttons.length).toBe(3);
-    await user.click(buttons[0]); // newest entry (seq 3, index 2)
+    await user.click(buttons[0]);
     expect(onView).toHaveBeenCalledWith(2);
   });
 
   test('dimmed future entries while scrubbed', () => {
     render(<EventFeed {...base({ activeIndex: 1, live: false })} />);
     const items = screen.getAllByRole('listitem').filter((li) => !li.className.includes('empty'));
-    expect(items[0].className).toContain('future'); // seq 3 after viewed seq 2
-    expect(items[1].className).toContain('active'); // seq 2 is the viewed event
+    expect(items[0].className).toContain('future');
+    expect(items[1].className).toContain('active');
     expect(items[2].className).not.toContain('active');
     expect(items[2].className).not.toContain('future');
   });
 
-  test('replay button shows while live and not replaying', () => {
-    render(<EventFeed {...base({ live: true, onReplay: vi.fn() })} />);
-    expect(screen.getByTestId('replay-btn')).toBeInTheDocument();
-    expect(screen.queryByTestId('stop-replay-btn')).not.toBeInTheDocument();
+  test('onView callback called with correct index', async () => {
+    const onView = vi.fn();
+    const user = userEvent.setup();
+    render(<EventFeed {...base({ onView })} />);
+    const buttons = screen.getAllByRole('button', { name: /view state after event/i });
+    await user.click(buttons[1]);
+    expect(onView).toHaveBeenCalledWith(1);
   });
 
-  test('stop replay button shows while replaying', () => {
-    render(<EventFeed {...base({ live: false, replaying: true, activeIndex: 0, onStop: vi.fn() })} />);
-    expect(screen.getByTestId('stop-replay-btn')).toBeInTheDocument();
-    expect(screen.queryByTestId('replay-btn')).not.toBeInTheDocument();
+  test('onReplay callback called on replay click', async () => {
+    const onReplay = vi.fn();
+    const user = userEvent.setup();
+    render(<EventFeed {...base({ onReplay })} />);
+    await user.click(screen.getByTestId('replay-btn'));
+    expect(onReplay).toHaveBeenCalled();
+  });
+
+  test('onStop callback called on stop click', async () => {
+    const onStop = vi.fn();
+    const user = userEvent.setup();
+    render(<EventFeed {...base({ replaying: true, onStop })} />);
+    await user.click(screen.getByTestId('stop-replay-btn'));
+    expect(onStop).toHaveBeenCalled();
+  });
+
+  test('renders empty list when no entries', () => {
+    render(<EventFeed {...base({ entries: [] })} />);
+    const items = screen.getAllByRole('listitem');
+    expect(items.length).toBe(1);
+    expect(items[0].className).toContain('empty');
   });
 });

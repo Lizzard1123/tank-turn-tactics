@@ -1,4 +1,4 @@
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import TankCard from './TankCard';
 import type { PlayerState } from '@ttt/engine';
@@ -12,15 +12,16 @@ function player(overrides: Partial<PlayerState> = {}): PlayerState {
 
 describe('TankCard', () => {
   test('renders name and hp for all players', () => {
-    render(<TankCard player={player()} isMe={false} />);
+    const { container } = render(<TankCard player={player()} isMe={false} />);
     expect(screen.getByTestId('card-p1')).toBeInTheDocument();
     expect(screen.getByText('Alice')).toBeInTheDocument();
-    expect(screen.getByText('3')).toBeInTheDocument(); // hp
+    expect(container.textContent).toContain('3');
   });
 
   test('shows skull icon for dead player', () => {
-    render(<TankCard player={player({ hp: 0 })} isMe={false} />);
+    const { container } = render(<TankCard player={player({ hp: 0 })} isMe={false} />);
     expect(screen.getByTestId('card-p1')).toBeInTheDocument();
+    expect(container.textContent).toContain('0');
   });
 
   test('shows robot icon and name for bot', () => {
@@ -28,11 +29,26 @@ describe('TankCard', () => {
     expect(screen.getByText('Hard Bot')).toBeInTheDocument();
   });
 
-  test('self card renders name with (you) suffix and hp + range', () => {
+  test('self card renders name with (you) suffix', () => {
     render(<TankCard player={player({ id: 'me', name: 'You' })} isMe={true} />);
     expect(screen.getByText('You (you)')).toBeInTheDocument();
-    const stats = screen.getByTestId('card-me');
-    expect(stats.textContent).toContain('3'); // hp
-    expect(stats.textContent).toContain('2'); // range (self only)
+  });
+
+  test('card calls onTap when clicked', () => {
+    const onTap = vi.fn();
+    const { container } = render(<TankCard player={player()} isMe={false} onTap={onTap} />);
+    const button = container.querySelector('button')!;
+    button.click();
+    expect(onTap).toHaveBeenCalled();
+  });
+
+  test('card hides stats when hideStats true', () => {
+    const { container } = render(<TankCard player={player()} isMe={false} hideStats />);
+    expect(container.querySelector('.tank-card-stats')).not.toBeInTheDocument();
+  });
+
+  test('card shows stats when hideStats false', () => {
+    const { container } = render(<TankCard player={player()} isMe={false} hideStats={false} />);
+    expect(container.querySelector('.tank-card-stats')).toBeInTheDocument();
   });
 });

@@ -34,6 +34,41 @@ describe('daily_tick', () => {
     let s = applyEvent(base, ev(base, 'system', 'daily_tick', { apGained: 1, elapsedMinutes: 5 }));
     expect(s.tickClockMinutes).toBe(5);
   });
+  it('tick clock defaults to 0', () => {
+    const s = createInitialState(cfg, [
+      { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+    ]);
+    expect(s.tickClockMinutes).toBe(0);
+  });
+  it('multiple ticks advance day', () => {
+    let s = base;
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
+    expect(s.day).toBe(3);
+  });
+  it('tick with apGained 0', () => {
+    let s = applyEvent(base, ev(base, 'system', 'daily_tick', { apGained: 0 }));
+    for (const p of Object.values(s.players)) expect(p.ap).toBe(0);
+  });
+  it('tick with large apGained', () => {
+    let s = applyEvent(base, ev(base, 'system', 'daily_tick', { apGained: 10 }));
+    for (const p of Object.values(s.players)) expect(p.ap).toBe(10);
+  });
+  it('tick preserves player hp', () => {
+    let s = { ...base, players: { ...base.players, p1: { ...base.players.p1, hp: 2 } } };
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
+    expect(s.players.p1.hp).toBe(2);
+  });
+  it('tick preserves player positions', () => {
+    const p1Pos = { ...base.players.p1.pos };
+    let s = applyEvent(base, ev(base, 'system', 'daily_tick', { apGained: 1 }));
+    expect(s.players.p1.pos).toEqual(p1Pos);
+  });
+  it('tick preserves player range', () => {
+    const p1Range = base.players.p1.range;
+    let s = applyEvent(base, ev(base, 'system', 'daily_tick', { apGained: 1 }));
+    expect(s.players.p1.range).toBe(p1Range);
+  });
 });
 
 describe('jury', () => {
@@ -54,7 +89,6 @@ describe('jury', () => {
     expect(() => applyEvent(s, ev(s, 'p3', 'jury_vote', { candidateId: 'ghost' }))).toThrow(EngineError);
   });
   it('three jury votes award 1 bonus AP on tick, then votes clear', () => {
-    // three dead players remain in `players` with hp 0
     const dead = (id: string) => ({ ...base.players[id], hp: 0 });
     let s = { ...base,
       players: { ...base.players, p3: dead('p3'), p4: dead('p4'), p5: dead('p5') },
@@ -73,5 +107,52 @@ describe('jury', () => {
     for (const j of ['p3', 'p4']) s = applyEvent(s, ev(s, j, 'jury_vote', { candidateId: 'p1' }));
     s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
     expect(s.players.p1.ap).toBe(1);
+  });
+  it('jury vote preserves player hp', () => {
+    let s = { ...base, jury: ['p3'], players: { ...base.players, p3: { ...base.players.p3, hp: 0 } } };
+    const hpBefore = s.players.p1.hp;
+    s = applyEvent(s, ev(s, 'p3', 'jury_vote', { candidateId: 'p1' }));
+    expect(s.players.p1.hp).toBe(hpBefore);
+  });
+  it('jury vote preserves player positions', () => {
+    let s = { ...base, jury: ['p3'], players: { ...base.players, p3: { ...base.players.p3, hp: 0 } } };
+    const p1Pos = { ...s.players.p1.pos };
+    s = applyEvent(s, ev(s, 'p3', 'jury_vote', { candidateId: 'p1' }));
+    expect(s.players.p1.pos).toEqual(p1Pos);
+  });
+  it('multiple jury votes for same candidate', () => {
+    const dead = (id: string) => ({ ...base.players[id], hp: 0 });
+    let s = { ...base,
+      players: { ...base.players, p3: dead('p3'), p4: dead('p4') },
+      order: [...base.order, 'p4'], jury: ['p3', 'p4'] };
+    s = applyEvent(s, ev(s, 'p3', 'jury_vote', { candidateId: 'p1' }));
+    s = applyEvent(s, ev(s, 'p4', 'jury_vote', { candidateId: 'p1' }));
+    expect(s.pendingVotes).toHaveLength(2);
+  });
+  it('jury vote from non-jury member rejected', () => {
+    expect(() => applyEvent(base, ev(base, 'p1', 'jury_vote', { candidateId: 'p2' }))).toThrow(EngineError);
+  });
+});
+
+describe('tick edge cases', () => {
+  it('tick preserves jury', () => {
+    let s = { ...base, jury: ['p1', 'p2'] };
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
+    expect(s.jury).toEqual(['p1', 'p2']);
+  });
+  it('tick clears pendingVotes on tick', () => {
+    let s = { ...base, pendingVotes: [{ voterId: 'p1', candidateId: 'p2' }] };
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
+    expect(s.pendingVotes).toEqual([]);
+  });
+  it('tick preserves hearts', () => {
+    let s = { ...base, hearts: [{ x: 3, y: 3, seq: 1 }] };
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
+    expect(s.hearts).toEqual([{ x: 3, y: 3, seq: 1 }]);
+  });
+  it('tick preserves log', () => {
+    let s = { ...base, log: [{ seq: 0, text: 'initial', kind: undefined }] };
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
+    expect(s.log.length).toBe(2);
   });
 });

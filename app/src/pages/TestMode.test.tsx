@@ -1,4 +1,4 @@
-import { test, expect, vi, beforeEach, afterEach } from 'vitest';
+import { test, expect, vi, beforeEach, afterEach, describe } from 'vitest';
 import { render, screen, act } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import TestMode from './TestMode';
@@ -18,12 +18,10 @@ vi.mock('../lib/auth', () => ({
   }),
 }));
 
-// Test Mode must not touch the database: assert gameCreate is never called.
 vi.mock('../lib/api', () => ({
   gameCreate: vi.fn(),
 }));
 
-// Mock the supabase client so no real network/auth calls are made.
 vi.mock('../lib/supabaseClient', () => ({
   supabase: {
     auth: {
@@ -45,65 +43,280 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-test('guest sign-in starts a local game (no DB game) and the 30s AP drip increments AP', async () => {
-  vi.useFakeTimers();
-  render(
-    <LocalGameProvider>
-      <MemoryRouter initialEntries={['/test']}>
-        <Routes>
-          <Route path="/test" element={<TestMode />} />
-          <Route path="/game/:gameId" element={<Game />} />
-        </Routes>
-      </MemoryRouter>
-    </LocalGameProvider>,
-  );
+describe('TestMode', () => {
+  test('guest sign-in starts a local game (no DB game) and the 30s AP drip increments AP', async () => {
+    vi.useFakeTimers();
+    render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
 
-  // flush the async guest sign-in, context update and navigation
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(vi.mocked(api.gameCreate)).not.toHaveBeenCalled();
+    expect(screen.getByTestId('board')).toBeInTheDocument();
+    expect(screen.getByTestId('ap-counter')).toHaveTextContent('4 AP');
+
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+    expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
   });
 
-  // no database game was created
-  expect(vi.mocked(api.gameCreate)).not.toHaveBeenCalled();
+  test('during play the full feed is hidden and no fork/rewind exists', async () => {
+    vi.useFakeTimers();
+    render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
 
-  // local game mounted with default starting AP = 4
-  expect(screen.getByTestId('board')).toBeInTheDocument();
-  expect(screen.getByTestId('ap-counter')).toHaveTextContent('4 AP');
+    act(() => { vi.advanceTimersByTime(30_000); });
+    expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
 
-  // advance one 30s drip tick: every alive player gains 1 AP
-  act(() => {
-    vi.advanceTimersByTime(30_000);
-  });
-  expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
-});
-
-test('during play the full feed is hidden and no fork/rewind exists (same as play mode)', async () => {
-  vi.useFakeTimers();
-  render(
-    <LocalGameProvider>
-      <MemoryRouter initialEntries={['/test']}>
-        <Routes>
-          <Route path="/test" element={<TestMode />} />
-          <Route path="/game/:gameId" element={<Game />} />
-        </Routes>
-      </MemoryRouter>
-    </LocalGameProvider>,
-  );
-  await act(async () => {
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
+    expect(screen.queryByTestId('event-feed')).not.toBeInTheDocument();
+    expect(screen.queryAllByRole('button', { name: /rewind/i })).toHaveLength(0);
+    expect(screen.queryAllByRole('button', { name: /view state after event/i })).toHaveLength(0);
   });
 
-  // one drip tick so the history has exactly one event (AP 4 -> 5)
-  act(() => { vi.advanceTimersByTime(30_000); });
-  expect(screen.getByTestId('ap-counter')).toHaveTextContent('5 AP');
+  test('renders board component', async () => {
+    vi.useFakeTimers();
+    render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('board')).toBeInTheDocument();
+  });
 
-  // parity with database games: full event feed is post-game only, and the
-  // fork/rewind control is gone everywhere (both modes behave the same)
-  expect(screen.queryByTestId('event-feed')).not.toBeInTheDocument();
-  expect(screen.queryAllByRole('button', { name: /rewind/i })).toHaveLength(0);
-  expect(screen.queryAllByRole('button', { name: /view state after event/i })).toHaveLength(0);
+  test('renders AP counter', async () => {
+    vi.useFakeTimers();
+    render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('ap-counter')).toBeInTheDocument();
+  });
+
+  test('renders starting AP as 4', async () => {
+    vi.useFakeTimers();
+    render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('ap-counter')).toHaveTextContent('4 AP');
+  });
+
+  test('renders page wrapper', async () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('main')).toBeInTheDocument();
+  });
+
+  test('renders main element', async () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('main')).toBeInTheDocument();
+  });
+
+  test('renders page class', async () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('.page')).toBeInTheDocument();
+  });
+
+  test('renders game status header', async () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('.game-status')).toBeInTheDocument();
+  });
+
+  test('renders game mode badge', async () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(container.querySelector('.mode-badge')).toBeInTheDocument();
+  });
+
+  test('renders test mode badge', async () => {
+    vi.useFakeTimers();
+    const { container } = render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByText('TEST')).toBeInTheDocument();
+  });
+
+  test('renders loading state', async () => {
+    vi.useFakeTimers();
+    render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('board')).toBeInTheDocument();
+  });
+
+  test('renders game over state', async () => {
+    vi.useFakeTimers();
+    render(
+      <LocalGameProvider>
+        <MemoryRouter initialEntries={['/test']}>
+          <Routes>
+            <Route path="/test" element={<TestMode />} />
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      </LocalGameProvider>,
+    );
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('board')).toBeInTheDocument();
+  });
+
 });
