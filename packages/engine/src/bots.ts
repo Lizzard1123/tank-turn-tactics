@@ -56,14 +56,14 @@ export function planBotAction(state: GameState, botId: string): BotAction | null
 
   // hard
   if (targets.length > 0) {
-    // attack lowest-HP in range
+    // attack lowest-HP in range, or give AP instead when flush
     let best = targets[0], bestHp = state.players[targets[0]].hp;
     for (const t of targets) {
       if (state.players[t].hp < bestHp) { best = t; bestHp = state.players[t].hp; }
     }
+    if (bot.ap > 4 && rand() < 0.3) return { type: 'give_ap', payload: { targetId: best } };
     return { type: 'attack', payload: { targetId: best } };
   }
-  if (bot.ap > 4 && targets.length > 0) return { type: 'give_ap', payload: { targetId: targets[0] } };
   if (bot.ap >= state.config.upgradeCost) return { type: 'upgrade_range', payload: {} };
   // move toward nearest player
   if (moves.length > 0) {

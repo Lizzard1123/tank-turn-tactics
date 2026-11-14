@@ -157,6 +157,18 @@ describe('Board', () => {
     expect(screen.getByTestId('fx-pulse')).toBeInTheDocument();
   });
 
+  test('opponent action fx still renders (not gated to the local player)', () => {
+    render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}}
+      lastEvent={{ seq: 1, type: 'attack', actorId: 'p2', createdAt: 't', payload: { targetId: 'p1' } } } />);
+    expect(screen.getByTestId('fx-attack')).toBeInTheDocument();
+  });
+
+  test('masked attack (hidden actor) renders no fx', () => {
+    render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}}
+      lastEvent={{ seq: 1, type: 'attack', actorId: 'hidden', createdAt: 't', payload: { targetId: 'p1', anon: true } } } />);
+    expect(screen.queryByTestId('fx-attack')).not.toBeInTheDocument();
+  });
+
   test('move events spawn no fx; fx is removed on animationend', () => {
     const { rerender } = render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}}
       lastEvent={{ seq: 4, type: 'move', actorId: 'p1', createdAt: 't', payload: { to: { x: 1, y: 0 } } }} />);
