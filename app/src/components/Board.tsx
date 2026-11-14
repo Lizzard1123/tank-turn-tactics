@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { GameEvent, GameState, Vec } from '@ttt/engine';
+import { HIDDEN_ACTOR } from '@ttt/engine';
 import { manhattan, occupantAt } from '@ttt/engine';
 import { flagUrl } from '../lib/flags';
 
@@ -86,8 +87,10 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
       const occId = occupantAt(state.players, p);
       if (!occId || occId === own.id) return false;
       const occ = state.players[occId];
-      // attack needs a living enemy in range; give needs anyone in range
-      return inRange(p) && (selectedMode === 'give_ap' || occ.hp > 0);
+      // attack and give_ap both require a living, in-range target (dead players
+      // are graves: passable, but not a valid AP recipient — the server rejects
+      // give_ap to a dead player with "player is dead")
+      return inRange(p) && occ.hp > 0;
     }
     if (selectedMode === 'give_heart') {
       // occupantAt only sees the living — scan all players so graves are
@@ -230,7 +233,7 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
             so a new event remounts the layer and restarts the animations.
             animationend hides the layer — except the bullet's, which would cut
             the victim flash short (bullet 250ms vs flash 400ms). */}
-        {fx && lastEvent && lastEvent.actorId === me && (
+        {fx && lastEvent && lastEvent.actorId !== HIDDEN_ACTOR && (
           <g
             key={lastEvent.seq}
             data-testid={FX_TESTIDS[fx.kind]}

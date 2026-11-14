@@ -44,6 +44,8 @@ export interface GameConfigPayload {
   heartGifts?: boolean;
   revives?: boolean;
   juryHaunt?: boolean;
+  // mid-game joining (game-join gates active-game entry on this flag)
+  allowLateJoin?: boolean;
   // heart spawns: own schedule + placement, independent of the AP schedule
   heartSpawn?: boolean;
   heartSchedule?: ScheduleMode;

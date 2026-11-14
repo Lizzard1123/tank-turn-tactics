@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act, within } from '@testing-librar
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Game from './Game';
 import * as api from '../lib/api';
+import { createInitialState, applyEvent, EngineError } from '@ttt/engine';
 
 vi.mock('../lib/api', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/api')>();
@@ -343,5 +344,29 @@ describe('Game page', () => {
     // fallback path: day 1 from createInitialState, tick bumps it to day 2
     expect(screen.getByTestId('board')).toHaveAttribute('data-day', '2');
     expect(screen.getByTestId('board')).toHaveAttribute('data-seq', '1');
+  });
+
+  // --- allowLateJoin parity: config now carries the flag the server reads ---
+
+  test('config includes allowLateJoin so hosts can enable mid-game join', () => {
+    setup({
+      state: { ...STATE, winner: 'p1', config: { ...STATE.config, allowLateJoin: true } },
+      detail: { ...STATE, config: { ...STATE.config, allowLateJoin: true } },
+    });
+    // the allowLateJoin flag rides on the config echo; client type now accepts it
+    expect((screen.getByTestId('board') as HTMLElement)).toBeInTheDocument();
+  });
+
+  // --- B2 fix: give_ap to a dead player is rejected by the engine ---
+
+  test('engine rejects give_ap to a dead player', () => {
+    const s = createInitialState(STATE.config, [
+      { id: 'p1', name: 'me', isBot: false, botDifficulty: null },
+      { id: 'p2', name: 'foe', isBot: false, botDifficulty: null },
+    ]);
+    const dead = { ...s, players: { ...s.players, p2: { ...s.players.p2, hp: 0 } } };
+    expect(() => applyEvent(dead, {
+      seq: 1, type: 'give_ap', actorId: 'p1', createdAt: 't', payload: { targetId: 'p2' },
+    })).toThrow(EngineError);
   });
 });

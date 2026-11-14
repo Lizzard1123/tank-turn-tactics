@@ -44,8 +44,43 @@ describe('planBotAction', () => {
   });
   it('hard bot attacks when someone is in range', () => {
     const s = adjacentTo(mk('hard'), 'b1', 'p1');
-    const a = planBotAction(s, 'b1');
+    // keep AP at/below the give_ap threshold so attack is certain here
+    const poor = { ...s, players: { ...s.players, b1: { ...s.players.b1, ap: 4 } } };
+    const a = planBotAction(poor, 'b1');
     expect(a?.type).toBe('attack');
+  });
+
+  it('hard bot with AP to spare sometimes gives AP instead of attacking', () => {
+    let gave = 0, attacked = 0;
+    for (let seed = 1; seed <= 300; seed++) {
+      const s = { ...adjacentTo(mk('hard'), 'b1', 'p1'), config: { ...cfg, seed } };
+      // flush bot: ap well above the give_ap threshold
+      const rich = { ...s, players: { ...s.players, b1: { ...s.players.b1, ap: 20 } } };
+      const a = planBotAction(rich, 'b1');
+      if (a?.type === 'give_ap') gave++;
+      else if (a?.type === 'attack') attacked++;
+    }
+    // both branches reachable across seeds (give_ap is a 30% roll when flush)
+    expect(gave).toBeGreaterThan(0);
+    expect(attacked).toBeGreaterThan(0);
+  });
+
+  it('hard bot gives AP to the lowest-HP target in range when it chooses to give', () => {
+    let s = adjacentTo(mk('hard'), 'b1', 'p1');
+    const bp = s.players.b1.pos;
+    // p2 adjacent too, with lower HP than p1
+    s = { ...s, players: { ...s.players,
+      p2: { id: 'p2', name: 'B', pos: { x: bp.x, y: bp.y + 1 < 8 ? bp.y + 1 : bp.y - 1 },
+        hp: 1, ap: 0, range: 2, isBot: false, botDifficulty: null } },
+      order: [...s.order, 'p2'] };
+    const rich = { ...s, players: { ...s.players, b1: { ...s.players.b1, ap: 20 } } };
+    // roll the RNG until give_ap is chosen, then assert it targets the lowest-HP player (p2)
+    let chosen: { type: string; payload: Record<string, unknown> } | null = null;
+    for (let seed = 1; seed <= 200 && chosen?.type !== 'give_ap'; seed++) {
+      chosen = planBotAction({ ...rich, config: { ...rich.config, seed } }, 'b1');
+    }
+    expect(chosen?.type).toBe('give_ap');
+    expect(chosen?.payload.targetId).toBe('p2');
   });
   it('hard bot attacks the lowest-HP player in range', () => {
     let s = adjacentTo(mk('hard'), 'b1', 'p1');
