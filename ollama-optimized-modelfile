@@ -1,0 +1,37 @@
+# Optimized modelfile for qwen3.6:35b-a3b-coding-nvfp4
+# M1 Max | 64GB Unified Memory | Claude Code harness
+#
+# REQUIRES: Ollama v0.32.6+ (MTP speculative decoding support)
+# REQUIRES: Ollama v0.40.15+ (the /v1 PARAMETER bug is fixed in this version)
+#
+# Upgrade: https://ollama.com/download or `brew upgrade ollama`
+
+FROM qwen3.6:35b-a3b-coding-nvfp4
+
+# Temperature: 0.8 is the single best optimization
+# - 28% faster total time (fewer tokens generated, more decisive output)
+# - No quality tradeoff for coding tasks
+PARAMETER temperature 0.8
+
+# num_predict: Hard cap at 5000 tokens
+# - Prevents rambling on long responses
+# - Is a CAP, not a fixed target (model can stop earlier)
+# - Default is -1 (infinite), which allows very long responses
+PARAMETER num_predict 5000
+
+# top_k: 15 (narrower sampling, slightly more focused output)
+# - Was 3% slower in our tests, but may improve coding quality
+PARAMETER top_k 15
+
+# top_p: 0.9 (slightly more restrictive than default 0.95)
+PARAMETER top_p 0.9
+
+# repeat_penalty: 1.0 (default, neutral in our tests)
+PARAMETER repeat_penalty 1.0
+
+# draft_num_predict: 4 is the sweet spot for Qwen3.6-35B
+# - Controls maximum number of speculative draft tokens per step
+# - ~10-15% improvement over baseline (no spec decoding)
+# - Best value: 4 (higher values add overhead without benefit)
+# - Set to 0 to disable speculative decoding
+PARAMETER draft_num_predict 4

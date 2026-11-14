@@ -73,4 +73,25 @@ describe('EventFeed', () => {
     await user.click(buttons[0]); // newest entry (seq 3, index 2)
     expect(onView).toHaveBeenCalledWith(2);
   });
+
+  test('dimmed future entries while scrubbed', () => {
+    render(<EventFeed {...base({ activeIndex: 1, live: false })} />);
+    const items = screen.getAllByRole('listitem').filter((li) => !li.className.includes('empty'));
+    expect(items[0].className).toContain('future'); // seq 3 after viewed seq 2
+    expect(items[1].className).toContain('active'); // seq 2 is the viewed event
+    expect(items[2].className).not.toContain('active');
+    expect(items[2].className).not.toContain('future');
+  });
+
+  test('replay button shows while live and not replaying', () => {
+    render(<EventFeed {...base({ live: true, onReplay: vi.fn() })} />);
+    expect(screen.getByTestId('replay-btn')).toBeInTheDocument();
+    expect(screen.queryByTestId('stop-replay-btn')).not.toBeInTheDocument();
+  });
+
+  test('stop replay button shows while replaying', () => {
+    render(<EventFeed {...base({ live: false, replaying: true, activeIndex: 0, onStop: vi.fn() })} />);
+    expect(screen.getByTestId('stop-replay-btn')).toBeInTheDocument();
+    expect(screen.queryByTestId('replay-btn')).not.toBeInTheDocument();
+  });
 });
