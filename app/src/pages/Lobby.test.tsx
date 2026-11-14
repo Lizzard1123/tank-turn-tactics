@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Lobby from './Lobby';
@@ -124,5 +124,114 @@ describe('Lobby (test mode)', () => {
     });
     renderAt();
     expect(await screen.findByText('GAME PAGE')).toBeInTheDocument();
+  });
+
+  // --- schedule mode persistence on start ---
+
+  test('interval schedule sends apIntervalMinutes only', async () => {
+    vi.mocked(api.gameGet).mockResolvedValueOnce(LOBBY_GAME);
+    vi.mocked(api.gameGet).mockResolvedValue({ ...LOBBY_GAME, game: { ...LOBBY_GAME.game, status: 'active' } });
+    vi.mocked(api.gameUpdate).mockResolvedValue({ ok: true, config: LOBBY_GAME.game.config });
+    vi.mocked(api.gameStart).mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderAt();
+    await screen.findByRole('heading', { name: /lobby/i });
+    // switch to interval and set an interval
+    const schedule = screen.getByLabelText(/^schedule$/i) as HTMLSelectElement;
+    fireEvent.change(schedule, { target: { value: 'interval' } });
+    await user.click(screen.getByRole('button', { name: /start game/i }));
+    expect(api.gameUpdate).toHaveBeenCalledWith('tok-1', 'g1', expect.objectContaining({
+      apIntervalMinutes: 5,
+      apSchedule: 'interval',
+      apPeriodMinutes: undefined,
+      apTimeOfDay: undefined,
+    }));
+  });
+
+  test('timeOfDay schedule sends apTimeOfDay and apTimezone only', async () => {
+    vi.mocked(api.gameGet).mockResolvedValueOnce(LOBBY_GAME);
+    vi.mocked(api.gameGet).mockResolvedValue({ ...LOBBY_GAME, game: { ...LOBBY_GAME.game, status: 'active' } });
+    vi.mocked(api.gameUpdate).mockResolvedValue({ ok: true, config: LOBBY_GAME.game.config });
+    vi.mocked(api.gameStart).mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderAt();
+    await screen.findByRole('heading', { name: /lobby/i });
+    const schedule = screen.getByLabelText(/^schedule$/i) as HTMLSelectElement;
+    fireEvent.change(schedule, { target: { value: 'timeOfDay' } });
+    await user.click(screen.getByRole('button', { name: /start game/i }));
+    expect(api.gameUpdate).toHaveBeenCalledWith('tok-1', 'g1', expect.objectContaining({
+      apSchedule: 'timeOfDay',
+      apTimeOfDay: '09:00',
+      apIntervalMinutes: undefined,
+    }));
+  });
+
+  test('random schedule sends apPeriodMinutes only', async () => {
+    vi.mocked(api.gameGet).mockResolvedValueOnce(LOBBY_GAME);
+    vi.mocked(api.gameGet).mockResolvedValue({ ...LOBBY_GAME, game: { ...LOBBY_GAME.game, status: 'active' } });
+    vi.mocked(api.gameUpdate).mockResolvedValue({ ok: true, config: LOBBY_GAME.game.config });
+    vi.mocked(api.gameStart).mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderAt();
+    await screen.findByRole('heading', { name: /lobby/i });
+    const schedule = screen.getByLabelText(/^schedule$/i) as HTMLSelectElement;
+    fireEvent.change(schedule, { target: { value: 'random' } });
+    await user.click(screen.getByRole('button', { name: /start game/i }));
+    expect(api.gameUpdate).toHaveBeenCalledWith('tok-1', 'g1', expect.objectContaining({
+      apSchedule: 'random',
+      apPeriodMinutes: 360,
+      apTimeOfDay: undefined,
+      apIntervalMinutes: undefined,
+    }));
+  });
+
+  test('heart spawn off deletes heart schedule fields', async () => {
+    vi.mocked(api.gameGet).mockResolvedValueOnce(LOBBY_GAME);
+    vi.mocked(api.gameGet).mockResolvedValue({ ...LOBBY_GAME, game: { ...LOBBY_GAME.game, status: 'active' } });
+    vi.mocked(api.gameUpdate).mockResolvedValue({ ok: true, config: LOBBY_GAME.game.config });
+    vi.mocked(api.gameStart).mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderAt();
+    await screen.findByRole('heading', { name: /lobby/i });
+    // heartSpawn defaults false; ensure heartSchedule not sent
+    await user.click(screen.getByRole('button', { name: /start game/i }));
+    expect(api.gameUpdate).toHaveBeenCalledWith('tok-1', 'g1', expect.objectContaining({
+      heartSpawn: false,
+      heartSchedule: undefined,
+      heartIntervalMinutes: undefined,
+    }));
+  });
+
+  test('new-rule toggles are persisted', async () => {
+    vi.mocked(api.gameGet).mockResolvedValueOnce(LOBBY_GAME);
+    vi.mocked(api.gameGet).mockResolvedValue({ ...LOBBY_GAME, game: { ...LOBBY_GAME.game, status: 'active' } });
+    vi.mocked(api.gameUpdate).mockResolvedValue({ ok: true, config: LOBBY_GAME.game.config });
+    vi.mocked(api.gameStart).mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderAt();
+    await screen.findByRole('heading', { name: /lobby/i });
+    await user.click(screen.getByRole('checkbox', { name: /steal ap on kill/i }));
+    await user.click(screen.getByRole('checkbox', { name: /jury haunt/i }));
+    await user.click(screen.getByRole('button', { name: /start game/i }));
+    expect(api.gameUpdate).toHaveBeenCalledWith('tok-1', 'g1', expect.objectContaining({
+      apStealOnKill: true,
+      juryHaunt: true,
+      heartGifts: false,
+      revives: false,
+    }));
+  });
+
+  test('showPlayerNames default on', async () => {
+    vi.mocked(api.gameGet).mockResolvedValueOnce(LOBBY_GAME);
+    vi.mocked(api.gameGet).mockResolvedValue({ ...LOBBY_GAME, game: { ...LOBBY_GAME.game, status: 'active' } });
+    vi.mocked(api.gameUpdate).mockResolvedValue({ ok: true, config: LOBBY_GAME.game.config });
+    vi.mocked(api.gameStart).mockResolvedValue({ ok: true });
+    const user = userEvent.setup();
+    renderAt();
+    await screen.findByRole('heading', { name: /lobby/i });
+    await user.click(screen.getByRole('button', { name: /start game/i }));
+    expect(api.gameUpdate).toHaveBeenCalledWith('tok-1', 'g1', expect.objectContaining({
+      showPlayerNames: true,
+    }));
   });
 });
