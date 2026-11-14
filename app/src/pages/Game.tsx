@@ -194,7 +194,7 @@ function LocalGameView() {
         <span>Day {displayState.day}</span>
         <span className="mode-badge">TEST{scrubbing ? ' · HISTORY' : ''}</span>
         {!state.winner && state.config.apSchedule !== 'random' && (
-          <span className="timer" data-testid="ap-timer">Next AP in {formatCountdown(apRemaining ?? 0)}</span>
+          <span className="timer" data-testid="ap-timer">AP in {formatCountdown(apRemaining ?? 0)}</span>
         )}
         <Link to="/games" className="link-button btn">Exit</Link>
       </header>
@@ -517,7 +517,7 @@ function DbGameView({ gameId }: DbGameProps) {
         </span>
         {!gameFinished && apRemaining != null && (
           <span className="timer" data-testid="ap-timer">
-            Next AP in {formatCountdown(apRemaining)}
+            AP in {formatCountdown(apRemaining)}
           </span>
         )}
         <Link to="/games" className="link-button btn">Exit</Link>
