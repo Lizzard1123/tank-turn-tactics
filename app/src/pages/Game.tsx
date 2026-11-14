@@ -73,16 +73,21 @@ function feedEntries(events: GameEvent[], live: GameState | null): FeedEntry[] {
 
 // PlayerSpecs for createInitialState, from the live state's player list
 // (same ids every generation; names only affect log cosmetics in scrubbed
-// views).
+// views). Iterates state.order — the authoritative player order — so the
+// client fallback matches game-get's server-side initial derivation, which
+// also uses state.order (spawn placement is order-sensitive).
 function specsFromDetail(state: GameState): PlayerSpec[] {
-  return Object.values(state.players).map((p) => ({
-    id: p.id,
-    name: p.name || (p.isBot
-      ? `${BOT_NAMES[p.botDifficulty ?? 'easy']} ${p.id.replace('bot-', '')}`
-      : p.id),
-    isBot: p.isBot,
-    botDifficulty: p.botDifficulty,
-  }));
+  return state.order.map((id) => {
+    const p = state.players[id];
+    return {
+      id: p.id,
+      name: p.name || (p.isBot
+        ? `${BOT_NAMES[p.botDifficulty ?? 'easy']} ${p.id.replace('bot-', '')}`
+        : p.id),
+      isBot: p.isBot,
+      botDifficulty: p.botDifficulty,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -288,9 +293,12 @@ function DbGameView({ gameId }: DbGameProps) {
   // when this client first saw the game active — fallback base for the AP
   // countdown before the server's first tick exists (lastTickAt is null)
   const gameStartedAtRef = useRef<number | null>(null);
-  if (detail?.status === 'active' && gameStartedAtRef.current === null) {
-    gameStartedAtRef.current = Date.now();
-  }
+
+  useEffect(() => {
+    if (detail?.status === 'active' && gameStartedAtRef.current === null) {
+      gameStartedAtRef.current = Date.now();
+    }
+  }, [detail?.status]);
 
   // Optimistic actions: events posted but not yet confirmed by a refetch.
   // Applied on top of the authoritative state so the board reacts instantly;

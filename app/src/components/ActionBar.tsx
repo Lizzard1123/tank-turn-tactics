@@ -20,9 +20,10 @@ export default function ActionBar({ state, me, mode, onAction, onModeChange }: A
   const ap = mine.ap;
   const cost = 1;
 
-  // find a target for attack/give in the current mode
+  // find a target for attack/give in the current mode (living players only:
+  // give_ap to a dead player is rejected server-side with "player is dead")
   const targetId = Object.values(state.players).find(
-    (p) => p.id !== me && inRange(mine.pos, p.pos, mine.range)
+    (p) => p.id !== me && p.hp > 0 && inRange(mine.pos, p.pos, mine.range)
       && (mode !== 'attack' || p.hp > 0),
   )?.id ?? null;
 

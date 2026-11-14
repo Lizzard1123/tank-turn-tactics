@@ -78,4 +78,11 @@ describe('ActionBar', () => {
     fireEvent.click(screen.getByRole('button', { name: /upgrade range/i }));
     expect(onAction).toHaveBeenCalledWith('upgrade_range', {});
   });
+
+  test('give AP is disabled when the only in-range target is dead', () => {
+    const s = state();
+    s.players.p2.hp = 0; // dead — give_ap to a grave is rejected server-side
+    render(<ActionBar {...props(s, 'give_ap')} />);
+    expect(screen.getByRole('button', { name: /give ap/i })).toBeDisabled();
+  });
 });
