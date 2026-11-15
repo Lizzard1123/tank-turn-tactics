@@ -1,9 +1,9 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import { getAuthUserId } from '../_shared/auth.ts';
-import { ALLOWED_KEYS, sanitizePayload } from './_shared/action-validation.ts';
+import { ALLOWED_KEYS, sanitizePayload } from '../_shared/action-validation.ts';
 import {
-  applyEvent, EngineError, scrubState, attackMask, attackActors, maskEvents, maskLog,
+  applyEvent, EngineError, scrubState, attackMask, attackActors, maskEvents, maskLog, viewerLogReveal,
   type GameConfig, type GameEvent, type GameState, type PlayerSpec,
 } from '../_shared/engine.ts';
 import { rebuildStateAt, canonicalHistory, effectiveForks, type ForkPoint, type HistoryRow } from '../_shared/history.ts';
@@ -186,16 +186,23 @@ Deno.serve(async (req) => {
     const actors = attackActors(full);
     const memberStates = (detail.members ?? [])
       .filter((m) => UUID_RE.test(m.player_id))
-      .map((m) => ({
-        player_id: m.player_id,
-        state: {
-          ...scrubState(next, m.player_id),
-          log: maskLog(next.log, actors, m.player_id, mask, (id) => next.players[id]?.name ?? id),
-        },
-        events: maskEvents([event], m.player_id, mask)
-          .map((e) => ({ ...e, generation: game.cur_generation })),
-        game_patch: next.winner ? { status: 'finished' } : {},
-      }));
+      .map((m) => {
+        // eliminated + revives off: the dead viewer gets the full log and
+        // the unmasked event
+        const reveal = viewerLogReveal(next, m.player_id);
+        return {
+          player_id: m.player_id,
+          state: {
+            ...scrubState(next, m.player_id),
+            log: reveal
+              ? next.log
+              : maskLog(next.log, actors, m.player_id, mask, (id) => next.players[id]?.name ?? id),
+          },
+          events: (reveal ? [event] : maskEvents([event], m.player_id, mask))
+            .map((e) => ({ ...e, generation: game.cur_generation })),
+          game_patch: next.winner ? { status: 'finished' } : {},
+        };
+      });
 
     // Atomic single-round-trip commit (migration 0016): events insert +
     // snapshot upsert + per-member realtime rows + winner status, previously

@@ -2,7 +2,7 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import {
   applyEvent, planBotAction, heartSpawnPos, normalizeHeartState, mulberry32, hashSeed,
-  scrubState, attackMask, attackActors, maskLog,
+  scrubState, attackMask, attackActors, maskLog, viewerLogReveal,
   type GameEvent, type GameState,
 } from '../_shared/engine.ts';
 import { canonicalHistory, effectiveForks } from '../_shared/history.ts';
@@ -325,7 +325,10 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
       player_id: m.player_id,
       state: {
         ...scrubState(state, m.player_id),
-        log: maskLog(state.log, actors, m.player_id, mask, (id) => state.players[id]?.name ?? id),
+        // eliminated + revives off: the dead viewer gets the full log
+        log: viewerLogReveal(state, m.player_id)
+          ? state.log
+          : maskLog(state.log, actors, m.player_id, mask, (id) => state.players[id]?.name ?? id),
       },
       events: newEvents.map((e) => ({ ...e, generation: game.cur_generation })),
       game_patch: patch,

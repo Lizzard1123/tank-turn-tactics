@@ -3,7 +3,7 @@ import { admin } from '../_shared/client.ts';
 import { getAuthUserId } from '../_shared/auth.ts';
 import {
   applyEvent, createInitialState,
-  attackMask, attackActors, maskEvents, maskLog, scrubState, scrubConfig,
+  attackMask, attackActors, maskEvents, maskLog, scrubState, scrubConfig, viewerLogReveal,
   type GameEvent, type GameState,
 } from '../_shared/engine.ts';
 import { canonicalHistory, effectiveForks, type ForkPoint, type HistoryRow } from '../_shared/history.ts';
@@ -110,9 +110,15 @@ Deno.serve(async (req) => {
       const rawConfig = game.config as unknown as GameState['config'];
       const mask = attackMask(history);
       const actors = attackActors(history);
+      // eliminated + revives off = nothing left to protect: the full,
+      // unmasked log goes on the wire (maskEvents stays on `history`, which
+      // only feeds the post-game scrubber)
+      const reveal = viewerLogReveal(state, me.id);
       const stateForViewer: GameState = {
         ...scrubState(state, me.id),
-        log: maskLog(state.log, actors, me.id, mask, (id) => state.players[id]?.name ?? id),
+        log: reveal
+          ? state.log
+          : maskLog(state.log, actors, me.id, mask, (id) => state.players[id]?.name ?? id),
       };
       // the scrubber's starting point, computed server-side with the real
       // seed (createInitialState is seed-deterministic, so this is exact).
@@ -138,7 +144,7 @@ Deno.serve(async (req) => {
           initial,
         },
         state: stateForViewer,
-        events: maskEvents(tail, me.id, mask),  // authoritative tail (applied)
+        events: reveal ? tail : maskEvents(tail, me.id, mask),  // authoritative tail (applied)
         history: maskEvents(history, me.id, mask), // full event record for the scrubber
         members,
         avatars,

@@ -69,6 +69,11 @@ export function maskLog(
     if (!mask.masked.has(entry.seq)) return entry;
     if (actorBySeq.get(entry.seq) === me) return entry;
     const targetId = mask.victimBySeq.get(entry.seq) ?? '';
+    // final blows mask to the same "dealt the final blow" wording (the kind
+    // marker stays; only the actor name is hidden)
+    if (entry.kind === 'kill') {
+      return { ...entry, text: `Someone dealt the final blow to ${targetName(targetId)}` };
+    }
     return { ...entry, text: `Someone attacked ${targetName(targetId)} for 1 damage` };
   });
 }
@@ -79,6 +84,14 @@ export function attackActors(canonical: GameEvent[]): Map<number, PlayerId> {
   const out = new Map<number, PlayerId>();
   for (const e of canonical) if (e.type === 'attack') out.set(e.seq, e.actorId);
   return out;
+}
+
+// Full-log reveal for eliminated viewers: a dead player in a revives-off
+// game cannot come back, so attacker anonymity protects nothing anymore —
+// they get the complete, unmasked event log (and event stream). With
+// revives ON the mask stays: the dead may return to fight with that intel.
+export function viewerLogReveal(state: GameState, viewerId: PlayerId): boolean {
+  return (state.players[viewerId]?.hp ?? 1) <= 0 && !state.config.revives;
 }
 
 // Remove the seed and everyone else's AP from a state going on the wire.

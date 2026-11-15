@@ -3,7 +3,7 @@ import { applyEvent } from '../src/reducer';
 import { createInitialState } from '../src/state';
 import { applyEvents } from '../src/replay';
 import {
-  attackMask, attackActors, maskEvents, maskLog, scrubState, scrubConfig, HIDDEN_ACTOR,
+  attackMask, attackActors, maskEvents, maskLog, scrubState, scrubConfig, viewerLogReveal, HIDDEN_ACTOR,
 } from '../src/scrub';
 import type { GameConfig, GameEvent, GameState, LogEntry } from '../src/types';
 
@@ -242,6 +242,31 @@ describe('scrubState', () => {
     expect(out.seed).toBe(0);
     expect(out.board).toBe(cfg.board);
     expect(out.startingHp).toBe(cfg.startingHp);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// viewerLogReveal — dead viewers with revives off get the full log
+// ---------------------------------------------------------------------------
+
+describe('viewerLogReveal', () => {
+  it('a dead viewer in a revives-off game sees the full log', () => {
+    const s = { ...base, players: { ...base.players, p2: { ...base.players.p2, hp: 0 } } };
+    expect(viewerLogReveal(s, 'p2')).toBe(true);
+  });
+
+  it('revives ON keeps the mask even for the dead (they may come back)', () => {
+    const on = { ...base, config: { ...base.config, revives: true } };
+    const s = { ...on, players: { ...on.players, p2: { ...on.players.p2, hp: 0 } } };
+    expect(viewerLogReveal(s, 'p2')).toBe(false);
+  });
+
+  it('living viewers never get the reveal', () => {
+    expect(viewerLogReveal(base, 'p1')).toBe(false);
+  });
+
+  it('a viewer missing from the players map defaults to alive (no reveal)', () => {
+    expect(viewerLogReveal(base, 'ghost')).toBe(false);
   });
 });
 
