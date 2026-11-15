@@ -261,7 +261,7 @@ describe('TestMode', () => {
 
   test('renders test mode badge', async () => {
     vi.useFakeTimers();
-    const { container } = render(
+    render(
       <LocalGameProvider>
         <MemoryRouter initialEntries={['/test']}>
           <Routes>

@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Dashboard from './Dashboard';
@@ -238,5 +238,104 @@ describe('Dashboard', () => {
     await user.click(screen.getByTestId('finished-games-toggle'));
     await user.click(screen.getByRole('button', { name: /^delete/i }));
     expect(api.gameDelete).toHaveBeenCalledWith('tok-1', 'g3');
+  });
+
+  // --- host controls: End (flag) on an active play game, decline path, nav ---
+
+  test('host ending an active play game clicks the END control, which calls game-delete', async () => {
+    vi.mocked(api.gameList)
+      .mockResolvedValueOnce({
+        games: [{ id: 'g9', name: 'Long War', mode: 'play', status: 'active', playerCount: 4, created_at: '', createdBy: 'p1' }],
+      })
+      .mockResolvedValue({ games: [] });
+    vi.mocked(api.gameDelete).mockResolvedValue({ ok: true });
+    vi.stubGlobal('confirm', () => true);
+    const user = userEvent.setup();
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByText('Long War');
+    await user.click(screen.getByRole('button', { name: /^end/i }));
+    expect(api.gameDelete).toHaveBeenCalledWith('tok-1', 'g9');
+  });
+
+  test('declining the confirm dialog never calls game-delete', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [{ id: 'g2', name: 'Test Run', mode: 'test', status: 'lobby', playerCount: 1, created_at: '', createdBy: 'p1' }],
+    });
+    vi.stubGlobal('confirm', () => false);
+    const user = userEvent.setup();
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByText('Test Run');
+    await user.click(screen.getByRole('button', { name: /^delete/i }));
+    expect(api.gameDelete).not.toHaveBeenCalled();
+    expect(screen.getByText('Test Run')).toBeInTheDocument();
+  });
+
+  test('failed delete surfaces the error block', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [{ id: 'g2', name: 'Test Run', mode: 'test', status: 'lobby', playerCount: 1, created_at: '', createdBy: 'p1' }],
+    });
+    vi.mocked(api.gameDelete).mockRejectedValue(new Error('cannot delete'));
+    vi.stubGlobal('confirm', () => true);
+    const user = userEvent.setup();
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByText('Test Run');
+    await user.click(screen.getByRole('button', { name: /^delete/i }));
+    await screen.findByText(/cannot delete/i);
+  });
+
+  test('lobby games route to the lobby page, active games to the game page', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [
+        { id: 'g-l', name: 'Pending', mode: 'play', status: 'lobby', playerCount: 2, created_at: '', createdBy: 'p2' },
+        { id: 'g-a', name: 'Running', mode: 'play', status: 'active', playerCount: 4, created_at: '', createdBy: 'p2' },
+      ],
+    });
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/games']}>
+        <Routes>
+          <Route path="/games" element={<Dashboard />} />
+          <Route path="/lobby/:gameId" element={<div>LOBBY PAGE</div>} />
+          <Route path="/game/:gameId" element={<div>GAME PAGE</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText('Pending');
+    await user.click(screen.getByText('Pending'));
+    expect(screen.getByText('LOBBY PAGE')).toBeInTheDocument();
+  });
+
+  test('active games route to the game page', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({
+      games: [{ id: 'g-a', name: 'Running', mode: 'play', status: 'active', playerCount: 4, created_at: '', createdBy: 'p2' }],
+    });
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/games']}>
+        <Routes>
+          <Route path="/games" element={<Dashboard />} />
+          <Route path="/game/:gameId" element={<div>GAME PAGE</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    await screen.findByText('Running');
+    await user.click(screen.getByText('Running'));
+    expect(screen.getByText('GAME PAGE')).toBeInTheDocument();
+  });
+
+  test('create button is disabled while a create is in flight', async () => {
+    vi.mocked(api.gameList).mockResolvedValue({ games: [] });
+    let release!: (v: unknown) => void;
+    vi.mocked(api.gameCreate).mockImplementation(
+      (() => new Promise((r: (v: never) => void) => { release = r as typeof release; })) as never,
+    );
+    const user = userEvent.setup();
+    render(<MemoryRouter><Dashboard /></MemoryRouter>);
+    await screen.findByRole('button', { name: /^create$/i });
+    await user.type(screen.getByLabelText(/game name/i), 'My War');
+    await user.click(screen.getByRole('button', { name: /^create$/i }));
+    expect(screen.getByRole('button', { name: /^create$/i })).toBeDisabled();
+    release({ gameId: 'g1', inviteCode: 'x' });
+    await waitFor(() => expect(screen.getByRole('button', { name: /^create$/i })).toBeEnabled());
   });
 });

@@ -34,3 +34,25 @@ test('Play button is clickable', () => {
   render(<MemoryRouter><Landing /></MemoryRouter>);
   expect(screen.getByTestId('btn-play')).toBeInTheDocument();
 });
+
+test('guest sees profile but not register', () => {
+  vi.mocked(useAuth).mockReturnValue({
+    player: { id: 'p9', name: 'guest', isGuest: true },
+    token: 't', isGuest: true,
+    signin: vi.fn(), register: vi.fn(), guestSignin: vi.fn(), signout: vi.fn(),
+  } as never);
+  render(<MemoryRouter><Landing /></MemoryRouter>);
+  expect(screen.getByTestId('btn-profile')).toBeInTheDocument();
+  expect(screen.queryByTestId('btn-play')).toBeInTheDocument();
+});
+
+test('instructions and test mode links are present', () => {
+  render(<MemoryRouter><Landing /></MemoryRouter>);
+  expect(screen.getByTestId('btn-instructions')).toHaveAttribute('href', '/instructions');
+  expect(screen.getByTestId('btn-test')).toHaveAttribute('href', '/test');
+});
+
+test('page title renders', () => {
+  render(<MemoryRouter><Landing /></MemoryRouter>);
+  expect(screen.getByText('Tank Turn Tactics')).toBeInTheDocument();
+});
