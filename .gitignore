@@ -17,3 +17,9 @@ memory/
 # dev-setup lab state: generated account passwords + browser profiles
 scripts/dev-accounts.json
 scripts/.dev-profiles/
+
+# personal/scratch files: keep local, never track
+/ollama-optimization-report.md
+/ollama-optimized-modelfile
+/session_note_injected_message.txt
+docs/screenshots/
