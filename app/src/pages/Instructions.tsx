@@ -165,7 +165,7 @@ export default function Instructions() {
           <strong>Health (HP)</strong> — starts at 3. You can only heal by
           picking up hearts on the board. At 0 HP you die and join the Jury.</p>
           <p><Icon html={boltSvg} width={14} height={14} className="stat-icon" /> <strong>Action Points (AP)</strong> — the resource to act
-          with. Everyone starts with 4 AP and gains more each day.</p>
+          with. Everyone starts with 0 AP and gains more each day.</p>
           <p><Icon html={targetSvg} width={14} height={14} className="stat-icon" /> <strong>Range</strong> — the distance (in grid steps) at which
           you can interact with other players. Starts at 2.</p>
         </div>
@@ -207,8 +207,8 @@ export default function Instructions() {
                 <td><strong>Give Heart</strong></td>
                 <td>1 of YOUR HP</td>
                 <td>
-                  Heal an ally below max HP by 1, or <strong>revive</strong> a dead player at 1 HP / 0 AP (if revives are enabled).
-                  You always keep at least 1 HP.
+                  Heal an ally below max HP by 1, or give a heart to any
+                  player in range — living or dead.
                 </td>
               </tr>
               <tr>
@@ -255,8 +255,7 @@ export default function Instructions() {
           secret random minute. There is <strong>no countdown</strong> in this
           mode — stay ready, and don't assume anyone else's AP either.</p>
           <p><strong>AP is secret</strong> — hoard it, spend it, or gift it;
-          only your own stash is visible to you. No countdown means no
-          guarantees.</p>
+          only your own stash is visible to you.</p>
           <p>Tap your AP counter to see a popup: your current AP, the lifetime
           total the game has granted you (all AP you've ever earned), and any
           jury tint explanation — why your counter is golden or purple.</p>
@@ -298,9 +297,8 @@ export default function Instructions() {
           <p><strong>Heal:</strong> a living ally below max HP gains 1 HP.</p>
           <p><strong>Revive:</strong> if revives are enabled, giving a heart
           to a <em>dead</em> player brings them back at <strong>1 HP / 0
-          AP</strong>, straight off the jury. Dead players with revives on see
-          no board and no event log — just the jury vote and a long wait for
-          someone to care.</p>
+          AP</strong>, straight off the jury. While dead you watch the board
+          and vote daily — a heart from a teammate is your only way back.</p>
         </div>
         <Figure caption="Hearts — give them, receive them"><HeartGraphic /></Figure>
       </div>
@@ -311,15 +309,15 @@ export default function Instructions() {
           <h2>Special rules</h2>
 
           <h3>AP Steal on Kill</h3>
-          <p>With this rule on, the final blow transfers the victim's entire
-          AP stash to the killer. Off, a dead player's AP dies with them.
+          <p>With this rule on, delivering the final blow transfers the
+          victim's entire AP stash to you. Off, that AP is lost.
           Choose your assassinations by the loot.</p>
 
           <h3>Jury Haunt</h3>
-          <p>The jury's most-voted living player is <em>haunted</em> for the
-          day — they receive no AP on the next tick. A tie haunts nobody;
-          the 3-vote jury bonus still applies to the haunted player.
-          Vote carefully.</p>
+          <p>The jury's most-voted living player is <em>haunted</em> — they
+          receive no AP on the next tick. A tie for most votes haunts nobody.
+          A player can be haunted and still receive the 3-vote bonus; the two
+          effects are independent. Vote carefully.</p>
 
           <h3>Jury AP Tints</h3>
           <p>The day after the votes are tallied, your AP counter changes
@@ -336,7 +334,9 @@ export default function Instructions() {
 
           <h3>Gravestones</h3>
           <p>Dead flags stay on the board as gravestones — small tombstones
-          with their name and a portrait. Graves <strong>don't block
+          with their name and a portrait. If several players die on the same
+          square, each gets a smaller stone; up to 4 keep names, anything
+          beyond that shows only a count tag. Graves <strong>don't block
           movement</strong> — drive right over them (and hearts can spawn
           beside them).</p>
         </div>
@@ -367,8 +367,8 @@ export default function Instructions() {
           the jury screen you can watch the board and <strong>vote for a living
           player</strong> each day.</p>
           <p>Any living player with <strong>3 or more votes</strong> receives
-          1 bonus AP on the next tick. Your vote stays locked until you change
-          it — but everyone else can switch theirs too.</p>
+          1 bonus AP on the next tick. You can change your vote at any
+          time — and so can everyone else.</p>
           <p>Your votes are secret — no one can see who you voted for.</p>
           <p>Don't make enemies on your way out.</p>
         </div>
