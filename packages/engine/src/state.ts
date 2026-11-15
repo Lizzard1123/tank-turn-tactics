@@ -36,3 +36,23 @@ export function normalizeHeartState(s: GameState): GameState {
   const legacy = s.heart;
   return { ...s, hearts: legacy ? [{ x: legacy.x, y: legacy.y, seq: legacy.seq }] : [], heart: null };
 }
+
+// Backfill the lifetime AP counter for snapshots that predate the field.
+// gainAp only materializes apEarned on a player's next GRANT (reconstructing
+// the "everything so far counts as granted" baseline from their pre-gain ap),
+// so a legacy player shows no total at all until that grant — the Action
+// Points popup would fall back to current ap as the total. This applies the
+// exact same baseline up front: apEarned ??= ap. Idempotent; never lowers an
+// existing counter.
+export function ensureApEarned(s: GameState): GameState {
+  let changed = false;
+  const players: Record<PlayerId, PlayerState> = { ...s.players };
+  for (const id of Object.keys(players)) {
+    const p = players[id];
+    if (p.apEarned == null) {
+      players[id] = { ...p, apEarned: p.ap };
+      changed = true;
+    }
+  }
+  return changed ? { ...s, players } : s;
+}

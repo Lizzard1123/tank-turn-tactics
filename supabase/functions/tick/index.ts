@@ -1,7 +1,7 @@
 import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import {
-  applyEvent, planBotAction, heartSpawnPos, normalizeHeartState, mulberry32, hashSeed,
+  applyEvent, planBotAction, heartSpawnPos, normalizeHeartState, ensureApEarned, mulberry32, hashSeed,
   scrubState, attackMask, attackActors, maskEvents, maskLog, viewerLogReveal, juryResultEvent,
   type GameEvent, type GameState,
 } from '../_shared/engine.ts';
@@ -236,8 +236,9 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
   if (!game || game.status !== 'active') return 0;
   const snap = detail.snap;
   if (!snap) return 0;
-  // legacy snapshots carry a single `heart`; normalize to the `hearts` array
-  let state: GameState = normalizeHeartState(snap.state as GameState);
+  // legacy snapshots carry a single `heart` (normalize to `hearts`) and may
+  // predate the apEarned lifetime counter (backfill with the engine baseline)
+  let state: GameState = ensureApEarned(normalizeHeartState(snap.state as GameState));
 
   // all events this tick appends, committed atomically at the end
   const newEvents: GameEvent[] = [];

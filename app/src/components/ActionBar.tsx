@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { type GameState, type ActionType } from '@ttt/engine';
-import { inRange } from '@ttt/engine';
 import type { BoardMode } from './Board';
 
 interface ActionBarProps {
@@ -11,9 +10,11 @@ interface ActionBarProps {
   onModeChange: (mode: BoardMode) => void;
 }
 
-// Action buttons for the local player. Move/attack/give are two-step:
-// first tap selects a mode (board highlights legal targets), second tap
-// (with a target in range) commits the action.
+// Action buttons for the local player. Every button only arms or cancels a
+// mode (the board then highlights the legal targets); the player's own board
+// tap picks the target and opens the confirmation. The buttons never choose
+// or filter a target, and never trigger an action by themselves — except
+// Upgrade Range, which has no target to choose.
 export default function ActionBar({ state, me, mode, onAction, onModeChange }: ActionBarProps) {
   const mine = state.players[me];
   const [apInfoOpen, setApInfoOpen] = useState(false);
@@ -29,46 +30,28 @@ export default function ActionBar({ state, me, mode, onAction, onModeChange }: A
   const bonusMine = (state.lastBonus ?? []).find((b) => b.id === me && b.day === state.day);
   const apTint = state.haunted === me ? 'purple' : bonusMine ? 'golden' : null;
 
-  // find a target for attack/give in the current mode (living players only:
-  // give_ap to a dead player is rejected server-side with "player is dead")
-  const targetId = Object.values(state.players).find(
-    (p) => p.id !== me && p.hp > 0 && inRange(mine.pos, p.pos, mine.range)
-      && (mode !== 'attack' || p.hp > 0),
-  )?.id ?? null;
+  // heart gifts cost 1 of the GIVER's hp (never the last one)
+  const canGiveHeart = mode === 'give_heart' || mine.hp >= 2;
 
-  // Active-mode buttons stay clickable so a second click toggles them off —
-  // even when no target is in range (that click then just unselects).
+  // Active-mode buttons stay clickable so a second click cancels the mode —
+  // even when no target is in range.
   const canAttack = mode === 'attack' || ap >= cost;
   const canGive = mode === 'give_ap' || ap >= cost;
   const canUpgrade = ap >= state.config.upgradeCost;
 
-  // heart gifts cost 1 of the GIVER's hp (never the last one); targets are
-  // allies under max hp, or graves when revives are on
-  const heartTarget = Object.values(state.players).find(
-    (p) => p.id !== me && inRange(mine.pos, p.pos, mine.range)
-      && (p.hp > 0 ? p.hp < state.config.startingHp : !!state.config.revives),
-  )?.id ?? null;
-  const canGiveHeart = mode === 'give_heart' || mine.hp >= 2;
-
+  // Buttons ONLY arm or cancel a mode — they never pick a target and never
+  // open a confirmation. The confirm dialog appears solely from the player's
+  // own board tap (which cell to move to, which person to hit, who gets AP,
+  // who gets a heart / rez), so the buttons can never act on anyone the
+  // player did not explicitly choose.
   function handleAttack() {
-    if (mode === 'attack') {
-      // toggle off: clicking the active button unselects it (also when no
-      // target is in range, since the button stays enabled in active mode)
-      if (!targetId || ap < cost) onModeChange('none');
-      else onAction('attack', { targetId });
-    } else onModeChange('attack');
+    onModeChange(mode === 'attack' ? 'none' : 'attack');
   }
   function handleGive() {
-    if (mode === 'give_ap') {
-      if (!targetId || ap < cost) onModeChange('none');
-      else onAction('give_ap', { targetId, amount: 1 });
-    } else onModeChange('give_ap');
+    onModeChange(mode === 'give_ap' ? 'none' : 'give_ap');
   }
   function handleGiveHeart() {
-    if (mode === 'give_heart') {
-      if (!heartTarget || mine.hp < 2) onModeChange('none');
-      else onAction('give_heart', { targetId: heartTarget });
-    } else onModeChange('give_heart');
+    onModeChange(mode === 'give_heart' ? 'none' : 'give_heart');
   }
   function handleMove() {
     onModeChange(mode === 'move' ? 'none' : 'move');

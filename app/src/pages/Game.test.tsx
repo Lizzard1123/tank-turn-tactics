@@ -19,6 +19,7 @@ vi.mock('../components/Board', () => ({
   default: ({ onCellTap, lastEvent, state }: { onCellTap: (p: { x: number; y: number }) => void; lastEvent?: { type: string } | null; state: { seq: number; day: number } }) => (
     <div data-testid="board" data-last-event={lastEvent?.type ?? ''} data-seq={state.seq} data-day={state.day}>
       <button data-testid="tap-legal" onClick={() => onCellTap({ x: 1, y: 0 })}>tap</button>
+      <button data-testid="tap-foe" onClick={() => onCellTap({ x: 1, y: 1 })}>tap foe</button>
     </div>
   ),
 }));
@@ -179,10 +180,10 @@ describe('Game page', () => {
     const refresh = vi.fn();
     vi.mocked(api.action).mockRejectedValue(new Error('server rejected'));
     setup({ refresh });
-    // attack p2 who is in range: first click selects attack mode, second
-    // requests the action, confirm commits it
+    // attack p2 who is in range: arm the mode, tap the target's own cell (the
+    // player's explicit pick — buttons never choose a target), confirm commits
     fireEvent.click(screen.getByTestId('btn-attack'));
-    fireEvent.click(screen.getByTestId('btn-attack'));
+    fireEvent.click(screen.getByTestId('tap-foe'));
     fireEvent.click(screen.getByTestId('confirm-yes'));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/server rejected/i));
     expect(refresh).toHaveBeenCalled();

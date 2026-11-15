@@ -41,18 +41,22 @@ describe('ActionBar', () => {
     expect(onModeChange).toHaveBeenCalledWith('move');
   });
 
-  test('attack click in none-mode selects attack; in attack-mode acts on target', () => {
+  test('attack click only arms the mode — never picks a target or confirms', () => {
     const onAction = vi.fn();
     const onModeChange = vi.fn();
-    const { unmount } = render(<ActionBar {...props(state(), 'none', onAction, onModeChange)} />);
+    render(<ActionBar {...props(state(), 'none', onAction, onModeChange)} />);
     fireEvent.click(screen.getByRole('button', { name: /attack/i }));
     expect(onModeChange).toHaveBeenCalledWith('attack');
     expect(onAction).not.toHaveBeenCalled();
-    unmount();
+  });
 
+  test('clicking the active attack button cancels; onAction is never called', () => {
+    const onAction = vi.fn();
+    const onModeChange = vi.fn();
     render(<ActionBar {...props(state(), 'attack', onAction, onModeChange)} />);
     fireEvent.click(screen.getByRole('button', { name: /attack/i }));
-    expect(onAction).toHaveBeenCalledWith('attack', { targetId: 'p2' });
+    expect(onModeChange).toHaveBeenCalledWith('none');
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   test('attack stays enabled in active mode with no enemy in range (so it can toggle off)', () => {
@@ -101,12 +105,34 @@ describe('ActionBar', () => {
     expect(onAction).not.toHaveBeenCalled();
   });
 
-  test('give AP acts on target in give mode', () => {
+  test('give AP click only arms the mode — never picks a target or confirms', () => {
     const onAction = vi.fn();
-    render(<ActionBar {...props(state(), 'give_ap', onAction)} />);
+    const onModeChange = vi.fn();
+    render(<ActionBar {...props(state(), 'none', onAction, onModeChange)} />);
     expect(screen.getByRole('button', { name: /give ap/i })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: /give ap/i }));
-    expect(onAction).toHaveBeenCalledWith('give_ap', { targetId: 'p2', amount: 1 });
+    expect(onModeChange).toHaveBeenCalledWith('give_ap');
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  test('clicking the active give AP button cancels; onAction is never called', () => {
+    const onAction = vi.fn();
+    const onModeChange = vi.fn();
+    render(<ActionBar {...props(state(), 'give_ap', onAction, onModeChange)} />);
+    fireEvent.click(screen.getByRole('button', { name: /give ap/i }));
+    expect(onModeChange).toHaveBeenCalledWith('none');
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  test('give heart click only arms the mode — even a lone grave is never auto-picked', () => {
+    const onAction = vi.fn();
+    const onModeChange = vi.fn();
+    const s = state({ config: { ...state().config, heartGifts: true, revives: true } });
+    s.players.p2.hp = 0; // the only in-range candidate is a grave — still no auto-pick
+    render(<ActionBar {...props(s, 'none', onAction, onModeChange)} />);
+    fireEvent.click(screen.getByRole('button', { name: /give heart/i }));
+    expect(onModeChange).toHaveBeenCalledWith('give_heart');
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   test('upgrade range fires immediately', () => {

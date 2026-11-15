@@ -3,7 +3,7 @@ import { admin } from '../_shared/client.ts';
 import { getAuthUserId } from '../_shared/auth.ts';
 import { ALLOWED_KEYS, sanitizePayload } from '../_shared/action-validation.ts';
 import {
-  applyEvent, EngineError, scrubState, attackMask, attackActors, maskEvents, maskLog, viewerLogReveal,
+  applyEvent, EngineError, ensureApEarned, scrubState, attackMask, attackActors, maskEvents, maskLog, viewerLogReveal,
   type GameConfig, type GameEvent, type GameState, type PlayerSpec,
 } from '../_shared/engine.ts';
 import { rebuildStateAt, canonicalHistory, effectiveForks, type ForkPoint, type HistoryRow } from '../_shared/history.ts';
@@ -97,6 +97,9 @@ Deno.serve(async (req) => {
     for (const r of detail.tail ?? []) {
       state = applyEvent(state, toEvent(r));
     }
+    // backfill the apEarned lifetime counter on legacy snapshots so the
+    // committed state carries it (see engine/state.ts ensureApEarned)
+    state = ensureApEarned(state);
 
     if (type === 'fork') {
       if (game.mode !== 'test' || game.created_by !== me.id)

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { applyEvents, normalizeHeartState, type GameEvent, type GameState, type PlayerId } from '@ttt/engine';
+import { applyEvents, ensureApEarned, normalizeHeartState, type GameEvent, type GameState, type PlayerId } from '@ttt/engine';
 import { gameGet, type GameDetail } from './api';
 import { supabase } from './supabaseClient';
 
@@ -91,9 +91,13 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
       const tail = d.events as GameEvent[];
       const future = tail.filter((e) => e.seq > base.seq);
       const merged = future.length > 0 ? applyEvents(base, future) : base;
+      // Backfill the apEarned lifetime counter for legacy snapshots (the
+      // engine's own baseline: apEarned ??= ap). Defense in depth alongside
+      // the server-side backfill — the Action Points popup stays exact even
+      // while a stale deployed game-get is still serving old snapshots.
+      setState(ensureApEarned(merged));
       setDetail(d.game);
       setAvatars(d.avatars);
-      setState(merged);
       setEvents(tail);
       setHistory(d.history as Array<GameEvent & { generation?: number }>);
       setMe(d.me as PlayerId);

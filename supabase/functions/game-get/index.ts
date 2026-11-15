@@ -2,7 +2,7 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import { getAuthUserId } from '../_shared/auth.ts';
 import {
-  applyEvent, createInitialState,
+  applyEvent, createInitialState, ensureApEarned,
   attackMask, attackActors, maskEvents, maskLog, scrubState, scrubConfig, viewerLogReveal,
   type GameEvent, type GameState,
 } from '../_shared/engine.ts';
@@ -89,6 +89,10 @@ Deno.serve(async (req) => {
       for (const e of tail) {
         try { state = applyEvent(state, e); } catch { break; }
       }
+      // legacy snapshots predate the apEarned lifetime counter — backfill it
+      // (apEarned ??= ap, the engine's own baseline) so the Action Points
+      // popup is exact immediately instead of after the player's next grant
+      state = ensureApEarned(state);
       // full history for scrubbing: the CANONICAL timeline across fork
       // generations — each ancestor generation is cut at the fork that ended
       // it (game_forks), so replaying from the initial state never walks a

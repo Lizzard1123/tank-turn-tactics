@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createInitialState, normalizeHeartState } from '../src/state';
+import { createInitialState, ensureApEarned, normalizeHeartState } from '../src/state';
 import { inRange, manhattan } from '../src/geom';
 import type { GameConfig, GameState, PlayerState } from '../src/types';
 
@@ -195,5 +195,52 @@ describe('normalizeHeartState', () => {
     expect(result.tickClockMinutes).toBe(10);
     expect(result.players.p1).toEqual(legacy.players.p1);
     expect(result.order).toEqual(['p1']);
+  });
+});
+
+describe('ensureApEarned', () => {
+  // legacy snapshot: players created before the apEarned field shipped
+  const legacyPlayer = (id: string, ap: number): PlayerState => ({
+    id, name: id.toUpperCase(), pos: { x: 0, y: 0 }, hp: 3, ap,
+    range: 2, isBot: false, botDifficulty: null,
+  });
+  const legacyState = (players: Record<string, PlayerState>): GameState => ({
+    seq: 40, day: 5, tickClockMinutes: 0, config: cfg(),
+    players, order: Object.keys(players), jury: [], pendingVotes: [],
+    winner: null, log: [], hearts: [], haunted: null,
+  } as GameState);
+
+  it('backfills apEarned = ap for players missing the field', () => {
+    const s = legacyState({ p1: legacyPlayer('p1', 4), p2: legacyPlayer('p2', 0) });
+    const out = ensureApEarned(s);
+    expect(out.players.p1.apEarned).toBe(4);
+    expect(out.players.p2.apEarned).toBe(0);
+  });
+
+  it('never lowers or rewrites an existing counter', () => {
+    const tracked = { ...legacyPlayer('p1', 4), apEarned: 9 };
+    const out = ensureApEarned(legacyState({ p1: tracked }));
+    expect(out.players.p1.apEarned).toBe(9);
+  });
+
+  it('returns the SAME state object when there is nothing to backfill', () => {
+    const tracked = { ...legacyPlayer('p1', 4), apEarned: 9 };
+    const s = legacyState({ p1: tracked });
+    expect(ensureApEarned(s)).toBe(s);
+  });
+
+  it('a later grant on a backfilled player keeps the lifetime total exact', () => {
+    // legacy p1 with ap 4 → backfill 4; a +1 drip then lands apEarned at 5,
+    // matching gainAp's own baseline reconstruction (4 was "already granted")
+    const s = ensureApEarned(legacyState({ p1: legacyPlayer('p1', 4) }));
+    const granted = { ...s.players.p1, ap: s.players.p1.ap + 1 };
+    const expected = (granted.apEarned ?? granted.ap - 1) + 1;
+    expect(expected).toBe(5);
+  });
+
+  it('backfills dead players too (harmless — the popup only shows for the living)', () => {
+    const dead = { ...legacyPlayer('p1', 2), hp: 0 };
+    const out = ensureApEarned(legacyState({ p1: dead }));
+    expect(out.players.p1.apEarned).toBe(2);
   });
 });
