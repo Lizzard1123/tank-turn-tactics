@@ -58,13 +58,6 @@ export default function Jury() {
         <Icon html={skullSvg} width={14} height={14} className="stat-icon" /> You are on the jury — vote daily to grant a player bonus AP (3+ votes needed).
       </p>
 
-      {myVote && (
-        <p className="banner" data-testid="voted-banner">
-          You voted for {state.players[myVote]?.name ?? myVote} today — pick another
-          player to change your vote.
-        </p>
-      )}
-
       {/* the board is always visible — jury members spectate the war. It sits
           above the votes; with revives on, the live event feed stays hidden
           (the board is all a dead player sees); with revives off it shows. */}

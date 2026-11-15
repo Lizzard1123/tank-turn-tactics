@@ -193,7 +193,7 @@ describe('Jury', () => {
     expect(btn).toBeEnabled();
   });
 
-  test('shows voted banner after voting', async () => {
+  test('after voting: no banner, vote buttons show state instead', async () => {
     const state: GameState = {
       ...BASE_STATE,
       players: {
@@ -211,7 +211,11 @@ describe('Jury', () => {
         </Routes>
       </MemoryRouter>,
     );
-    expect(await screen.findByText(/you voted for/i)).toBeInTheDocument();
+    // the gold "You voted for…" banner is gone — the vote buttons carry the
+    // state themselves ("Your vote" disabled vs "Change vote")
+    expect(await screen.findByTestId('vote-p2')).toBeDisabled();
+    expect(screen.queryByTestId('voted-banner')).not.toBeInTheDocument();
+    expect(screen.queryByText(/you voted for/i)).not.toBeInTheDocument();
   });
 
   test('after voting: current choice pinned, others offer a change', async () => {
