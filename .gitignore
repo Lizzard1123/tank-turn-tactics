@@ -13,3 +13,7 @@ tsconfig.tsbuildinfo
 coverage/
 tmp/
 memory/
+
+# dev-setup lab state: generated account passwords + browser profiles
+scripts/dev-accounts.json
+scripts/.dev-profiles/
