@@ -212,8 +212,8 @@ export default function Instructions() {
               </tr>
               <tr>
                 <td><strong>Upgrade Range</strong></td>
-                <td>Configurable (default 2)</td>
-                <td>+1 to your interaction range. Permanent.</td>
+                <td>2 AP</td>
+                <td>+1 to your interaction range (in grid steps). Permanent.</td>
               </tr>
             </tbody>
           </table>
@@ -257,7 +257,8 @@ export default function Instructions() {
           only your own stash is visible to you. No countdown means no
           guarantees.</p>
           <p>Tap your AP counter to see a popup: your current AP, the lifetime
-          total the game has granted you, and any jury tint explanation.</p>
+          total the game has granted you (all AP you've ever earned), and any
+          jury tint explanation — why your counter is golden or purple.</p>
           <Figure caption="Tap the counter for details"><APIcon /></Figure>
         </div>
       </div>
@@ -280,7 +281,8 @@ export default function Instructions() {
           every living player (and the previous heart) as possible — expect a
           hike.</p>
           <p>Hosts can also cap how many unclaimed hearts sit on the board at
-          once: once the cap is reached, new spawns wait until one is picked up.</p>
+          once (default 1): once the cap is reached, new spawns wait until
+          one is picked up.</p>
         </div>
         <Figure caption="Hearts — find them, claim them"><HeartGraphic /></Figure>
       </div>
@@ -332,9 +334,10 @@ export default function Instructions() {
           <p>Colors clear at the next day tick.</p>
 
           <h3>Gravestones</h3>
-          <p>Dead flags stay on the board as gravestones with their name on
-          them. Graves <strong>don't block movement</strong> — drive right
-          over them (and hearts can spawn beside them).</p>
+          <p>Dead flags stay on the board as gravestones — small tombstones
+          with their name and a portrait. Graves <strong>don't block
+          movement</strong> — drive right over them (and hearts can spawn
+          beside them).</p>
         </div>
       </div>
 
@@ -347,8 +350,8 @@ export default function Instructions() {
             <li><strong>Who dealt a final blow</strong> (shown as "dealt the final blow to …").</li>
             <li><strong>Who got revived</strong> (a heart brought someone back).</li>
           </ul>
-          <p>The battle log is <strong>collapsed by default</strong> on mobile
-          — tap the banner to expand it.</p>
+          <p>The battle log is <strong>collapsed by default on mobile</strong>
+          — tap the banner to expand it. On desktop it stays open.</p>
           <p>The full event history unlocks after the game
           ends (test-mode hosts can scrub it anytime).</p>
         </div>
@@ -359,9 +362,9 @@ export default function Instructions() {
       <div className="panel">
         <div className="panel-body">
           <h2>The Jury</h2>
-          <p>When a player dies, they join the Jury. From the jury screen
-          you can watch the board and <strong>vote for a living player</strong>
-          each day.</p>
+          <p>When a player dies, their job changes: they join the Jury. From
+          the jury screen you can watch the board and <strong>vote for a living
+          player</strong> each day.</p>
           <p>Any living player with <strong>3 or more votes</strong> receives
           1 bonus AP on the next tick. Your vote stays locked until you change
           it — but everyone else can switch theirs too.</p>
