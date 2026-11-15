@@ -452,3 +452,57 @@ describe('Game page', () => {
     })).toThrow(EngineError);
   });
 });
+
+describe('jury secrecy in the post-game event feed', () => {
+  // canonical tail: a kill, then the day's jury business (vote → tick → verdict)
+  const juryHistory = [
+    { seq: 1, type: 'attack', actorId: 'p1', createdAt: 'c', payload: { targetId: 'p2' } },
+    { seq: 2, type: 'daily_tick', actorId: 'system', createdAt: 'c', payload: { apGained: 1 } },
+    { seq: 3, type: 'jury_vote', actorId: 'p2', createdAt: 'c', payload: { candidateId: 'p1' } },
+    { seq: 4, type: 'jury_result', actorId: 'system', createdAt: 'c', payload: { haunted: ['p1'] } },
+  ];
+  const feedTexts = () =>
+    [...document.querySelectorAll('[data-testid="event-feed"] li, [data-testid="event-feed"] [data-testid^="feed-row"]')]
+      .map((n) => n.textContent);
+
+  test('a living viewer (winner) sees no jury rows at all — no votes, no verdict', () => {
+    setup({
+      state: { ...STATE, winner: 'p1', log: [{ seq: 2, text: 'Day 2: all alive players gain 1 AP' }] },
+      history: juryHistory as never,
+    });
+    const texts = feedTexts().join(' | ');
+    expect(texts).not.toMatch(/jury/i); // ballot AND verdict both withheld
+    expect(texts).toContain('Day 2: all alive players gain 1 AP'); // the public day line stays
+  });
+
+  test('a redacted jury_result event replays as nothing for a living viewer', () => {
+    setup({
+      state: { ...STATE, winner: 'p1' },
+      history: [
+        ...juryHistory.slice(0, 3),
+        { seq: 4, type: 'jury_result', actorId: 'system', createdAt: 'c', payload: { redacted: true } },
+      ] as never,
+    });
+    expect(feedTexts().join(' | ')).not.toMatch(/jury/i);
+  });
+
+  test('a dead viewer (revives off, game over) reads the jury verdict row', () => {
+    setup({
+      state: {
+        ...STATE,
+        winner: 'p2',
+        players: { ...STATE.players, p1: { ...STATE.players.p1, hp: 0 } },
+        log: [
+          { seq: 2, text: 'Day 2: all alive players gain 1 AP' },
+          { seq: 4, text: 'The jury haunted me', kind: 'jury' },
+        ],
+      },
+      history: juryHistory as never,
+    });
+    const texts = feedTexts().join(' | ');
+    expect(texts).toContain('The jury haunted me'); // verdict visible to the dead
+    expect(texts).not.toMatch(/jury vote/i); // the ballot itself is still never logged
+    // the day line no longer carries jury information either
+    expect(texts).toContain('Day 2: all alive players gain 1 AP');
+  });
+});

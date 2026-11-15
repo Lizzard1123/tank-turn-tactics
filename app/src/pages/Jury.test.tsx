@@ -388,3 +388,38 @@ describe('Jury', () => {
     expect(screen.getByText('JURY')).toBeInTheDocument();
   });
 });
+
+describe('jury screen event log', () => {
+  test('shows the jury verdict line and no vote lines for the dead viewer', async () => {
+    const state: GameState = {
+      ...BASE_STATE,
+      config: { ...BASE_STATE.config, juryHaunt: true },
+      players: {
+        p1: { ...BASE_STATE.players.p1, hp: 0 },
+        p2: { ...BASE_STATE.players.p2, hp: 3 },
+      },
+      log: [
+        { seq: 1, text: 'me attacked foe for 1 damage' },
+        { seq: 2, text: 'me dealt the final blow to foe', kind: 'kill' },
+        { seq: 3, text: 'Day 2: all alive players gain 1 AP' },
+        { seq: 4, text: 'The jury haunted me', kind: 'jury' },
+      ],
+    };
+    mockEvents(state, 'p1');
+    render(
+      <MemoryRouter initialEntries={['/jury/g1']}>
+        <Routes>
+          <Route path="/jury/:gameId" element={<Jury />} />
+          <Route path="/games" element={<div>GAMES</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+    const feed = await screen.findByText(/events/i);
+    expect(feed).toBeInTheDocument();
+    expect(await screen.findByText('The jury haunted me')).toBeInTheDocument();
+    expect(screen.getByText('Day 2: all alive players gain 1 AP')).toBeInTheDocument();
+    expect(screen.getByText('me dealt the final blow to foe')).toBeInTheDocument();
+    // no per-vote lines anywhere (the ballot is never logged)
+    expect(screen.queryByText(/voted for/i)).not.toBeInTheDocument();
+  });
+});
