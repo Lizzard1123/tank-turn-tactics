@@ -23,3 +23,6 @@ scripts/.dev-profiles/
 /ollama-optimized-modelfile
 /session_note_injected_message.txt
 docs/screenshots/
+
+# prod database dumps — NEVER commit (auth users, sessions, tokens)
+backups/
