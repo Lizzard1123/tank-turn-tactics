@@ -37,10 +37,16 @@ function logLine(
     case 'attack': {
       const targetId = payload.targetId as string;
       const killed = (pre.players[targetId]?.hp ?? 1) - 1 <= 0;
-      if (payload.anon === true) {
-        return { text: `Someone attacked ${name(targetId)} for 1 damage`, kind: killed ? 'kill' : undefined };
+      // final kills read differently: "dealt the final blow", not a damage line
+      if (killed) {
+        return payload.anon === true
+          ? { text: `Someone dealt the final blow to ${name(targetId)}`, kind: 'kill' }
+          : { text: `${name(actorId)} dealt the final blow to ${name(targetId)}`, kind: 'kill' };
       }
-      return { text: `${name(actorId)} attacked ${name(targetId)} for 1 damage`, kind: killed ? 'kill' : undefined };
+      if (payload.anon === true) {
+        return { text: `Someone attacked ${name(targetId)} for 1 damage`, kind: undefined };
+      }
+      return { text: `${name(actorId)} attacked ${name(targetId)} for 1 damage`, kind: undefined };
     }
     case 'give_ap': {
       const targetId = payload.targetId as string;
@@ -227,13 +233,18 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     }
     // jury bonus: candidates with >= 3 pending votes get +1
     const bonus = countBonusVotes(s.pendingVotes);
+    const nextDay = s.day + 1;
     for (const [candidateId] of Object.entries(bonus)) {
       const p = players[candidateId];
       if (p && p.hp > 0) players[candidateId] = { ...p, ap: p.ap + 1 };
     }
     const elapsed = (event.payload.elapsedMinutes as number) ?? 0;
-    s = { ...s, day: s.day + 1, tickClockMinutes: s.tickClockMinutes + elapsed,
-      players, pendingVotes: [], haunted: lastHaunted };
+    s = { ...s, day: nextDay, tickClockMinutes: s.tickClockMinutes + elapsed,
+      players, pendingVotes: [], haunted: lastHaunted,
+      // remembered for the "golden AP icon the day after chosen" UI
+      lastBonus: Object.keys(bonus).length
+        ? Object.keys(bonus).map((id) => ({ id, day: nextDay }))
+        : [] };
   } else if (event.type === 'heart_spawn') {
     // system-only event (the tick function mints it): place another board
     // heart (the tick enforces the config's heart cap). The square must be

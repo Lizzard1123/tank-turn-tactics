@@ -35,6 +35,10 @@ export interface GameState {
   heart?: { x: number; y: number; seq: number } | null;
   // player the most recent tick haunted (juryHaunt) — log/UI hint.
   haunted?: PlayerId | null;
+  // players the most recent tick gave jury bonus AP to (>= 3 votes each),
+  // with the day it took effect — the UI shows their AP icon golden for the
+  // day AFTER the choice. Absent/empty in old snapshots = no bonus.
+  lastBonus?: Array<{ id: PlayerId; day: number }>;
 }
 
 export interface LogEntry { seq: number; text: string; kind?: LogKind }

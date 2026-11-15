@@ -201,6 +201,52 @@ describe('juryHaunt', () => {
     s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
     expect(s.players.p1.ap).toBe(1);
   });
+
+  it('records lastBonus (id + day) for the golden AP icon on the day after', () => {
+    const three = createInitialState(hauntCfg, [
+      { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+      { id: 'p2', name: 'B', isBot: false, botDifficulty: null },
+      { id: 'p3', name: 'C', isBot: false, botDifficulty: null },
+      { id: 'p4', name: 'D', isBot: false, botDifficulty: null },
+      { id: 'p5', name: 'E', isBot: false, botDifficulty: null },
+    ]);
+    let t = { ...three, jury: ['p3', 'p4', 'p5'],
+      players: { ...three.players,
+        p3: { ...three.players.p3, hp: 0 }, p4: { ...three.players.p4, hp: 0 }, p5: { ...three.players.p5, hp: 0 } } };
+    t = voted(t, [['p3', 'p1'], ['p4', 'p1'], ['p5', 'p1']]);
+    t = applyEvent(t, ev(t, 'system', 'daily_tick', { apGained: 1 }));
+    // p1 hit 3 votes → bonus AP, recorded for the UI's golden tint on this day
+    expect(t.lastBonus).toEqual([{ id: 'p1', day: 2 }]);
+    // a later tick with no votes clears the tint state
+    t = applyEvent(t, ev(t, 'system', 'daily_tick', { apGained: 1 }));
+    expect(t.lastBonus).toEqual([]);
+  });
+  it('a tick without any bonus sets lastBonus empty (not undefined)', () => {
+    const s = applyEvent({ ...hb, pendingVotes: [] }, ev(hb, 'system', 'daily_tick', { apGained: 1 }));
+    expect(s.lastBonus).toEqual([]);
+  });
+});
+
+describe('final blow log wording', () => {
+  it('the killing attack logs "dealt the final blow", not a damage line', () => {
+    let s = placeAdjacent(base, 'p1', 'p2');
+    s = { ...s, players: { ...s.players, p2: { ...s.players.p2, hp: 1 } } };
+    s = applyEvent(s, ev(s, 'p1', 'attack', { targetId: 'p2' }));
+    expect(s.log[s.log.length - 1].text).toBe('A dealt the final blow to B');
+    expect(s.log[s.log.length - 1].kind).toBe('kill');
+  });
+  it('a non-killing attack keeps the damage wording', () => {
+    let s = placeAdjacent(base, 'p1', 'p2');
+    s = applyEvent(s, ev(s, 'p1', 'attack', { targetId: 'p2' }));
+    expect(s.log[s.log.length - 1].text).toBe('A attacked B for 1 damage');
+    expect(s.log[s.log.length - 1].kind).toBeUndefined();
+  });
+  it('an anonymous final blow hides the actor', () => {
+    let s = placeAdjacent(base, 'p1', 'p2');
+    s = { ...s, players: { ...s.players, p2: { ...s.players.p2, hp: 1 } } };
+    s = applyEvent(s, ev(s, 'p1', 'attack', { targetId: 'p2', anon: true }));
+    expect(s.log[s.log.length - 1].text).toBe('Someone dealt the final blow to B');
+  });
 });
 
 describe('heart spawn + claim', () => {
