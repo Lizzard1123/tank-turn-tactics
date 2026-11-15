@@ -163,8 +163,8 @@ export default function Instructions() {
           <h2>Your stats</h2>
           <p><Icon html={heartSvg} width={14} height={14} className="stat-icon" /> <strong>Health (HP)</strong> — starts at 3. There is no healing
           beyond your starting HP. At 0 HP you die and join the Jury.</p>
-          <p><Icon html={boltSvg} width={14} height={14} className="stat-icon" /> <strong>Action Points (AP)</strong> — the resource you spend
-          to act. Everyone starts with 4 AP and gains more each day.</p>
+          <p><Icon html={boltSvg} width={14} height={14} className="stat-icon" /> <strong>Action Points (AP)</strong> — the resource to act
+          with. Everyone starts with 4 AP and gains more each day.</p>
           <p><Icon html={targetSvg} width={14} height={14} className="stat-icon" /> <strong>Range</strong> — the distance (in grid steps) at which
           you can interact with other players. Starts at 2.</p>
         </div>
@@ -204,10 +204,10 @@ export default function Instructions() {
               </tr>
               <tr>
                 <td><strong>Give Heart</strong></td>
-                <td>1 HP</td>
+                <td>1 of YOUR HP</td>
                 <td>
                   Heal an ally below max HP by 1, or <strong>revive</strong> a dead player at 1 HP / 0 AP (if revives are enabled).
-                  You always keep at least 1 HP — never costs AP.
+                  You always keep at least 1 HP.
                 </td>
               </tr>
               <tr>
@@ -254,7 +254,8 @@ export default function Instructions() {
           secret random minute. There is <strong>no countdown</strong> in this
           mode — stay ready, and don't assume anyone else's AP either.</p>
           <p><strong>AP is secret</strong> — hoard it, spend it, or gift it;
-          only your own stash is visible to you.</p>
+          only your own stash is visible to you. No countdown means no
+          guarantees.</p>
           <p>Tap your AP counter to see a popup: your current AP, the lifetime
           total the game has granted you, and any jury tint explanation.</p>
           <Figure caption="Tap the counter for details"><APIcon /></Figure>
@@ -326,7 +327,7 @@ export default function Instructions() {
           </p>
           <p>
             <span className="ap-counter ap-purple" style={{ display: 'inline-block' }}>1 AP</span>
-            {' '}— you are haunted: the jury took your AP drip for the day.
+            {' '}— you are haunted: the jury withheld your AP drip for the day.
           </p>
           <p>Colors clear at the next day tick.</p>
 
@@ -341,7 +342,7 @@ export default function Instructions() {
       <div className="panel">
         <div className="panel-body">
           <h2>Battle log</h2>
-          <p>During a game the battle log only shows key events:</p>
+          <p>During a game the battle log only shows select key events:</p>
           <ul>
             <li><strong>Who dealt a final blow</strong> (shown as "dealt the final blow to …").</li>
             <li><strong>Who got revived</strong> (a heart brought someone back).</li>

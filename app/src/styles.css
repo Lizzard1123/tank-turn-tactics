@@ -830,12 +830,12 @@ button.ap-counter:focus-visible {
   align-items: start;
 }
 .screenshot-mobile img {
-  max-width: 200px;
   width: 100%;
+  max-width: 200px;
 }
 .screenshot-desktop img {
-  max-width: 340px;
   width: 100%;
+  max-width: 340px;
 }
 
 /* Mock action bar buttons — match the real action bar style */
