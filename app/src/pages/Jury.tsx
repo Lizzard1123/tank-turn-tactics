@@ -3,8 +3,9 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import Board from '../components/Board';
 import EventFeed from '../components/EventFeed';
 import TankCard from '../components/TankCard';
-import { Icon, skullSvg } from '../lib/icons';
+import { Icon, skullSvg, clipboardSvg } from '../lib/icons';
 import { useGameEvents } from '../lib/useGameEvents';
+import { useApCountdown, formatCountdown } from '../lib/useApCountdown';
 import { action } from '../lib/api';
 import { ErrorScreen, Loading } from '../components/Status';
 
@@ -12,7 +13,9 @@ import { ErrorScreen, Loading } from '../components/Status';
 export default function Jury() {
   const { gameId } = useParams<{ gameId: string }>();
   const navigate = useNavigate();
-  const { state, me, avatars, refresh } = useGameEvents(gameId);
+  const { state, me, avatars, refresh, detail } = useGameEvents(gameId);
+  // same server-derived AP countdown the game screen shows
+  const apRemaining = useApCountdown(state, detail);
 
   // revived (or game over while here): back to the game screen — the jury
   // board is read-only, so a revived player stuck here could not move
@@ -46,25 +49,41 @@ export default function Jury() {
 
   return (
     <main className="page">
-      <nav>
+      {/* same nav bar as the Lobby/Dashboard: back on the left, config and
+          profile on the right; the extra bottom margin separates it from the
+          status bar below */}
+      <nav className="jury-nav">
         <Link to="/games" className="link-button btn">← Back</Link>
+        <span className="row" style={{ gap: 8 }}>
+          <Link to="/config" className="link-button btn" data-testid="nav-config" aria-label="Game config">
+            <Icon html={clipboardSvg} width={14} height={14} /> Config
+          </Link>
+          <Link to="/profile" className="link-button btn">Profile</Link>
+        </span>
       </nav>
       <header className="game-status">
         <span>Day {state.day}</span>
         <span className="mode-badge">JURY</span>
+        {/* same server-derived countdown as the game header; the hook yields
+            null for 'random' schedules (grant minute is secret) and for games
+            without an AP interval, which hides the chip */}
+        {!state.winner && apRemaining != null && (
+          <span className="timer" data-testid="ap-timer">AP in {formatCountdown(apRemaining)}</span>
+        )}
       </header>
 
-      <p className="subtitle">
-        <Icon html={skullSvg} width={14} height={14} className="stat-icon" /> You are on the jury — vote daily to grant a player bonus AP (3+ votes needed).
-      </p>
-
-      {/* the board is always visible — jury members spectate the war. It sits
-          above the votes; with revives on, the live event feed stays hidden
-          (the board is all a dead player sees); with revives off it shows. */}
+      {/* the board is always visible — jury members spectate the war (with
+          revives on, the live event feed stays hidden — the board is all a
+          dead player sees; with revives off it shows below). */}
       <Board state={state} selectedMode="none" me={me} avatars={avatars} onCellTap={() => {}} />
 
       <section className="card" aria-label="Alive players">
         <h2>Alive players</h2>
+        <p className="subtitle" data-testid="jury-subtitle">
+          <Icon html={skullSvg} width={14} height={14} className="stat-icon" />{' '}
+          You are on the jury — vote daily to grant a player bonus AP (3+ votes
+          needed). Your votes are not public — no one can see who you voted for.
+        </p>
         {alive.map((p) => {
           const mine = p.id === myVote;
           return (

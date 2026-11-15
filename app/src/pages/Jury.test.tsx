@@ -212,10 +212,11 @@ describe('Jury', () => {
       </MemoryRouter>,
     );
     // the gold "You voted for…" banner is gone — the vote buttons carry the
-    // state themselves ("Your vote" disabled vs "Change vote")
+    // state themselves ("Your vote" disabled vs "Change vote"); the jury
+    // subtitle's privacy note may mention voting, but not the banner text
     expect(await screen.findByTestId('vote-p2')).toBeDisabled();
     expect(screen.queryByTestId('voted-banner')).not.toBeInTheDocument();
-    expect(screen.queryByText(/you voted for/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/pick another player to change your vote/i)).not.toBeInTheDocument();
   });
 
   test('after voting: current choice pinned, others offer a change', async () => {
@@ -393,6 +394,64 @@ describe('Jury', () => {
   });
 });
 
+describe('jury page extras', () => {
+  const deadState: GameState = {
+    ...BASE_STATE,
+    players: {
+      p1: { ...BASE_STATE.players.p1, hp: 0 },
+      p2: { ...BASE_STATE.players.p2, hp: 3 },
+    },
+  };
+
+  function renderJury(state: GameState, detail?: unknown) {
+    (useGameEvents as ReturnType<typeof vi.fn>).mockReturnValue({
+      state,
+      me: 'p1',
+      avatars: {},
+      refresh: vi.fn(),
+      detail: detail ?? null,
+    });
+    return render(
+      <MemoryRouter initialEntries={['/jury/g1']}>
+        <Routes>
+          <Route path="/jury/:gameId" element={<Jury />} />
+          <Route path="/games" element={<div>GAMES</div>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  test('shows the AP countdown in the header for interval games', async () => {
+    const state: GameState = {
+      ...deadState,
+      config: { ...BASE_STATE.config, apSchedule: 'interval', apIntervalMinutes: 30 },
+    };
+    renderJury(state, { id: 'g1', status: 'active', lastTickAt: new Date().toISOString() });
+    const timer = await screen.findByTestId('ap-timer');
+    expect(timer.textContent).toMatch(/^AP in \d+m \d+s$/);
+  });
+
+  test('hides the AP timer for random schedules and interval-less games', async () => {
+    renderJury(deadState); // no apIntervalMinutes → hook yields null → no chip
+    await screen.findByTestId('board');
+    expect(screen.queryByTestId('ap-timer')).not.toBeInTheDocument();
+  });
+
+  test('jury explainer sits under "Alive players" with the privacy note', async () => {
+    renderJury(deadState);
+    const heading = await screen.findByText(/alive players/i);
+    const note = await screen.findByTestId('jury-subtitle');
+    expect(note.textContent).toMatch(/You are on the jury/);
+    expect(note.textContent).toMatch(/3\+ votes needed/);
+    expect(note.textContent).toMatch(/votes are not public/i);
+    // the note renders inside the same card, after the heading
+    expect(note.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
+    // and above the first vote button
+    const btn = screen.getByTestId('vote-p2');
+    expect(note.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
 describe('jury screen event log', () => {
   test('shows the jury verdict line and no vote lines for the dead viewer', async () => {
     const state: GameState = {
@@ -423,7 +482,9 @@ describe('jury screen event log', () => {
     expect(await screen.findByText('The jury haunted me')).toBeInTheDocument();
     expect(screen.getByText('Day 2: all alive players gain 1 AP')).toBeInTheDocument();
     expect(screen.getByText('me dealt the final blow to foe')).toBeInTheDocument();
-    // no per-vote lines anywhere (the ballot is never logged)
-    expect(screen.queryByText(/voted for/i)).not.toBeInTheDocument();
+    // no per-vote lines anywhere (the ballot is never logged); the privacy
+    // note ("no one can see who you voted for") is not a vote line
+    expect(screen.queryByText(/Jury member/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/pick another player/i)).not.toBeInTheDocument();
   });
 });

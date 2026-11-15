@@ -643,6 +643,23 @@ button.ap-counter:focus-visible {
 }
 
 .jury-row { display: flex; justify-content: space-between; gap: 16px; padding: 6px 0; border-bottom: 1px solid var(--olive-soft); }
+/* all jury vote buttons share the same width, so rows align ("Vote",
+   "Change vote" and "Your vote" look uniform instead of text-sized) */
+.jury-row button { flex: 0 0 150px; width: 150px; text-align: center; white-space: nowrap; }
+/* the player card takes the rest of the row at full width — the fixed-width
+   vote button must not shrink it */
+.jury-row .tank-card { flex: 1 1 auto; min-width: 0; }
+/* jury page top nav: back left, config/profile right, with breathing room
+   before the status bar / board below */
+.jury-nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+/* AP countdown chip: fills the leftover space in the header bar (flex: 1) and
+   centers its text, so the shrinking numbers never shift the neighbors */
+.game-status .timer { flex: 1 1 auto; min-width: 150px; text-align: center; box-sizing: border-box; }
 
 /* ---------- misc ---------- */
 
