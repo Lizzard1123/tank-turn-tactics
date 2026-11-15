@@ -105,13 +105,19 @@ export function useApCountdown(
       // interval: base = last server tick. With none yet, the server grants
       // immediately on its next cron fire, so the first countdown runs to the
       // top of the minute — not gameStart + interval (cron owns the phase).
+      // The started-at base is read from the ref AT CALL TIME: on the first
+      // mount the countdown effect runs after the ref-stamp effect but the
+      // render-time capture would still be null.
       if (!lastTickAt) {
-        if (!gameStartedAt) return null;
+        const startedAt = gameStartedAtRef.current;
+        if (!startedAt) return null;
         return Math.round((60_000 - (now % 60_000)) / 1000);
       }
       const base = new Date(lastTickAt).getTime();
       const intervalSeconds = apIntervalMinutes * 60;
-      const elapsed = Math.floor((now - base) / 1000);
+      // clamped at 0: a server timestamp a hair AHEAD of the client clock
+      // must not push the countdown past a full interval
+      const elapsed = Math.max(0, Math.floor((now - base) / 1000));
       // grant boundary: hold at 0 until the server confirms the grant (a
       // refetch brings a new lastTickAt and resets the hold) — no rollover on
       // guesswork while the actual drip may be seconds late (cron jitter).
