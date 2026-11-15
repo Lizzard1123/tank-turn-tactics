@@ -233,7 +233,12 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
               className={`grave${many ? ' grave-crowded' : ''}`}
               style={{ transform: `translate(${p.pos.x * CELL}px, ${p.pos.y * CELL}px)`, pointerEvents: 'none' }}
             >
-              <g transform={`translate(${slot[0] * CELL - (CELL * scale) / 2}px, ${slot[1] * CELL - (CELL * scale) / 2}px) scale(${scale})`}>
+              {/* SVG transform ATTRIBUTE takes user units, not CSS px —
+                  "px" makes Chrome reject the whole transform, and every
+                  mini stone then renders full-size stacked on the same spot
+                  (the "one giant tombstone" bug). translate uses plain
+                  numbers separated by a space. */}
+              <g transform={`translate(${slot[0] * CELL - (CELL * scale) / 2} ${slot[1] * CELL - (CELL * scale) / 2}) scale(${scale})`}>
                 <path
                   d={`M${CELL * 0.16} ${CELL * 0.88}
                       V ${CELL * 0.38}
