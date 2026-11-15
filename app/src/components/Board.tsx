@@ -34,16 +34,18 @@ export function nameWidthPx(text: string, fontSize: number, letterSpacing = 0): 
 const TANK_NAME_MAX = CELL - 8;
 
 // --- crowded-grave layout -------------------------------------------------
-// 2+ dead on one square: mini stones fanned across the cell, drawn in death
-// order so later stones overlap earlier ones (offsets chosen so neighbours
-// genuinely overlap), on a shared dirt mound, with a "×N" tag — the cluster
-// must read as SEVERAL graves, never as one small stone.
+// 2+ dead on one square: SEPARATE small tombstones — one per dead player, up
+// to four (2 → side by side, 3 → triangle, 4 → 2×2 grid) on a shared dirt
+// mound. Each small stone keeps its portrait and its (squeezed) name. Five or
+// more dead: still four stones but no names — a square that crowded cannot
+// fit readable text — plus a "×N" count tag for the ones beyond the fourth.
+const CROWD_MAX = 4;
 const CROWD_SLOTS: Record<number, [number, number][]> = {
-  2: [[0.34, 0.46], [0.66, 0.52]],
-  3: [[0.5, 0.32], [0.32, 0.58], [0.68, 0.58]],
-  4: [[0.38, 0.34], [0.62, 0.34], [0.38, 0.66], [0.62, 0.66]],
+  2: [[0.27, 0.56], [0.73, 0.56]],
+  3: [[0.5, 0.34], [0.27, 0.7], [0.73, 0.7]],
+  4: [[0.27, 0.33], [0.73, 0.33], [0.27, 0.71], [0.73, 0.71]],
 };
-const CROWD_SCALES: Record<number, number> = { 2: 0.72, 3: 0.6, 4: 0.5 };
+const CROWD_SCALES: Record<number, number> = { 2: 0.48, 3: 0.44, 4: 0.4 };
 
 // fx layer testids (data-testids are part of the public DOM contract)
 const FX_TESTIDS = { attack: 'fx-attack', give_ap: 'fx-give_ap', upgrade_range: 'fx-pulse' } as const;
@@ -188,9 +190,10 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
             tombstone glyph with a framed portrait plus their name, both up on
             the stone's face (never spilling off it: long names are squeezed
             to the stone width). When 2+ players died on the same square the
-            stones shrink, fan out and genuinely OVERLAP on a dirt mound with
-            a "×N" tag, so the square reads as a cluster of graves. Tanks
-            drive over graves. The layer is click-transparent: taps pass
+            stones render as SEPARATE small tombstones (up to four, one per
+            dead player) on a shared dirt mound, each keeping its portrait and
+            name; five or more dead drops the names and adds a "×N" tag.
+            Tanks drive over graves. The layer is click-transparent: taps pass
             through to the cell rects underneath (moving onto a grave, or
             targeting it for a revive). */}
         {[...crowdByPos.values()].filter((l) => l.length > 1).map((l) => (
@@ -200,21 +203,25 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
             style={{ transform: `translate(${l[0].pos.x * CELL}px, ${l[0].pos.y * CELL}px)`, pointerEvents: 'none' }}
           >
             <ellipse cx={CELL / 2} cy={CELL * 0.74} rx={CELL * 0.44} ry={CELL * 0.17} className="grave-mound" />
-            <text x={CELL / 2} y={CELL * 0.96} textAnchor="middle" className="grave-count">
-              ×{l.length}
-            </text>
+            {l.length > CROWD_MAX && (
+              <text x={CELL / 2} y={CELL * 0.96} textAnchor="middle" className="grave-count">
+                ×{l.length}
+              </text>
+            )}
           </g>
         ))}
         {dead.map((p) => {
           const crowd = crowdByPos.get(`${p.pos.x},${p.pos.y}`) ?? [p];
           const idx = crowd.findIndex((q) => q.id === p.id);
           const many = crowd.length > 1;
-          // single grave: full-size, centered. Multi: mini stones fanned over
-          // the mound, in death order (crowd order is stable — Object.values).
-          const n = Math.min(crowd.length, 4);
-          const scale = many ? CROWD_SCALES[n] : 1;
-          const slot = many ? CROWD_SLOTS[n][Math.min(idx, 3)] : [0.5, 0.55];
-          // name plate fit: squeeze any name wider than the stone's face
+          // beyond the fourth grave on one square: the mound's ×N tag stands
+          // in — no individual stone for the overflow (it could not fit)
+          if (many && idx >= CROWD_MAX) return null;
+          const scale = many ? CROWD_SCALES[Math.min(crowd.length, CROWD_MAX)] : 1;
+          const slot = many ? CROWD_SLOTS[Math.min(crowd.length, CROWD_MAX)][idx] : [0.5, 0.55];
+          // name plate fit: squeeze any name wider than the stone's face (the
+          // textLength cap lives in the scaled group's local coordinates, so
+          // it shrinks with the stone)
           const nameFit =
             nameWidthPx(p.name, 7) > CELL * 0.6
               ? { textLength: CELL * 0.6, lengthAdjust: 'spacingAndGlyphs' as const }
@@ -246,10 +253,10 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
                   data-testid={`grave-pic-${p.id}`}
                 />
                 {/* name sits on the stone face under the portrait — paper
-                    text with an ink halo, readable on the olive stone. Mini
-                    stones in a crowd skip it (a 3-4px name is unreadable);
-                    the mound's ×N tag identifies the cluster. */}
-                {!many && (
+                    text with an ink halo. Every stone up to the fourth keeps
+                    its name; a >4 crowd drops them (unreadable at that size)
+                    and the mound's ×N tag stands in. */}
+                {crowd.length <= CROWD_MAX && (
                   <text
                     x={CELL / 2}
                     y={CELL * 0.76}

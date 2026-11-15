@@ -29,7 +29,6 @@ export default function Jury() {
   }
 
   const alive = Object.values(state.players).filter((p) => p.hp > 0);
-  const alreadyVoted = state.pendingVotes.some((v) => v.voterId === me);
   const myVote = state.pendingVotes.find((v) => v.voterId === me)?.candidateId;
 
   async function vote(candidateId: string) {
@@ -59,9 +58,10 @@ export default function Jury() {
         <Icon html={skullSvg} width={14} height={14} className="stat-icon" /> You are on the jury — vote daily to grant a player bonus AP (3+ votes needed).
       </p>
 
-      {alreadyVoted && (
+      {myVote && (
         <p className="banner" data-testid="voted-banner">
-          You voted for {state.players[myVote ?? '']?.name ?? myVote} today.
+          You voted for {state.players[myVote]?.name ?? myVote} today — pick another
+          player to change your vote.
         </p>
       )}
 
@@ -72,20 +72,25 @@ export default function Jury() {
 
       <section className="card" aria-label="Alive players">
         <h2>Alive players</h2>
-        {alive.map((p) => (
-          <div className="jury-row" key={p.id}>
-            {/* cards stay name-only in both rule sets: HP already shows as a
-                life bar on the board, and revives-on fog of war hides it too */}
-            <TankCard player={p} isMe={false} hideStats />
-            <button
-              data-testid={`vote-${p.id}`}
-              disabled={alreadyVoted}
-              onClick={() => void vote(p.id)}
-            >
-              {alreadyVoted ? 'Voted' : 'Vote'}
-            </button>
-          </div>
-        ))}
+        {alive.map((p) => {
+          const mine = p.id === myVote;
+          return (
+            <div className="jury-row" key={p.id}>
+              {/* cards stay name-only in both rule sets: HP already shows as a
+                  life bar on the board, and revives-on fog of war hides it too */}
+              <TankCard player={p} isMe={false} hideStats />
+              {/* the ballot is changeable all day: your current choice is
+                  pinned, everyone else offers a one-click switch */}
+              <button
+                data-testid={`vote-${p.id}`}
+                disabled={mine}
+                onClick={() => void vote(p.id)}
+              >
+                {mine ? 'Your vote' : myVote ? 'Change vote' : 'Vote'}
+              </button>
+            </div>
+          );
+        })}
       </section>
 
       {state.config.juryHaunt && (

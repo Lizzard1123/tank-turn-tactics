@@ -51,7 +51,7 @@ const ACCOUNTS_FILE = path.join(SCRIPT_DIR, 'dev-accounts.json'); // gitignored
 // interactive accounts (get browser windows)
 const INTERACTIVE = ['DevA', 'DevB'];
 // sacrificial bodies (API-only, no browser) — created lazily on first need
-const BODIES = ['DevC', 'DevD', 'DevE', 'DevF'];
+const BODIES = ['DevC', 'DevD', 'DevE', 'DevF', 'DevG'];
 
 const supabase = createClient(SUPABASE_URL, ANON_KEY);
 
@@ -305,14 +305,21 @@ const PLANS = [
   {
     name: 'Revive 4 Graves Same Spot',
     humans: ['A', 'B', 'C', 'D', 'F', 'E'],
-    about: 'Four stacked graves — the tombstone layer fans out into mini stones with portraits.',
+    about: 'Four stacked graves — four separate small tombstones, each with its own portrait and name.',
     cfg: { heartGifts: true, revives: true, startingHp: 4, board: 5 },
     setup: (d) => d.stackGraves(4),
   },
   {
+    name: 'Revive 5 Graves Same Spot',
+    humans: ['A', 'B', 'C', 'D', 'F', 'G', 'E'],
+    about: 'Five stacked graves — past the fourth the stones drop their names and a ×5 tag stands in (the over-cap crowd case). DevE stays alive so the game cannot end.',
+    cfg: { heartGifts: true, revives: true, startingHp: 4, board: 5 },
+    setup: (d) => d.stackGraves(5),
+  },
+  {
     name: 'Jury Screen & Voting',
     humans: ['A', 'B', 'E'],
-    about: 'Revives OFF: DevB is dead for good — their window shows the JURY screen (DevB has ALREADY voted for DevA). The vote was consumed by a tick, so DevA is HAUNTED: PURPLE AP counter (and DevA loses a future tick\'s drip). Vote in DevB\'s window to see the voting UI.',
+    about: 'Revives OFF: DevB is dead for good — their window shows the JURY screen. DevA is HAUNTED: PURPLE AP counter (and DevA loses a future tick\'s drip). DevB ALSO has a fresh pending vote for DevA — the jury screen says who they voted for and lets them CHANGE it by picking another player. The drip is frozen, so the vote stays pending for hours.',
     cfg: { juryHaunt: true, board: 5, apSchedule: 'interval', apIntervalMinutes: 1 },
     setup: async (d) => {
       await d.killPair('A', 'B');
@@ -322,6 +329,13 @@ const PLANS = [
           await doAction(d.tokens.B, d.gameId, 'jury_vote', { candidateId: d.ids.A });
         }
       });
+      // change-vote demo: stage a FRESH pending vote (this day's ballot) for
+      // DevB's jury screen. The drip is frozen, so no tick consumes it —
+      // DevB can swap it in the UI at leisure.
+      const s = await d.state();
+      if (!(s.pendingVotes ?? []).some((v) => v.voterId === d.ids.B)) {
+        await doAction(d.tokens.B, d.gameId, 'jury_vote', { candidateId: d.ids.A });
+      }
     },
   },
   {
@@ -522,7 +536,7 @@ class GameDriver {
    * budget covers every attack (kills cost 1 AP per HP).
    */
   async stackGraves(n) {
-    const bodies = ['B', 'C', 'D', 'F'].slice(0, n);
+    const bodies = ['B', 'C', 'D', 'F', 'G'].slice(0, n);
     await this.topUpTo('B', 'A', 30);
     const spot = this.player(await this.state(), 'B').pos;
     await this.kill('A', 'B'); // grave #1 at DevB's spawn

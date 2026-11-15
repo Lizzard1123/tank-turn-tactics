@@ -337,10 +337,11 @@ describe('jury_vote', () => {
     expect(() => applyEvent(s, ev(s, 'p1', 'jury_vote', { candidateId: 'p2' }))).toThrow(EngineError);
   });
 
-  it('rejects duplicate vote same day', () => {
+  it('re-voting the same day replaces the ballot (one vote per juror)', () => {
     let s = { ...base(), jury: ['p2'], players: { ...base().players, p2: { ...base().players.p2, hp: 0 } } };
     s = applyEvent(s, ev(s, 'p2', 'jury_vote', { candidateId: 'p1' }));
-    expect(() => applyEvent(s, ev(s, 'p2', 'jury_vote', { candidateId: 'p1' }))).toThrow(EngineError);
+    s = applyEvent(s, ev(s, 'p2', 'jury_vote', { candidateId: 'p1' }));
+    expect(s.pendingVotes).toEqual([{ voterId: 'p2', candidateId: 'p1' }]);
   });
 
   it('rejects vote for unknown candidate', () => {

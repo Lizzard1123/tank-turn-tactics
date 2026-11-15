@@ -338,19 +338,20 @@ input[type='radio'] {
   font-weight: 600;
   font-size: 0.9rem;
   padding: 6px 10px;
-  border: 2px dashed var(--brass);
+  border: 2px solid var(--brass);
   border-radius: var(--radius);
   color: var(--ink);
   background: var(--paper-raised);
 }
 
-/* the counter is a BUTTON (opens the "Action Points" popup): keep its own
-   compact shape against the .action-bar button defaults */
+/* the counter is a BUTTON (opens the "Action Points" popup): same height as
+   the rest of the action-bar buttons (stretch to the row), AP text centered
+   in it, no row-stretch in width */
 button.ap-counter {
   appearance: none;
-  min-height: 0;
   flex: 0 0 auto;
-  padding: 6px 10px;
+  align-self: stretch;
+  justify-content: center;
   cursor: pointer;
 }
 button.ap-counter:focus-visible {
@@ -1001,6 +1002,10 @@ button.ap-counter:focus-visible {
   background: var(--signal);
   color: var(--paper-raised);
   border-color: var(--ink);
+}
+/* no stamped dash on the popup title */
+[data-testid='ap-info-title']::before {
+  content: none;
 }
 
 /* battle log: the WHOLE card is the toggle (no nested button) — title click

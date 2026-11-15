@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import Jury from './Jury';
 import type { GameState } from '@ttt/engine';
@@ -214,16 +214,19 @@ describe('Jury', () => {
     expect(await screen.findByText(/you voted for/i)).toBeInTheDocument();
   });
 
-  test('vote button disabled after voting', async () => {
+  test('after voting: current choice pinned, others offer a change', async () => {
     const state: GameState = {
       ...BASE_STATE,
       players: {
         p1: { ...BASE_STATE.players.p1, hp: 0 },
         p2: { ...BASE_STATE.players.p2, hp: 3 },
+        p3: { id: 'p3', name: 'third', pos: { x: 5, y: 5 }, hp: 3, ap: 1, range: 2, isBot: false, botDifficulty: null },
       },
+      order: ['p1', 'p2', 'p3'],
       pendingVotes: [{ voterId: 'p1', candidateId: 'p2' }],
     };
     mockEvents(state, 'p1');
+    localStorage.setItem('ttt_token', 'tok-test'); // vote() requires a session token
     render(
       <MemoryRouter initialEntries={['/jury/g1']}>
         <Routes>
@@ -232,8 +235,15 @@ describe('Jury', () => {
         </Routes>
       </MemoryRouter>,
     );
-    const btn = screen.getByTestId('vote-p2');
-    expect(btn).toBeDisabled();
+    const mine = await screen.findByTestId('vote-p2');
+    expect(mine).toBeDisabled();
+    expect(mine).toHaveTextContent('Your vote');
+    const other = screen.getByTestId('vote-p3');
+    expect(other).toBeEnabled();
+    expect(other).toHaveTextContent('Change vote');
+    const { action } = await import('../lib/api');
+    fireEvent.click(other);
+    expect(action).toHaveBeenCalledWith('tok-test', 'g1', 'jury_vote', { candidateId: 'p3' });
   });
 
   test('renders haunt banner when juryHaunt is on', async () => {

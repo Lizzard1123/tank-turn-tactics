@@ -85,7 +85,7 @@ export default function ActionBar({ state, me, mode, onAction, onModeChange }: A
         onClick={() => setApInfoOpen(true)}
         {...(apTint ? { 'data-ap-tint': apTint } : {})}
       >
-        {ap} AP{apTint === 'golden' ? ' ★' : apTint === 'purple' ? ' ☾' : ''}
+        {ap} AP
       </button>
       <button
         data-testid="btn-move"

@@ -350,7 +350,7 @@ describe('Board — new rules', () => {
     expect(screen.getByTestId('grave-p3').getAttribute('class')).not.toContain('grave-crowded');
   });
 
-  test('a crowded square gets a dirt mound and a ×N tag (no single-grave mound)', () => {
+  test('a crowded square gets a dirt mound; the ×N tag only appears past four', () => {
     const dead = state({
       players: {
         ...state().players,
@@ -361,7 +361,8 @@ describe('Board — new rules', () => {
     });
     render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
     expect(screen.getByTestId('grave-mound-2-0')).toBeInTheDocument();
-    expect(screen.getByTestId('grave-mound-2-0')).toHaveTextContent('×2');
+    // ≤4 dead: every stone carries its own name, so no count tag is needed
+    expect(screen.getByTestId('grave-mound-2-0').textContent).toBe('');
 
     const single = state({ players: { ...state().players, p2: { ...state().players.p2, hp: 0 } } });
     const { unmount } = render(<Board state={single} selectedMode="none" me="p1" onCellTap={() => {}} />);
@@ -369,7 +370,7 @@ describe('Board — new rules', () => {
     unmount();
   });
 
-  test('crowded mini stones skip the name text (unreadable at that size)', () => {
+  test('crowded stones (≤4) keep their names', () => {
     const dead = state({
       players: {
         ...state().players,
@@ -379,9 +380,29 @@ describe('Board — new rules', () => {
       order: ['p1', 'p2', 'p3'],
     });
     render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
-    // the ONLY 'foe'/'third' text on this board is the tank's own name plate
+    expect(screen.getByTestId('grave-p2').textContent).toContain('foe');
+    expect(screen.getByTestId('grave-p3').textContent).toContain('third');
+  });
+
+  test('five dead on one square: four stones, no names, ×5 tag', () => {
+    const base = state().players;
+    const players: GameState['players'] = {
+      ...base,
+      p2: { ...base.p2, hp: 0 },
+      p3: { id: 'p3', name: 'bot p3', pos: { x: 2, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+      p4: { id: 'p4', name: 'bot p4', pos: { x: 2, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+      p5: { id: 'p5', name: 'bot p5', pos: { x: 2, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+      p6: { id: 'p6', name: 'bot p6', pos: { x: 2, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+    };
+    render(<Board state={state({ players, order: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'] })} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    // only the first four dead get individual stones; the fifth is the ×5 tag
+    for (const id of ['p2', 'p3', 'p4', 'p5']) {
+      expect(screen.getByTestId(`grave-${id}`)).toBeInTheDocument();
+    }
+    expect(screen.queryByTestId('grave-p6')).toBeNull();
+    expect(screen.getByTestId('grave-mound-2-0')).toHaveTextContent('×5');
+    // names are dropped entirely at this crowding
     expect(screen.getByTestId('grave-p2').textContent).not.toContain('foe');
-    expect(screen.getByTestId('grave-p3').textContent).not.toContain('third');
   });
 
   test('a long name on a single grave is squeezed to the stone width (textLength)', () => {

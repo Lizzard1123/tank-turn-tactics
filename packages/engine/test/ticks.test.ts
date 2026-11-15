@@ -77,9 +77,21 @@ describe('jury', () => {
     s = applyEvent(s, ev(s, 'p3', 'jury_vote', { candidateId: 'p1' }));
     expect(s.pendingVotes).toContainEqual({ voterId: 'p3', candidateId: 'p1' });
   });
-  it('rejects duplicate vote in the same day', () => {
-    let s = { ...base, jury: ['p3'], pendingVotes: [{ voterId: 'p3', candidateId: 'p1' }] };
-    expect(() => applyEvent(s, ev(s, 'p3', 'jury_vote', { candidateId: 'p2' }))).toThrow(EngineError);
+  it('re-voting replaces the ballot: still one vote per juror per day', () => {
+    const deadP3 = { ...base.players.p3, hp: 0 };
+    const deadP4 = { ...base.players.p4, hp: 0 };
+    let s: GameState = { ...base, jury: ['p3'], pendingVotes: [{ voterId: 'p3', candidateId: 'p1' }],
+      players: { ...base.players, p3: deadP3 } };
+    s = applyEvent(s, ev(s, 'p3', 'jury_vote', { candidateId: 'p2' }));
+    expect(s.pendingVotes).toEqual([{ voterId: 'p3', candidateId: 'p2' }]);
+    // another juror's vote is untouched by the change
+    let t: GameState = { ...base, jury: ['p3', 'p4'],
+      pendingVotes: [{ voterId: 'p3', candidateId: 'p1' }, { voterId: 'p4', candidateId: 'p2' }],
+      players: { ...base.players, p3: deadP3, p4: deadP4 },
+      order: [...base.order, 'p4'] };
+    t = applyEvent(t, ev(t, 'p3', 'jury_vote', { candidateId: 'p2' }));
+    expect(t.pendingVotes).toHaveLength(2);
+    expect(t.pendingVotes).toContainEqual({ voterId: 'p4', candidateId: 'p2' });
   });
   it('alive player cannot vote', () => {
     expect(() => applyEvent(base, ev(base, 'p1', 'jury_vote', { candidateId: 'p2' }))).toThrow(EngineError);

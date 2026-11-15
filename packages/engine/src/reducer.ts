@@ -288,8 +288,10 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     if (voter.hp > 0) throw new EngineError('alive players cannot vote');
     const candidateId = event.payload.candidateId as string;
     if (!s.players[candidateId]) throw new EngineError('unknown candidate');
-    if (s.pendingVotes.some(v => v.voterId === event.actorId)) throw new EngineError('already voted this day');
-    s = { ...s, pendingVotes: [...s.pendingVotes, { voterId: event.actorId, candidateId }] };
+    // a juror may CHANGE their vote for the day: re-voting replaces their
+    // earlier ballot (still exactly one vote per juror per day)
+    const others = s.pendingVotes.filter(v => v.voterId !== event.actorId);
+    s = { ...s, pendingVotes: [...others, { voterId: event.actorId, candidateId }] };
   } else if (event.type === 'join') {
     // mid-game late join: spawn on the first free cell (row-major scan —
     // deterministic, so replays reconstruct the same position)

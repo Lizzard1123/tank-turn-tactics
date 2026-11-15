@@ -140,7 +140,6 @@ describe('ActionBar', () => {
     const s = state({ day: 4, haunted: null, lastBonus: [{ id: 'p1', day: 4 } as never] });
     render(<ActionBar {...props(s, 'none')} />);
     expect(screen.getByTestId('ap-counter')).toHaveAttribute('data-ap-tint', 'golden');
-    expect(screen.getByTestId('ap-counter')).toHaveTextContent('★');
   });
 
   test('golden tint expires the day after (bonus day does not match)', () => {
