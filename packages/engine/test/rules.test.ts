@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { applyEvent } from '../src/reducer';
+import { applyEvent, juryResultEvent } from '../src/reducer';
 import { EngineError } from '../src/errors';
 import { createInitialState, normalizeHeartState } from '../src/state';
 import type { GameState } from '../src/types';
@@ -400,5 +400,164 @@ describe('heartSpawnPos', () => {
       }
     }
     expect(heartSpawnPos(s)).toBeNull();
+  });
+});
+
+describe('jury log secrecy', () => {
+  const jc: GameConfig = { ...cfg, juryHaunt: true, startingAp: 0 };
+  const jb = createInitialState(jc, [
+    { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+    { id: 'p2', name: 'B', isBot: false, botDifficulty: null },
+    { id: 'p3', name: 'C', isBot: false, botDifficulty: null },
+    { id: 'p4', name: 'D', isBot: false, botDifficulty: null },
+    { id: 'p5', name: 'E', isBot: false, botDifficulty: null },
+  ]);
+  const dead = (s: GameState, ...ids: string[]): GameState => ({
+    ...s,
+    jury: [...s.jury, ...ids],
+    players: Object.fromEntries(Object.entries(s.players).map(([id, p]) =>
+      [id, ids.includes(id) ? { ...p, hp: 0 } : p])),
+  });
+  function votes(s: GameState, list: Array<[string, string]>): GameState {
+    let out = s;
+    for (const [voter, candidate] of list) out = applyEvent(out, ev(out, voter, 'jury_vote', { candidateId: candidate }));
+    return out;
+  }
+
+  it('jury_vote appends no log entry (the ballot is never logged)', () => {
+    let s = dead(jb, 'p3');
+    const before = s.log.length;
+    s = applyEvent(s, ev(s, 'p3', 'jury_vote', { candidateId: 'p1' }));
+    expect(s.log.length).toBe(before);
+    expect(s.pendingVotes).toHaveLength(1); // the vote still counts
+  });
+
+  it('the daily_tick line is clean: no jury names, and it names the NEW day', () => {
+    let s = dead(jb, 'p3', 'p4', 'p5');
+    s = votes(s, [['p3', 'p1'], ['p4', 'p1'], ['p5', 'p1']]);
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
+    const line = s.log.at(-1)!;
+    expect(line.text).toBe('Day 2: all alive players gain 1 AP');
+    expect(line.text).not.toContain('p1');
+    expect(line.text).not.toMatch(/jury|haunt/i);
+  });
+
+  it('jury_result logs the haunt outcome with kind jury, changing no state', () => {
+    let s = dead(jb, 'p3', 'p4', 'p5');
+    s = votes(s, [['p3', 'p1'], ['p4', 'p1'], ['p5', 'p1']]);
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
+    const snapshot = { ...s, log: [...s.log] };
+    s = applyEvent(s, ev(s, 'system', 'jury_result', { haunted: ['p1'] }));
+    const line = s.log.at(-1)!;
+    expect(line.text).toBe('The jury haunted A');
+    expect(line.kind).toBe('jury');
+    // no state change beyond seq/log
+    expect(s.haunted).toBe(snapshot.haunted);
+    expect(s.players).toEqual(snapshot.players);
+    expect(s.day).toBe(snapshot.day);
+  });
+
+  it('jury_result logs the award outcome', () => {
+    const s0 = { ...jb, config: { ...jc, juryHaunt: false } };
+    let s = dead(s0, 'p3', 'p4', 'p5');
+    s = votes(s, [['p3', 'p1'], ['p4', 'p1'], ['p5', 'p1']]);
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
+    s = applyEvent(s, ev(s, 'system', 'jury_result', { awarded: ['p1'] }));
+    expect(s.log.at(-1)!.text).toBe('The jury awarded A bonus AP');
+  });
+
+  it('jury_result logs an inconclusive jury as a failure', () => {
+    const s = applyEvent(jb, ev(jb, 'system', 'jury_result', { failed: true }));
+    expect(s.log.at(-1)!.text).toBe('The jury failed to reach a decision');
+  });
+
+  it('a redacted jury_result (masked wire form) logs nothing', () => {
+    const before = jb.log.length;
+    const s = applyEvent(jb, ev(jb, 'system', 'jury_result', { redacted: true }));
+    expect(s.log.length).toBe(before);
+    expect(s.seq).toBe(jb.seq + 1);
+  });
+
+  it('juryResultEvent: null without votes; haunted / awarded / failed payloads', () => {
+    const pre = dead(jb, 'p3', 'p4', 'p5');
+    const noVotes = juryResultEvent(pre, { ...pre, pendingVotes: [] }, 9, 'c');
+    expect(noVotes).toBeNull();
+    const votedPre = votes(pre, [['p3', 'p1'], ['p4', 'p1'], ['p5', 'p1']]);
+    const post = applyEvent(votedPre, {
+      seq: pre.seq + 4, type: 'daily_tick', actorId: 'system', createdAt: '', payload: { apGained: 1 },
+    });
+    const haunted = juryResultEvent(votedPre, post, post.seq + 1, 'c')!;
+    expect(haunted.type).toBe('jury_result');
+    expect(haunted.actorId).toBe('system');
+    // 3 votes = strictly-most-voted (haunt) AND >= 3 (bonus) for the same player
+    expect(haunted.payload).toEqual({ haunted: ['p1'], awarded: ['p1'] });
+    // haunt off + no 3-vote candidate = inconclusive
+    const offPre = { ...pre, config: { ...jc, juryHaunt: false } };
+    const votedOff = votes({ ...offPre, pendingVotes: [] }, [['p3', 'p1']]);
+    const offPost = applyEvent(votedOff, ev(votedOff, 'system', 'daily_tick', { apGained: 1 }));
+    const failed = juryResultEvent({ ...offPre, pendingVotes: [{ voterId: 'p3', candidateId: 'p1' }] }, offPost, offPost.seq + 1, 'c')!;
+    expect(failed.payload).toEqual({ failed: true });
+  });
+});
+
+describe('apEarned (lifetime AP for the Action Points popup)', () => {
+  it('starts at the starting grant', () => {
+    expect(base.players.p1.apEarned).toBe(cfg.startingAp);
+  });
+
+  it('daily drip increments it; a haunted player gets no drip', () => {
+    const hc: GameConfig = { ...cfg, juryHaunt: true, startingAp: 0 };
+    const hb = createInitialState(hc, [
+      { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+      { id: 'p2', name: 'B', isBot: false, botDifficulty: null },
+      { id: 'p3', name: 'C', isBot: false, botDifficulty: null },
+    ]);
+    let s: GameState = { ...hb, jury: ['p3'], players: { ...hb.players, p3: { ...hb.players.p3, hp: 0 } } };
+    s = applyEvent(s, ev(s, 'p3', 'jury_vote', { candidateId: 'p1' }));
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 2 }));
+    expect(s.players.p1.apEarned).toBe(0); // haunted: no drip
+    expect(s.players.p2.apEarned).toBe(2);
+  });
+
+  it('the 3-vote jury bonus increments it', () => {
+    const three = createInitialState(cfg, [
+      { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+      { id: 'p2', name: 'B', isBot: false, botDifficulty: null },
+      { id: 'p3', name: 'C', isBot: false, botDifficulty: null },
+      { id: 'p4', name: 'D', isBot: false, botDifficulty: null },
+      { id: 'p5', name: 'E', isBot: false, botDifficulty: null },
+    ]);
+    let s: GameState = { ...three, jury: ['p3', 'p4', 'p5'], players: { ...three.players,
+      p3: { ...three.players.p3, hp: 0 }, p4: { ...three.players.p4, hp: 0 }, p5: { ...three.players.p5, hp: 0 } } };
+    for (const v of ['p3', 'p4', 'p5']) s = applyEvent(s, ev(s, v, 'jury_vote', { candidateId: 'p1' }));
+    const earned0 = s.players.p1.apEarned!;
+    s = applyEvent(s, ev(s, 'system', 'daily_tick', { apGained: 1 }));
+    expect(s.players.p1.apEarned).toBe(earned0 + 2); // drip + jury bonus
+  });
+
+  it('give_ap increments the recipient, not the giver', () => {
+    let s = placeAdjacent(base, 'p1', 'p2');
+    const before = s.players.p2.apEarned!;
+    s = applyEvent(s, ev(s, 'p1', 'give_ap', { targetId: 'p2', amount: 1 }));
+    expect(s.players.p2.apEarned).toBe(before + 1);
+    expect(s.players.p1.apEarned).toBe(cfg.startingAp); // spending is not earning
+  });
+
+  it('apStealOnKill loots count as earned by the killer', () => {
+    const sc: GameConfig = { ...cfg, apStealOnKill: true };
+    const sb = createInitialState(sc, base ? [
+      { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+      { id: 'p2', name: 'B', isBot: false, botDifficulty: null },
+      { id: 'p3', name: 'C', isBot: false, botDifficulty: null },
+    ] : []);
+    let s = placeAdjacent(sb, 'p1', 'p2');
+    s = { ...s, players: { ...s.players, p2: { ...s.players.p2, hp: 1, ap: 5 } } };
+    s = applyEvent(s, ev(s, 'p1', 'attack', { targetId: 'p2' }));
+    expect(s.players.p1.apEarned).toBe(cfg.startingAp + 5);
+  });
+
+  it('a late joiner starts at their starting grant', () => {
+    let s = applyEvent(base, ev(base, 'system', 'join', { playerId: 'late', name: 'Late' }));
+    expect(s.players.late.apEarned).toBe(cfg.startingAp);
   });
 });

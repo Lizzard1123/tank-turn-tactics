@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  applyEvent, createInitialState,
+  applyEvent, createInitialState, viewerLogReveal,
   type ActionType, type GameEvent, type GameState, type PlayerSpec,
 } from '@ttt/engine';
 import Board, { type BoardMode } from '../components/Board';
@@ -45,7 +45,7 @@ const EVENT_FALLBACK_TEXT: Record<string, string> = {
   upgrade_range: 'upgraded range',
   daily_tick: 'day tick',
   bot_action: 'bot acted',
-  jury_vote: 'jury vote',
+  jury_result: 'jury verdict',
   fork: 'forked the timeline',
 };
 
@@ -116,16 +116,20 @@ function battleLines(state: GameState | null, limit = 12): { seq: number; text: 
 // Feed entries from the CANONICAL history (never the scrubbed log, which
 // would drop the events that come after the viewed point). Text comes from
 // the live log when it has a line for the seq, else a per-type fallback.
-function feedEntries(events: GameEvent[], live: GameState | null): FeedEntry[] {
+// Jury business is dead-viewer-only: per-vote rows never show for anyone
+// (the ballot is secret), and the outcome row only for entitled viewers.
+function feedEntries(events: GameEvent[], live: GameState | null, showJury: boolean): FeedEntry[] {
   const textBySeq = new Map<number, string>();
   for (const l of live?.log ?? []) textBySeq.set(l.seq, l.text);
-  return events.map((e) => ({
-    seq: e.seq,
-    type: e.type,
-    actorId: e.actorId,
-    createdAt: e.createdAt,
-    text: textBySeq.get(e.seq) ?? (EVENT_FALLBACK_TEXT[e.type] ?? e.type),
-  }));
+  return events
+    .filter((e) => e.type !== 'jury_vote' && (showJury || e.type !== 'jury_result'))
+    .map((e) => ({
+      seq: e.seq,
+      type: e.type,
+      actorId: e.actorId,
+      createdAt: e.createdAt,
+      text: textBySeq.get(e.seq) ?? (EVENT_FALLBACK_TEXT[e.type] ?? e.type),
+    }));
 }
 
 // PlayerSpecs for createInitialState, from the live state's player list
@@ -373,7 +377,7 @@ function LocalGameView() {
         <section className="card" aria-label="Events">
           <h2>Events{scrubbing ? ' (History)' : ' (Post-Game)'}</h2>
           <EventFeed
-            entries={feedEntries(game.history, state)}
+            entries={feedEntries(game.history, state, viewerLogReveal(state, me))}
             activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, game.history.length) - 1}
             live={!scrubbing}
             onView={viewEvent}
@@ -765,7 +769,7 @@ function DbGameView({ gameId }: DbGameProps) {
         <section className="card" aria-label="Events">
           <h2>Events{scrubbing ? ' (History)' : ' (Post-Game)'}</h2>
           <EventFeed
-            entries={feedEntries(history, state)}
+            entries={feedEntries(history, state, viewerLogReveal(state, me))}
             activeIndex={scrubIdx === null ? null : Math.min(scrubIdx, history.length) - 1}
             live={!scrubbing}
             onView={viewEvent}

@@ -168,3 +168,71 @@ describe('ActionBar', () => {
   });
 
 });
+
+describe('Action Points popup', () => {
+  test('the counter is a button that opens the info dialog', () => {
+    render(<ActionBar {...props(state(), 'none')} />);
+    const counter = screen.getByTestId('ap-counter');
+    expect(counter.tagName).toBe('BUTTON');
+    expect(screen.queryByTestId('ap-info-dialog')).toBeNull();
+    fireEvent.click(counter);
+    expect(screen.getByTestId('ap-info-dialog')).toBeInTheDocument();
+  });
+
+  test('the dialog is titled Action Points with holdings and lifetime total', () => {
+    const s = state();
+    s.players.p1.ap = 7;
+    s.players.p1.apEarned = 19;
+    render(<ActionBar {...props(s, 'none')} />);
+    fireEvent.click(screen.getByTestId('ap-counter'));
+    expect(screen.getByTestId('ap-info-title')).toHaveTextContent('Action Points');
+    expect(screen.getByTestId('ap-info-body')).toHaveTextContent('You have 7 AP');
+    expect(screen.getByTestId('ap-info-body')).toHaveTextContent('19 have been given out in total');
+  });
+
+  test('an untracked legacy player falls back to current ap as the total', () => {
+    const s = state();
+    s.players.p1.ap = 5;
+    delete (s.players.p1 as { apEarned?: number }).apEarned;
+    render(<ActionBar {...props(s, 'none')} />);
+    fireEvent.click(screen.getByTestId('ap-counter'));
+    expect(screen.getByTestId('ap-info-body')).toHaveTextContent('5 have been given out in total');
+  });
+
+  test('golden tint explains the jury bonus; purple explains the haunt', () => {
+    const golden = state({ lastBonus: [{ id: 'p1', day: 1 }] } as Partial<GameState>);
+    render(<ActionBar {...props(golden, 'none')} />);
+    fireEvent.click(screen.getByTestId('ap-counter'));
+    expect(screen.getByTestId('ap-info-tint')).toHaveTextContent(/awarded you bonus AP/);
+  });
+
+  test('purple tint explains the haunt', () => {
+    const purple = state({ haunted: 'p1' } as Partial<GameState>);
+    render(<ActionBar {...props(purple, 'none')} />);
+    fireEvent.click(screen.getByTestId('ap-counter'));
+    expect(screen.getByTestId('ap-info-tint')).toHaveTextContent(/haunted you/);
+  });
+
+  test('no tint means no explanation line', () => {
+    render(<ActionBar {...props(state(), 'none')} />);
+    fireEvent.click(screen.getByTestId('ap-counter'));
+    expect(screen.queryByTestId('ap-info-tint')).toBeNull();
+  });
+
+  test('OK is the only button and dismisses the popup', () => {
+    render(<ActionBar {...props(state(), 'none')} />);
+    fireEvent.click(screen.getByTestId('ap-counter'));
+    const actions = screen.getByTestId('ap-info-dialog').querySelector('.confirm-actions');
+    expect(actions?.querySelectorAll('button')).toHaveLength(1);
+    expect(screen.getByTestId('ap-info-ok')).toHaveTextContent('OK');
+    fireEvent.click(screen.getByTestId('ap-info-ok'));
+    expect(screen.queryByTestId('ap-info-dialog')).toBeNull();
+  });
+
+  test('clicking the overlay dismisses the popup', () => {
+    render(<ActionBar {...props(state(), 'none')} />);
+    fireEvent.click(screen.getByTestId('ap-counter'));
+    fireEvent.click(screen.getByTestId('ap-info-overlay'));
+    expect(screen.queryByTestId('ap-info-dialog')).toBeNull();
+  });
+});

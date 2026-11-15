@@ -8,6 +8,8 @@ import {
   scrubState,
   scrubConfig,
 } from '../src/scrub';
+import { applyEvent } from '../src/reducer';
+import { createInitialState } from '../src/state';
 import type { GameEvent, GameState, LogEntry, PlayerId } from '../src/types';
 
 describe('HIDDEN_ACTOR', () => {
@@ -350,5 +352,68 @@ describe('scrubConfig', () => {
     const config = { seed: 42, board: 8 } as { seed?: number; board: number };
     const scrubbed = scrubConfig(config);
     expect(scrubbed).not.toBe(config);
+  });
+});
+
+describe('jury secrecy in the scrub layer', () => {
+  const emptyMask = { masked: new Set<number>(), victimBySeq: new Map<number, PlayerId>() };
+  const noActors = new Map<number, PlayerId>();
+  const idName = (id: PlayerId) => id;
+
+  it('maskLog drops jury outcome entries for living viewers', () => {
+    const log: LogEntry[] = [
+      { seq: 1, text: 'Day 2: all alive players gain 1 AP' },
+      { seq: 2, text: 'The jury haunted p1', kind: 'jury' },
+    ];
+    const masked = maskLog(log, noActors, 'p3', emptyMask, idName);
+    expect(masked).toHaveLength(1);
+    expect(masked[0].text).toBe('Day 2: all alive players gain 1 AP');
+  });
+
+  it('maskLog drops legacy per-vote lines and strips legacy day-line suffixes', () => {
+    const log: LogEntry[] = [
+      { seq: 1, text: 'Jury member p2 voted for p1' },
+      { seq: 2, text: 'Day 2: all alive players gain 1 AP (+1 jury AP to p1), p1 is haunted (no AP)' },
+      { seq: 3, text: 'p1 attacked p2 for 1 damage' },
+    ];
+    const masked = maskLog(log, noActors, 'p3', emptyMask, idName);
+    expect(masked).toHaveLength(2);
+    expect(masked[0].text).toBe('Day 2: all alive players gain 1 AP');
+    expect(masked[1].text).toBe('p1 attacked p2 for 1 damage');
+  });
+
+  it('maskEvents redacts jury_result payloads for viewers without the reveal', () => {
+    const events: GameEvent[] = [
+      { seq: 1, type: 'jury_result', actorId: 'system', createdAt: '', payload: { haunted: ['p1'] } },
+      { seq: 2, type: 'attack', actorId: 'p1', createdAt: '', payload: { targetId: 'p2' } },
+    ];
+    const masked = maskEvents(events, 'p3', emptyMask);
+    expect(masked[0].payload).toEqual({ redacted: true });
+    expect(masked[0].type).toBe('jury_result'); // seq/type intact for replay
+    expect(masked[1]).toBe(events[1]); // attacks untouched by an empty mask
+  });
+
+  it('a redacted jury_result replays through the engine without a log entry', () => {
+    const s = createInitialState({
+      seed: 1, board: 4, startingHp: 3, startingAp: 0, baseRange: 2, apPerDay: 1, upgradeCost: 2, apIntervalMinutes: 0,
+    }, [{ id: 'p1', name: 'A', isBot: false, botDifficulty: null }]);
+    const redacted: GameEvent = {
+      seq: s.seq + 1, type: 'jury_result', actorId: 'system', createdAt: '', payload: { redacted: true },
+    };
+    const next = applyEvent(s, redacted);
+    expect(next.seq).toBe(s.seq + 1);
+    expect(next.log).toEqual(s.log); // no entry appended
+  });
+
+  it('scrubState hides other players apEarned along with ap', () => {
+    const s = createInitialState({
+      seed: 1, board: 4, startingHp: 3, startingAp: 2, baseRange: 2, apPerDay: 1, upgradeCost: 2, apIntervalMinutes: 0,
+    }, [
+      { id: 'p1', name: 'A', isBot: false, botDifficulty: null },
+      { id: 'p2', name: 'B', isBot: false, botDifficulty: null },
+    ]);
+    const scrubbed = scrubState(s, 'p1');
+    expect(scrubbed.players.p2.apEarned).toBe(-1);
+    expect(scrubbed.players.p1.apEarned).toBe(2);
   });
 });

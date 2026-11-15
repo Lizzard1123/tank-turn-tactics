@@ -20,6 +20,8 @@ export function createInitialState(config: GameConfig, specs: PlayerSpec[]): Gam
     players[spec.id] = {
       id: spec.id, name: spec.name, pos, hp: config.startingHp, ap: config.startingAp,
       range: config.baseRange, isBot: spec.isBot, botDifficulty: spec.botDifficulty,
+      // the starting grant counts as given out (Action Points popup)
+      apEarned: config.startingAp,
     };
     order.push(spec.id);
   }

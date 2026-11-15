@@ -77,7 +77,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // FREEZE the game's AP drip by patching games.ap_interval_minutes (service
 // role bypasses RLS) — golden (lastBonus) and purple (haunted) stay live for
 // hours instead of dying at the next tick.
-import { applyEvent } from '../supabase/functions/_shared/engine_src/reducer.ts';
+import { applyEvent, juryResultEvent } from '../supabase/functions/_shared/engine_src/reducer.ts';
 
 const SYSTEM_ID = '00000000-0000-0000-0000-000000000000';
 
@@ -113,14 +113,21 @@ async function commitDailyTick(gameId) {
     createdAt: new Date().toISOString(),
     payload: { apGained: state.config.apPerDay ?? 1, elapsedMinutes: 1440 },
   };
-  const next = applyEvent(state, event);
+  let next = applyEvent(state, event);
+  const events = [event];
+  // jury outcome event, exactly as the tick edge function mints it
+  const jury = juryResultEvent(state, next, next.seq + 1, new Date().toISOString());
+  if (jury) {
+    next = applyEvent(next, jury);
+    events.push(jury);
+  }
   const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/commit_game_update`, {
     method: 'POST',
     headers: { apikey: sk, Authorization: `Bearer ${sk}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       p_game_id: gameId,
       p_generation: d.game.cur_generation,
-      p_events: [{ seq: event.seq, type: event.type, actor_id: event.actorId, payload: event.payload, created_at: event.createdAt }],
+      p_events: events.map((e) => ({ seq: e.seq, type: e.type, actor_id: e.actorId, payload: e.payload, created_at: e.createdAt })),
       p_next_seq: next.seq,
       p_next_state: next,
       p_has_winner: !!next.winner,

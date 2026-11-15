@@ -11,6 +11,10 @@ export interface PlayerState {
   range: number;
   isBot: boolean;
   botDifficulty: 'easy' | 'medium' | 'hard' | null;
+  // lifetime AP received (starting grant + drips + jury bonus + gifts +
+  // steals + heart windfalls) — feeds the "Action Points" info popup.
+  // Absent in pre-feature snapshots; the UI falls back to current ap.
+  apEarned?: number;
 }
 
 export interface JuryVote { voterId: PlayerId; candidateId: PlayerId }
@@ -45,7 +49,7 @@ export interface LogEntry { seq: number; text: string; kind?: LogKind }
 
 // Markers for the live battle log: during play the feed shows only these
 // kinds (final blows and revives); post-game shows everything.
-export type LogKind = 'kill' | 'revive' | 'heart_spawn';
+export type LogKind = 'kill' | 'revive' | 'heart_spawn' | 'jury';
 
 export interface GameConfig {
   seed: number;
@@ -93,7 +97,7 @@ export interface GameConfig {
 
 export type ActionType =
   | 'move' | 'attack' | 'give_ap' | 'give_heart' | 'upgrade_range'
-  | 'daily_tick' | 'jury_vote' | 'fork' | 'bot_action' | 'join'
+  | 'daily_tick' | 'jury_vote' | 'jury_result' | 'fork' | 'bot_action' | 'join'
   | 'heart_spawn';
 
 export interface GameEvent {

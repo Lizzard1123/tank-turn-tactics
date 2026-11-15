@@ -2,7 +2,7 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import {
   applyEvent, planBotAction, heartSpawnPos, normalizeHeartState, mulberry32, hashSeed,
-  scrubState, attackMask, attackActors, maskLog, viewerLogReveal,
+  scrubState, attackMask, attackActors, maskEvents, maskLog, viewerLogReveal, juryResultEvent,
   type GameEvent, type GameState,
 } from '../_shared/engine.ts';
 import { canonicalHistory, effectiveForks } from '../_shared/history.ts';
@@ -245,12 +245,21 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
   // 1. AP drip (only when the AP schedule is due)
   if (due.ap) {
     const apGained = (state.config as { apPerDay?: number }).apPerDay ?? 1;
+    const pre = state;
     const drip: GameEvent = {
       seq: state.seq + 1, type: 'daily_tick', actorId: 'system',
       createdAt: new Date().toISOString(), payload: { apGained, elapsedMinutes: game.mode === 'test' ? (game.ap_interval_minutes ?? 2) : 1440 },
     };
     state = applyEvent(state, drip);
     newEvents.push(drip);
+    // jury outcome: when the drip consumed this day's pending votes, mint the
+    // dead-viewer-only outcome event (who was haunted / awarded / failed)
+    // right after the day line it belongs to.
+    const jury = juryResultEvent(pre, state, state.seq + 1, new Date().toISOString());
+    if (jury) {
+      state = applyEvent(state, jury);
+      newEvents.push(jury);
+    }
   }
 
   // 2. heart spawn (only when the heart schedule is due); placed BEFORE the
@@ -306,8 +315,8 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
   // view of the post-tick state, with the log mask-rewritten over the
   // canonical timeline INCLUDING the new events. Tick events (system drips,
   // heart spawns, bot actions) are never identity-masked — only top-level
-  // human attacks are secret — so `events` carries them as-is for the
-  // recipients' board fx and scrubber history.
+  // human attacks are secret — but jury_result is redacted for viewers who
+  // are not entitled to it (living players; the dead with revives on).
   const canonical = canonicalHistory(
     (detail.history ?? []).map((r) => ({
       seq: r.seq, type: r.type as GameEvent['type'], actorId: r.actor_id,
@@ -321,18 +330,24 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
   const actors = attackActors(full);
   const memberStates = (detail.members ?? [])
     .filter((m) => UUID_RE.test(m.player_id))
-    .map((m) => ({
-      player_id: m.player_id,
-      state: {
-        ...scrubState(state, m.player_id),
-        // eliminated + revives off: the dead viewer gets the full log
-        log: viewerLogReveal(state, m.player_id)
-          ? state.log
-          : maskLog(state.log, actors, m.player_id, mask, (id) => state.players[id]?.name ?? id),
-      },
-      events: newEvents.map((e) => ({ ...e, generation: game.cur_generation })),
-      game_patch: patch,
-    }));
+    .map((m) => {
+      const reveal = viewerLogReveal(state, m.player_id);
+      return {
+        player_id: m.player_id,
+        state: {
+          ...scrubState(state, m.player_id),
+          // eliminated + revives off: the dead viewer gets the full log
+          log: reveal
+            ? state.log
+            : maskLog(state.log, actors, m.player_id, mask, (id) => state.players[id]?.name ?? id),
+        },
+        events: (reveal
+          ? newEvents
+          : maskEvents(newEvents, m.player_id, mask)
+        ).map((e) => ({ ...e, generation: game.cur_generation })),
+        game_patch: patch,
+      };
+    });
 
   // Atomic commit (migration 0016): all events + snapshot + per-member
   // realtime rows + the schedule cursor / winner-status patch in ONE

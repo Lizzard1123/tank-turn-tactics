@@ -344,6 +344,20 @@ input[type='radio'] {
   background: var(--paper-raised);
 }
 
+/* the counter is a BUTTON (opens the "Action Points" popup): keep its own
+   compact shape against the .action-bar button defaults */
+button.ap-counter {
+  appearance: none;
+  min-height: 0;
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+button.ap-counter:focus-visible {
+  outline: 2px solid var(--signal);
+  outline-offset: 2px;
+}
+
 /* AP counter tints from the jury: golden = you got the bonus-vote AP,
    purple = the jury haunted you (no drip that tick). Each shows only on the
    day after the vote was tallied (the tick sets/clears the state). */
@@ -980,6 +994,12 @@ input[type='radio'] {
   color: var(--paper-raised);
 }
 .confirm-actions button[data-testid='confirm-yes'] {
+  border-color: var(--ink);
+}
+/* the Action Points popup has one action — OK reads as the primary */
+.confirm-actions button[data-testid='ap-info-ok'] {
+  background: var(--signal);
+  color: var(--paper-raised);
   border-color: var(--ink);
 }
 

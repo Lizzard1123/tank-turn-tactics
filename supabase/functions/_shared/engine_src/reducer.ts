@@ -15,9 +15,17 @@ function assertAlive(s: GameState, id: string): PlayerState {
   return p;
 }
 
+// Lifetime AP accounting for the "Action Points" info popup: call on the
+// player object whose `ap` ALREADY includes the gain. Baseline for snapshots
+// predating the field is the pre-gain ap (everything so far counts as
+// granted); fresh games seed apEarned = startingAp, so the count is exact.
+function gainAp(p: PlayerState, gain: number): PlayerState {
+  return { ...p, apEarned: (p.apEarned ?? p.ap - gain) + gain };
+}
+
 function logLine(
   s: GameState, pre: GameState, actorId: string, type: string, payload: Record<string, unknown>,
-): { text: string; kind?: LogKind } {
+): { text: string; kind?: LogKind } | null {
   const name = (id: string) => s.players[id]?.name ?? id;
   switch (type) {
     case 'move': {
@@ -61,18 +69,27 @@ function logLine(
     }
     case 'upgrade_range':
       return { text: `${name(actorId)} upgraded range to ${s.players[actorId].range + 1}` };
-    case 'daily_tick': {
-      const day = s.day + 1;
-      const bonus = countBonusVotes(s.pendingVotes);
-      const names = Object.keys(bonus).length
-        ? ` (+1 jury AP to ${Object.keys(bonus).map(name).join(', ')})` : '';
-      const hauntNote = s.haunted && s.players[s.haunted]?.hp > 0
-        ? `, ${name(s.haunted)} is haunted (no AP)` : '';
-      return { text: `Day ${day}: all alive players gain ${payload.apGained ?? 1} AP${names}${hauntNote}` };
-    }
-    case 'jury_vote': {
-      const candidateId = payload.candidateId as string;
-      return { text: `Jury member ${name(actorId)} voted for ${name(candidateId)}` };
+    case 'daily_tick':
+      // public day line only — jury business (who was haunted / awarded) is
+      // recorded separately as a dead-viewer-only `jury_result` event, so a
+      // living player's log never carries jury information.
+      return { text: `Day ${s.day}: all alive players gain ${payload.apGained ?? 1} AP` };
+    case 'jury_vote':
+      // votes are never logged: the jury's ballot is nobody's business but
+      // the dead's — only the OUTCOME (jury_result) becomes log-visible.
+      return null;
+    case 'jury_result': {
+      // system-only event (minted by the tick right after the daily_tick that
+      // consumed pending votes). Dead viewers only — the masked wire form
+      // (`{ redacted: true }`) produces no log line at all.
+      if (payload.redacted === true) return null;
+      const parts: string[] = [];
+      const haunted = (payload.haunted as string[] | undefined) ?? [];
+      const awarded = (payload.awarded as string[] | undefined) ?? [];
+      if (haunted.length) parts.push(`The jury haunted ${haunted.map(name).join(', ')}`);
+      if (awarded.length) parts.push(`The jury awarded ${awarded.map(name).join(', ')} bonus AP`);
+      if (parts.length === 0) parts.push('The jury failed to reach a decision');
+      return { text: parts.join('. '), kind: 'jury' };
     }
     case 'fork':
       return { text: `Game forked/rewound to event ${payload.toSeq}` };
@@ -120,7 +137,7 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
       const hearts = s.hearts ?? (s.heart ? [s.heart] : []);
       if (hearts.some((h) => h.x === to.x && h.y === to.y)) {
         players[actorId] = players[actorId].hp >= s.config.startingHp
-          ? { ...players[actorId], ap: players[actorId].ap + 2 }
+          ? gainAp({ ...players[actorId], ap: players[actorId].ap + 2 }, 2)
           : { ...players[actorId], hp: players[actorId].hp + 1 };
       }
       const remaining = hearts.filter((h) => !(h.x === to.x && h.y === to.y));
@@ -138,7 +155,7 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
       const killed = hp <= 0;
       const steal = killed && s.config.apStealOnKill ? target.ap : 0;
       const players = { ...s.players,
-        [actorId]: { ...actor, ap: actor.ap - 1 + steal },
+        [actorId]: gainAp({ ...actor, ap: actor.ap - 1 + steal }, steal),
         [target.id]: { ...target, hp, ap: steal > 0 ? 0 : target.ap } };
       if (killed) {
         jury = [...s.jury, target.id];
@@ -153,7 +170,7 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
       if (!inRange(actor.pos, target.pos, actor.range)) throw new EngineError('target out of range');
       return { ...s, players: { ...s.players,
         [actorId]: { ...actor, ap: actor.ap - 1 },
-        [target.id]: { ...target, ap: target.ap + 1 } } };
+        [target.id]: gainAp({ ...target, ap: target.ap + 1 }, 1) } };
     }
     case 'give_heart': {
       // costs 1 of the GIVER's hp (never the last one), not AP
@@ -181,7 +198,7 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
       let revived: PlayerState = { ...target, hp: 1, ap: 0 };
       if (underFeet) {
         revived = revived.hp >= s.config.startingHp
-          ? { ...revived, ap: revived.ap + 2 }
+          ? gainAp({ ...revived, ap: revived.ap + 2 }, 2)
           : { ...revived, hp: revived.hp + 1 };
       }
       return { ...s,
@@ -229,14 +246,15 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     }
     const players = { ...s.players };
     for (const p of Object.values(players)) {
-      if (p.hp > 0 && p.id !== lastHaunted) players[p.id] = { ...p, ap: p.ap + apGained };
+      if (p.hp > 0 && p.id !== lastHaunted)
+        players[p.id] = gainAp({ ...p, ap: p.ap + apGained }, apGained);
     }
     // jury bonus: candidates with >= 3 pending votes get +1
     const bonus = countBonusVotes(s.pendingVotes);
     const nextDay = s.day + 1;
     for (const [candidateId] of Object.entries(bonus)) {
       const p = players[candidateId];
-      if (p && p.hp > 0) players[candidateId] = { ...p, ap: p.ap + 1 };
+      if (p && p.hp > 0) players[candidateId] = gainAp({ ...p, ap: p.ap + 1 }, 1);
     }
     const elapsed = (event.payload.elapsedMinutes as number) ?? 0;
     s = { ...s, day: nextDay, tickClockMinutes: s.tickClockMinutes + elapsed,
@@ -258,6 +276,12 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     const hearts = s.hearts ?? (s.heart ? [s.heart] : []);
     if (hearts.some((h) => h.x === at.x && h.y === at.y)) throw new EngineError('heart_spawn on a heart square');
     s = { ...s, hearts: [...hearts, { x: at.x, y: at.y, seq: event.seq }], heart: null };
+  } else if (event.type === 'jury_result') {
+    // system-only event (the tick function mints it right after the
+    // daily_tick that consumed this day's jury votes). No state change —
+    // `haunted`/`lastBonus` were already set by the daily_tick itself; this
+    // event exists so the OUTCOME has its own log entry (kind 'jury', dead
+    // viewers only) and its own scrubber row.
   } else if (event.type === 'jury_vote') {
     const voter = s.players[event.actorId];
     if (!voter) throw new EngineError('unknown player');
@@ -294,6 +318,7 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
       id: playerId, name, pos: spawn,
       hp: s.config.startingHp, ap: s.config.startingAp, range: s.config.baseRange,
       isBot: false, botDifficulty: null,
+      apEarned: s.config.startingAp,
     };
     s = { ...s, players: { ...s.players, [playerId]: player },
       order: [...s.order, playerId] };
@@ -328,7 +353,27 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
   }
 
   const line = logLine(s, state, event.actorId, event.type, event.payload);
+  // a null line (jury_vote, redacted jury_result) appends no log entry —
+  // the event still advances seq/state exactly the same.
+  if (!line) return { ...s, seq: event.seq };
   const entry: { seq: number; text: string; kind?: LogKind } = { seq: event.seq, text: line.text };
   if (line.kind) entry.kind = line.kind;
   return { ...s, seq: event.seq, log: [...s.log, entry] };
+}
+
+// The jury outcome event the tick mints immediately after a daily_tick that
+// consumed this day's pending votes: WHO was haunted / awarded bonus AP, or
+// that the jury failed to reach a decision. A pure function of the pre- and
+// post-tick states, so the tick edge function and the dev-lab driver mint
+// byte-identical events. Returns null when no votes were pending.
+export function juryResultEvent(
+  pre: GameState, post: GameState, seq: number, createdAt: string,
+): GameEvent | null {
+  if (pre.pendingVotes.length === 0) return null;
+  const payload: Record<string, unknown> = {};
+  if (post.haunted) payload.haunted = [post.haunted];
+  const awarded = (post.lastBonus ?? []).map((b) => b.id);
+  if (awarded.length) payload.awarded = awarded;
+  if (!payload.haunted && !payload.awarded) payload.failed = true;
+  return { seq, type: 'jury_result', actorId: 'system', createdAt, payload };
 }

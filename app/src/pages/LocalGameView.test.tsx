@@ -24,7 +24,7 @@ function Harness() {
   const { setGame, game } = useLocalGame();
   useEffect(() => {
     if (!gameRef) {
-      gameRef = createLocalGame({ startingAp: 4 });
+      gameRef = createLocalGame({ startingAp: 4, seed: 7 }); // fixed seed: Date.now() makes same-ms runs share a spawn, and a right-edge spawn breaks legalMoveTarget
       setGame(gameRef);
     }
   }, [setGame]);
