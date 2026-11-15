@@ -291,4 +291,130 @@ describe('Board — new rules', () => {
     const hidden = boards[1];
     expect(hidden.textContent).not.toContain('foe');
   });
+
+  // --- multi-dead tombstones: 2-4 dead on the same square fan out ---
+
+  test('single grave renders full-size with its portrait', () => {
+    const dead = state({ players: { ...state().players, p2: { ...state().players.p2, hp: 0 } } });
+    render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    expect(screen.getByTestId('grave-p2')).toBeInTheDocument();
+    expect(screen.getByTestId('grave-pic-p2')).toBeInTheDocument();
+    expect(screen.getByTestId('grave-p2').getAttribute('class')).not.toContain('grave-crowded');
+  });
+
+  test('two dead on the same square: both graves render, marked crowded', () => {
+    const dead = state({
+      players: {
+        ...state().players,
+        p2: { ...state().players.p2, hp: 0 },
+        p3: { id: 'p3', name: 'third', pos: { x: 2, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+      },
+      order: ['p1', 'p2', 'p3'],
+    });
+    render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    // SVG className is an SVGAnimatedString in jsdom — read the attribute
+    expect(screen.getByTestId('grave-p2').getAttribute('class')).toContain('grave-crowded');
+    expect(screen.getByTestId('grave-p3').getAttribute('class')).toContain('grave-crowded');
+    // both portraits render
+    expect(screen.getByTestId('grave-pic-p2')).toBeInTheDocument();
+    expect(screen.getByTestId('grave-pic-p3')).toBeInTheDocument();
+  });
+
+  test('up to four dead on the same square each get their own grave', () => {
+    const base = state().players;
+    const players: GameState['players'] = {
+      ...base,
+      p2: { ...base.p2, hp: 0 },
+      p3: { id: 'p3', name: 'bot p3', pos: { x: 2, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+      p4: { id: 'p4', name: 'bot p4', pos: { x: 2, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+      p5: { id: 'p5', name: 'bot p5', pos: { x: 2, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+    };
+    render(<Board state={state({ players, order: ['p1', 'p2', 'p3', 'p4', 'p5'] })} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    for (const id of ['p2', 'p3', 'p4', 'p5']) {
+      expect(screen.getByTestId(`grave-${id}`)).toBeInTheDocument();
+      expect(screen.getByTestId(`grave-${id}`).getAttribute('class')).toContain('grave-crowded');
+    }
+  });
+
+  test('dead players on DIFFERENT squares render full-size (not crowded)', () => {
+    const dead = state({
+      players: {
+        ...state().players,
+        p2: { ...state().players.p2, hp: 0, pos: { x: 2, y: 0 } },
+        p3: { id: 'p3', name: 'third', pos: { x: 3, y: 3 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+      },
+      order: ['p1', 'p2', 'p3'],
+    });
+    render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    expect(screen.getByTestId('grave-p2').getAttribute('class')).not.toContain('grave-crowded');
+    expect(screen.getByTestId('grave-p3').getAttribute('class')).not.toContain('grave-crowded');
+  });
+
+  test('a crowded square gets a dirt mound and a ×N tag (no single-grave mound)', () => {
+    const dead = state({
+      players: {
+        ...state().players,
+        p2: { ...state().players.p2, hp: 0 },
+        p3: { id: 'p3', name: 'third', pos: { x: 2, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+      },
+      order: ['p1', 'p2', 'p3'],
+    });
+    render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    expect(screen.getByTestId('grave-mound-2-0')).toBeInTheDocument();
+    expect(screen.getByTestId('grave-mound-2-0')).toHaveTextContent('×2');
+
+    const single = state({ players: { ...state().players, p2: { ...state().players.p2, hp: 0 } } });
+    const { unmount } = render(<Board state={single} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    expect(screen.getAllByTestId('board')[1].querySelector('[data-testid^="grave-mound"]')).toBeNull();
+    unmount();
+  });
+
+  test('crowded mini stones skip the name text (unreadable at that size)', () => {
+    const dead = state({
+      players: {
+        ...state().players,
+        p2: { ...state().players.p2, hp: 0 },
+        p3: { id: 'p3', name: 'third', pos: { x: 2, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+      },
+      order: ['p1', 'p2', 'p3'],
+    });
+    render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    // the ONLY 'foe'/'third' text on this board is the tank's own name plate
+    expect(screen.getByTestId('grave-p2').textContent).not.toContain('foe');
+    expect(screen.getByTestId('grave-p3').textContent).not.toContain('third');
+  });
+
+  test('a long name on a single grave is squeezed to the stone width (textLength)', () => {
+    const dead = state({
+      players: { ...state().players, p2: { ...state().players.p2, hp: 0, name: 'verylongplayer' } },
+    });
+    render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    const texts = screen.getByTestId('grave-p2').querySelectorAll('text');
+    const name = Array.from(texts).find((t) => t.textContent === 'verylongplayer');
+    expect(name).toBeTruthy();
+    expect(name!.getAttribute('textLength')).toBe(String(40 * 0.6));
+  });
+
+  test('a short grave name renders at natural width (no textLength)', () => {
+    const dead = state({ players: { ...state().players, p2: { ...state().players.p2, hp: 0, name: 'foe' } } });
+    render(<Board state={dead} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    const texts = screen.getByTestId('grave-p2').querySelectorAll('text');
+    const name = Array.from(texts).find((t) => t.textContent === 'foe');
+    expect(name!.getAttribute('textLength')).toBeNull();
+  });
+
+  test('a long tank name is squeezed to the plate width; a short one is not', () => {
+    const long = state({
+      players: { ...state().players, p2: { ...state().players.p2, name: 'ExtraordinaryTankCommander' } },
+    });
+    const { unmount: unmountLong } = render(<Board state={long} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    const name = screen.getByTestId('tank-p2').querySelector('text')!;
+    expect(name.getAttribute('textLength')).toBe('32');
+    unmountLong();
+
+    render(<Board state={state()} selectedMode="none" me="p1" onCellTap={() => {}} />);
+    const short = screen.getByTestId('tank-p2').querySelector('text')!;
+    expect(short.textContent).toBe('foe');
+    expect(short.getAttribute('textLength')).toBeNull();
+  });
 });

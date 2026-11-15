@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { gameGet, gameStart, gameUpdate, type GameDetail, type ScheduleMode } from '../lib/api';
-import { Icon, robotSvg } from '../lib/icons';
+import { Icon, clipboardSvg, robotSvg } from '../lib/icons';
 import { ErrorScreen, Loading } from '../components/Status';
 
 const BOT_DIFFICULTIES = ['easy', 'medium', 'hard'] as const;
@@ -226,6 +226,16 @@ const isHost = detail?.game.createdBy === player?.id;
 
   return (
     <main className="page">
+      {/* same nav bar as the Dashboard: home on the left, config/profile right */}
+      <p className="row" style={{ justifyContent: 'space-between' }}>
+        <Link to="/games" className="link-button btn">← Home</Link>
+        <span className="row" style={{ gap: 8 }}>
+          <Link to="/config" className="link-button btn" data-testid="nav-config" aria-label="Game config">
+            <Icon html={clipboardSvg} width={14} height={14} /> Config
+          </Link>
+          <Link to="/profile" className="link-button btn">Profile</Link>
+        </span>
+      </p>
       <h1>Lobby — {game.name}</h1>
       <p className="subtitle">
         {game.mode === 'test' ? 'Test mode' : 'Play mode'} · invite code: <strong>{game.inviteCode}</strong>

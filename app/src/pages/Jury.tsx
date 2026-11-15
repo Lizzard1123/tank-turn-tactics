@@ -74,8 +74,9 @@ export default function Jury() {
         <h2>Alive players</h2>
         {alive.map((p) => (
           <div className="jury-row" key={p.id}>
-            {/* revives on = fog of war: voters see names, not HP/range */}
-            <TankCard player={p} isMe={false} hideStats={!!state.config.revives} />
+            {/* cards stay name-only in both rule sets: HP already shows as a
+                life bar on the board, and revives-on fog of war hides it too */}
+            <TankCard player={p} isMe={false} hideStats />
             <button
               data-testid={`vote-${p.id}`}
               disabled={alreadyVoted}

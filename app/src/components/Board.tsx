@@ -17,6 +17,34 @@ interface BoardProps {
 
 const CELL = 40; // px per cell; container scrolls for large boards
 
+// --- name plate pixel fit -------------------------------------------------
+// Rough per-glyph advance widths (fractions of font-size) for the stamped
+// bold plates. Names longer than their plate get squeezed via textLength so
+// they can never spill off the stone / square.
+const NARROW_GLYPHS = 'iljtfI|!.,\'’()[]- 1';
+const WIDE_GLYPHS = 'mwMW@';
+export function nameWidthPx(text: string, fontSize: number, letterSpacing = 0): number {
+  let w = 0;
+  for (const ch of text) {
+    w += NARROW_GLYPHS.includes(ch) ? 0.35 : WIDE_GLYPHS.includes(ch) ? 0.98 : 0.68;
+  }
+  return w * fontSize + letterSpacing * Math.max(0, [...text].length - 1);
+}
+// tank plates render across a full square; leave 4px of margin per side
+const TANK_NAME_MAX = CELL - 8;
+
+// --- crowded-grave layout -------------------------------------------------
+// 2+ dead on one square: mini stones fanned across the cell, drawn in death
+// order so later stones overlap earlier ones (offsets chosen so neighbours
+// genuinely overlap), on a shared dirt mound, with a "×N" tag — the cluster
+// must read as SEVERAL graves, never as one small stone.
+const CROWD_SLOTS: Record<number, [number, number][]> = {
+  2: [[0.34, 0.46], [0.66, 0.52]],
+  3: [[0.5, 0.32], [0.32, 0.58], [0.68, 0.58]],
+  4: [[0.38, 0.34], [0.62, 0.34], [0.38, 0.66], [0.62, 0.66]],
+};
+const CROWD_SCALES: Record<number, number> = { 2: 0.72, 3: 0.6, 4: 0.5 };
+
 // fx layer testids (data-testids are part of the public DOM contract)
 const FX_TESTIDS = { attack: 'fx-attack', give_ap: 'fx-give_ap', upgrade_range: 'fx-pulse' } as const;
 
@@ -112,6 +140,17 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
     return cls.join(' ');
   };
 
+  // graves grouped by square — the mound layer and each stone's fan slot
+  // both read from this (crowd order is stable: Object.values order)
+  const dead = Object.values(state.players).filter((p) => p.hp <= 0);
+  const crowdByPos = new Map<string, typeof dead>();
+  for (const p of dead) {
+    const key = `${p.pos.x},${p.pos.y}`;
+    const list = crowdByPos.get(key);
+    if (list) list.push(p);
+    else crowdByPos.set(key, [p]);
+  }
+
   return (
     <div className="board" data-testid="board">
       <svg
@@ -145,29 +184,86 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
             />
           );
         })}
-        {/* gravestone layer: one non-blocking marker per DEAD player —
-            a tombstone glyph plus their name. Tanks drive over graves. The
-            layer is click-transparent: taps pass through to the cell rects
-            underneath (moving onto a grave, or targeting it for a revive). */}
-        {Object.values(state.players).filter((p) => p.hp <= 0).map((p) => (
+        {/* gravestone layer: one non-blocking marker per DEAD player — a
+            tombstone glyph with a framed portrait plus their name, both up on
+            the stone's face (never spilling off it: long names are squeezed
+            to the stone width). When 2+ players died on the same square the
+            stones shrink, fan out and genuinely OVERLAP on a dirt mound with
+            a "×N" tag, so the square reads as a cluster of graves. Tanks
+            drive over graves. The layer is click-transparent: taps pass
+            through to the cell rects underneath (moving onto a grave, or
+            targeting it for a revive). */}
+        {[...crowdByPos.values()].filter((l) => l.length > 1).map((l) => (
           <g
-            key={p.id}
-            data-testid={`grave-${p.id}`}
-            className="grave"
-            style={{ transform: `translate(${p.pos.x * CELL}px, ${p.pos.y * CELL}px)`, pointerEvents: 'none' }}
+            key={`mound-${l[0].pos.x}-${l[0].pos.y}`}
+            data-testid={`grave-mound-${l[0].pos.x}-${l[0].pos.y}`}
+            style={{ transform: `translate(${l[0].pos.x * CELL}px, ${l[0].pos.y * CELL}px)`, pointerEvents: 'none' }}
           >
-            <path
-              d={`M${CELL * 0.28} ${CELL * 0.86}
-                  V ${CELL * 0.42}
-                  A ${CELL * 0.22},${CELL * 0.22} 0 0 1 ${CELL * 0.72} ${CELL * 0.42}
-                  V ${CELL * 0.86} Z`}
-              className="grave-stone"
-            />
-            <text x={CELL / 2} y={CELL - 3} textAnchor="middle" className="grave-name">
-              {p.name}
+            <ellipse cx={CELL / 2} cy={CELL * 0.74} rx={CELL * 0.44} ry={CELL * 0.17} className="grave-mound" />
+            <text x={CELL / 2} y={CELL * 0.96} textAnchor="middle" className="grave-count">
+              ×{l.length}
             </text>
           </g>
         ))}
+        {dead.map((p) => {
+          const crowd = crowdByPos.get(`${p.pos.x},${p.pos.y}`) ?? [p];
+          const idx = crowd.findIndex((q) => q.id === p.id);
+          const many = crowd.length > 1;
+          // single grave: full-size, centered. Multi: mini stones fanned over
+          // the mound, in death order (crowd order is stable — Object.values).
+          const n = Math.min(crowd.length, 4);
+          const scale = many ? CROWD_SCALES[n] : 1;
+          const slot = many ? CROWD_SLOTS[n][Math.min(idx, 3)] : [0.5, 0.55];
+          // name plate fit: squeeze any name wider than the stone's face
+          const nameFit =
+            nameWidthPx(p.name, 7) > CELL * 0.6
+              ? { textLength: CELL * 0.6, lengthAdjust: 'spacingAndGlyphs' as const }
+              : {};
+          return (
+            <g
+              key={p.id}
+              data-testid={`grave-${p.id}`}
+              className={`grave${many ? ' grave-crowded' : ''}`}
+              style={{ transform: `translate(${p.pos.x * CELL}px, ${p.pos.y * CELL}px)`, pointerEvents: 'none' }}
+            >
+              <g transform={`translate(${slot[0] * CELL - (CELL * scale) / 2}px, ${slot[1] * CELL - (CELL * scale) / 2}px) scale(${scale})`}>
+                <path
+                  d={`M${CELL * 0.16} ${CELL * 0.88}
+                      V ${CELL * 0.38}
+                      A ${CELL * 0.34},${CELL * 0.26} 0 0 1 ${CELL * 0.84} ${CELL * 0.38}
+                      V ${CELL * 0.88} Z`}
+                  className="grave-stone"
+                />
+                {/* portrait stamped well INSIDE the stone edge (paper frame
+                    margin all round — the image never touches the stone's
+                    edge) */}
+                <image
+                  x={CELL * 0.24} y={CELL * 0.24}
+                  width={CELL * 0.52} height={CELL * 0.28}
+                  href={avatars?.[p.id] ?? flagUrl(p.id)}
+                  preserveAspectRatio="xMidYMid slice"
+                  className="grave-pic"
+                  data-testid={`grave-pic-${p.id}`}
+                />
+                {/* name sits on the stone face under the portrait — paper
+                    text with an ink halo, readable on the olive stone. Mini
+                    stones in a crowd skip it (a 3-4px name is unreadable);
+                    the mound's ×N tag identifies the cluster. */}
+                {!many && (
+                  <text
+                    x={CELL / 2}
+                    y={CELL * 0.76}
+                    textAnchor="middle"
+                    className="grave-name"
+                    {...nameFit}
+                  >
+                    {p.name}
+                  </text>
+                )}
+              </g>
+            </g>
+          );
+        })}
         {/* heart tiles: every unclaimed board heart (spawned by the tick loop
             up to the config's heart cap, claimed by moving onto one). Sits
             under the tank layer; legacy snapshots carry a single `heart`. */}
@@ -212,12 +308,23 @@ export default function Board({ state, selectedMode, me, avatars, onCellTap, las
               data-testid={`tank-image-${p.id}`}
             />
             {/* name plate: stamped across the top of the square (host can
-                turn names off via config.showPlayerNames) */}
-            {state.config.showPlayerNames !== false && (
-              <text x={CELL / 2} y={9} textAnchor="middle" className="tank-name">
-                {p.name}
-              </text>
-            )}
+                turn names off via config.showPlayerNames). CSS uppercases it,
+                so the width estimate runs on the uppercase form; a name wider
+                than the plate is squeezed to the plate width (textLength),
+                never spilling off the square. */}
+            {state.config.showPlayerNames !== false && (() => {
+              const est = nameWidthPx(p.name.toUpperCase(), 9, 9 * 0.04);
+              return (
+                <text
+                  x={CELL / 2} y={9} textAnchor="middle" className="tank-name"
+                  {...(est > TANK_NAME_MAX
+                    ? { textLength: TANK_NAME_MAX, lengthAdjust: 'spacingAndGlyphs' as const }
+                    : {})}
+                >
+                  {p.name}
+                </text>
+              );
+            })()}
             {/* ownership ring (signal = own, olive = enemy) */}
             <rect
               x={0} y={0} width={CELL} height={CELL}

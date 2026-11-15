@@ -344,6 +344,20 @@ input[type='radio'] {
   background: var(--paper-raised);
 }
 
+/* AP counter tints from the jury: golden = you got the bonus-vote AP,
+   purple = the jury haunted you (no drip that tick). Each shows only on the
+   day after the vote was tallied (the tick sets/clears the state). */
+.ap-counter.ap-golden {
+  border-color: #a07a1e;
+  background: linear-gradient(135deg, rgba(160, 122, 30, 0.18), rgba(240, 200, 90, 0.25));
+  color: #6d5410;
+}
+.ap-counter.ap-purple {
+  border-color: #6d4a9e;
+  background: linear-gradient(135deg, rgba(109, 74, 158, 0.18), rgba(180, 140, 220, 0.25));
+  color: #4c3272;
+}
+
 /* ---------- the tactical map (board) ---------- */
 
 .board {
@@ -777,10 +791,36 @@ input[type='radio'] {
   stroke-width: 2;
   opacity: 0.85;
 }
+/* name sits on the stone's face: paper text with an ink halo so it reads on
+   the olive stone (never black-on-stone) */
 .grave-name {
+  font-size: 7px;
+  font-weight: 700;
+  fill: var(--paper-raised, #f3ecdb);
+  stroke: var(--ink, #26251d);
+  stroke-width: 2px;
+  paint-order: stroke;
+  pointer-events: none;
+}
+/* tiny portrait stamped into the stone, with an ink frame */
+.grave-pic {
+  stroke: var(--ink, #26251d);
+  stroke-width: 1.5;
+}
+/* crowded squares: shared dirt mound under the fanned stones + a ×N tag */
+.grave-mound {
+  fill: #8a7355;
+  stroke: var(--ink, #26251d);
+  stroke-width: 1.5;
+  opacity: 0.9;
+}
+.grave-count {
   font-size: 9px;
   font-weight: 700;
-  fill: var(--ink, #26251d);
+  fill: var(--paper-raised, #f3ecdb);
+  stroke: var(--ink, #26251d);
+  stroke-width: 2px;
+  paint-order: stroke;
   pointer-events: none;
 }
 
@@ -811,9 +851,10 @@ input[type='radio'] {
   stroke-width: 2;
 }
 
-/* live battle log: kill/revive rows only */
-.battle-log { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.battle-line { padding: 4px 8px; border-left: 3px solid var(--olive); }
+/* live battle log: kill/revive rows only — roomy vertical rhythm so the
+   lines don't crush together */
+.battle-log { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 7px; }
+.battle-line { padding: 5px 10px; border-left: 3px solid var(--olive); line-height: 1.45; }
 .battle-line.kind-kill { border-left-color: #c8471f; }
 .battle-line.kind-revive { border-left-color: #3c7a3c; }
 
@@ -885,4 +926,104 @@ input[type='radio'] {
   text-transform: uppercase;
   letter-spacing: 0.06em;
   font-weight: 700;
+}
+
+/* confirmation dialog: a stamped order slip — CONFIRM in stencil, the
+   semantic action ("move up", "give heart to foe") as the subtext */
+.confirm-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(38, 37, 29, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 16px;
+}
+.confirm-dialog {
+  background: var(--paper-raised);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+  max-width: 320px;
+  width: 100%;
+  text-align: center;
+}
+.confirm-dialog h2 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.6rem;
+  letter-spacing: 0.04em;
+  margin: 0 0 6px;
+  color: var(--signal);
+}
+.confirm-dialog p {
+  font-family: var(--font-mono);
+  font-size: 0.9rem;
+  margin: 0 0 16px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.confirm-actions {
+  display: flex;
+  gap: 10px;
+}
+.confirm-actions button {
+  flex: 1;
+  min-height: 48px;
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+}
+.confirm-actions button[data-testid='confirm-yes'] {
+  background: var(--signal);
+  color: var(--paper-raised);
+}
+.confirm-actions button[data-testid='confirm-yes'] {
+  border-color: var(--ink);
+}
+
+/* battle log: the WHOLE card is the toggle (no nested button) — title click
+   condenses it up/down, default closed so the mobile game page fits without
+   scrolling */
+.battle-card { cursor: pointer; }
+.battle-card:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.battle-card.battle-open { padding-bottom: 12px; }
+.battle-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.battle-head h2 { margin: 0; }
+.battle-chevron { font-size: 0.9rem; color: var(--olive); flex: none; }
+
+/* revive chooser: same order-slip style as the confirm dialog, one wide
+   row per grave on the tapped square */
+.revive-dialog { max-width: 360px; text-align: left; }
+.revive-options { display: grid; gap: 8px; margin: 0 0 14px; }
+.revive-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
+  min-height: 48px;
+  width: 100%;
+  text-align: left;
+}
+.revive-option .revive-name {
+  font-weight: 700;
+  font-size: 0.95rem;
+  overflow-wrap: anywhere;
+}
+.revive-option .revive-sub {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--olive);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.revive-cancel {
+  width: 100%;
+  min-height: 40px;
 }

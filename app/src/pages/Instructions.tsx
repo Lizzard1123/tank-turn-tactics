@@ -72,17 +72,33 @@ function FlagIcon() {
 
 function HeartGraphic() {
   return (
-    <svg width="120" height="110" viewBox="0 0 120 110" aria-label="Heart pickup">
-      <rect width="120" height="110" fill="#e9e2cf" stroke="#26251d" stroke-width="3" />
-      {/* ration-token marker: paper octagon, ink border, rust heart */}
-      <rect
-        x="24" y="20" width="72" height="70" rx="12"
-        fill="#f3ecdb" stroke="#26251d" stroke-width="3"
-      />
-      <path
-        d="M60 78 C 36 62, 30 46, 42 36 C 49 30, 60 36, 60 44 C 60 36, 71 30, 78 36 C 90 46, 84 62, 60 78 Z"
-        fill="#c8471f" stroke="#26251d" stroke-width="3"
-      />
+    <svg width="220" height="110" viewBox="0 0 220 110" aria-label="Heart pickup — a tank moves onto an adjacent heart">
+      <rect width="220" height="110" fill="#e9e2cf" stroke="#26251d" stroke-width="3" />
+      {/* two board cells: the tank's square and the heart's square next door */}
+      <line x1="110" y1="5" x2="110" y2="105" stroke="#6b6a4f" strokeWidth="1.5" />
+      {/* your tank, parked in the left square */}
+      <circle cx="55" cy="55" r="24" fill="#c8471f" stroke="#26251d" strokeWidth="3" />
+      <rect x="45" y="40" width="20" height="15" fill="#c8471f" stroke="#26251d" strokeWidth="2" rx="2" />
+      <text
+        x="55" y="61" textAnchor="middle"
+        fill="#e9e2cf" fontFamily="'Black Ops One', sans-serif" fontSize="18" fontWeight="700"
+      >
+        T
+      </text>
+      {/* move arrow: one step onto the heart's square picks it up */}
+      <line x1="84" y1="55" x2="118" y2="55" stroke="#26251d" strokeWidth="3" strokeDasharray="6 4" />
+      <path d="M118 55 l-9 -5 v10 Z" fill="#26251d" />
+      {/* the ration-token heart sitting in the neighbouring square */}
+      <g transform="translate(116.8 15.4) scale(0.72)">
+        <rect
+          x="24" y="20" width="72" height="70" rx="12"
+          fill="#f3ecdb" stroke="#26251d" strokeWidth="3"
+        />
+        <path
+          d="M60 78 C 36 62, 30 46, 42 36 C 49 30, 60 36, 60 44 C 60 36, 71 30, 78 36 C 90 46, 84 62, 60 78 Z"
+          fill="#c8471f" stroke="#26251d" strokeWidth="3"
+        />
+      </g>
     </svg>
   );
 }
@@ -221,6 +237,13 @@ export default function Instructions() {
           is <em>haunted</em> for the day — they receive no AP on the next
           tick. A tie haunts nobody; the 3-vote jury bonus still applies to
           the haunted player. Vote carefully.</p>
+          <p><strong>Jury AP tints:</strong> the day after the votes are
+          tallied, your AP counter changes color so you know the jury's
+          verdict. <span className="ap-counter ap-golden" style={{ display: 'inline-block' }}>4 AP ★</span> —
+          you were the jury's favorite: 3+ votes landed you a bonus AP.
+          <span className="ap-counter ap-purple" style={{ display: 'inline-block', marginLeft: 6 }}>1 AP ☾</span> —
+          you are haunted: the jury took your AP drip for the day. Colors
+          clear at the next day tick.</p>
           <p><strong>Gravestones:</strong> dead tanks stay on the board as
           gravestones with their name on them. Graves don't block movement —
           drive right over them (and hearts can spawn beside them).</p>
