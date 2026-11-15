@@ -6,6 +6,9 @@ import {
 } from '@ttt/engine';
 import Board, { type BoardMode } from '../components/Board';
 import ActionBar from '../components/ActionBar';
+import ConfirmDialog from '../components/ConfirmDialog';
+import BattleLog from '../components/BattleLog';
+import ReviveChooser from '../components/ReviveChooser';
 import { ErrorScreen, Loading } from '../components/Status';
 
 import EventFeed, { type FeedEntry } from '../components/EventFeed';
@@ -45,6 +48,60 @@ const EVENT_FALLBACK_TEXT: Record<string, string> = {
   jury_vote: 'jury vote',
   fork: 'forked the timeline',
 };
+
+// Directional text for move actions: "move up", "move down", "move left", "move right"
+function moveDirection(from: { x: number; y: number }, to: { x: number; y: number }): string {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  // Primary axis: the larger absolute delta wins; tie-break dy > dx → vertical
+  const primary = Math.abs(dx) >= Math.abs(dy) ? 'x' : 'y';
+  if (primary === 'x') {
+    return dx > 0 ? 'right' : 'left';
+  }
+  return dy > 0 ? 'down' : 'up';
+}
+
+// Compute a human-readable confirmation message for a pending action.
+// `mine` is the acting player — position for directional moves, and their
+// CURRENT range (not config.baseRange) for upgrade messages.
+function actionMessage(
+  type: ActionType,
+  payload: Record<string, unknown>,
+  mine: GameState['players'][string] | undefined,
+  state: GameState,
+): string {
+  const players = state.players;
+  switch (type) {
+    case 'move': {
+      const to = payload.to as { x: number; y: number } | undefined;
+      if (!to || !mine) return 'move';
+      return `move ${moveDirection(mine.pos, to)}`;
+    }
+    case 'attack': {
+      const targetId = payload.targetId as string | undefined;
+      const target = targetId ? players[targetId] : null;
+      return `attack ${target?.name ?? targetId ?? 'target'}`;
+    }
+    case 'give_ap': {
+      const targetId = payload.targetId as string | undefined;
+      const target = targetId ? players[targetId] : null;
+      return `give AP to ${target?.name ?? targetId ?? 'target'}`;
+    }
+    case 'give_heart': {
+      const targetId = payload.targetId as string | undefined;
+      const target = targetId ? players[targetId] : null;
+      // Check if revives is on and target is dead
+      const isRevive = target && target.hp! <= 0 && state.config.revives;
+      return `give heart to ${target?.name ?? targetId ?? 'target'}${isRevive ? ' to revive' : ''}`;
+    }
+    case 'upgrade_range': {
+      const currentRange = mine?.range ?? state.config.baseRange;
+      return `upgrade range from ${currentRange} to ${currentRange + 1}`;
+    }
+    default:
+      return type;
+  }
+}
 
 // Live battle feed: during play only final blows and revives are shown (the
 // full event log stays post-game / in history scrubbing). Newest first.
@@ -101,8 +158,13 @@ function LocalGameView() {
   const [toast, setToast] = useState<string | null>(null);
   const [scrubIdx, setScrubIdx] = useState<number | null>(null);
   const [replaying, setReplaying] = useState(false);
-
-  // AP countdown: derived from the local drip's LAST actual tick (history),
+  const [pendingAction, setPendingAction] = useState<{
+    type: ActionType;
+    payload: Record<string, unknown>;
+    message: string;
+  } | null>(null);
+  // give_heart on a square with 2+ graves: choose who gets revived
+  const [reviveChoice, setReviveChoice] = useState<string[] | null>(null);
   // not an independent counter — the two can never disagree. The drip interval
   // is the game's apIntervalMinutes (default 30s when unset). Once the game
   // has a winner the countdown stops and the engine drip is halted
@@ -181,17 +243,74 @@ function LocalGameView() {
     ? (game.history[Math.min(scrubIdx, game.history.length) - 1] ?? null)
     : (game.history[game.history.length - 1] ?? null);
 
+  // Every action request — from the action bar buttons or a board cell tap —
+  // becomes a pending confirmation; handleConfirm submits on "Yes".
   const doAction = useCallback((type: ActionType, payload: Record<string, unknown>) => {
     if (!mine || mine.hp <= 0) return;
+    if (pendingAction != null) return;
+    setPendingAction({ type, payload, message: actionMessage(type, payload, mine, state) });
+  }, [mine, state, pendingAction]);
+
+  const handleCellTap = useCallback((pos: { x: number; y: number }) => {
+    if (scrubbing || mode === 'none') return;
+    const occId = Object.entries(state.players).find(
+      ([, p]) => p.pos.x === pos.x && p.pos.y === pos.y,
+    )?.[0];
+
+    // If there's a pending confirmation, don't queue another
+    if (pendingAction != null) return;
+
+    // Determine action type from mode
+    if (mode === 'move' && (!occId || state.players[occId]?.hp <= 0)) {
+      doAction('move', { to: pos });
+    } else if ((mode === 'attack' || mode === 'give_ap') && occId && occId !== me && state.players[occId]?.hp > 0) {
+      doAction(mode as ActionType, {
+        targetId: occId,
+        ...(mode === 'give_ap' ? { amount: 1 } : {}),
+      });
+    } else if (mode === 'give_heart' && occId && occId !== me) {
+      // multiple graves on this square: pick who gets the revive
+      const crowd = Object.values(state.players).filter(
+        (p) => p.hp <= 0 && p.pos.x === pos.x && p.pos.y === pos.y && p.id !== me,
+      );
+      if (crowd.length > 1) {
+        setReviveChoice(crowd.map((p) => p.id));
+        return;
+      }
+      doAction('give_heart', { targetId: occId });
+    }
+    // toggle off: tapping a cell when no target matches exits the mode
+    else {
+      setMode('none');
+    }
+  }, [scrubbing, mode, state, me, doAction]);
+
+  const handleRevivePick = useCallback((targetId: string) => {
+    setReviveChoice(null);
+    doAction('give_heart', { targetId });
+  }, [doAction]);
+
+  const handleConfirm = useCallback(() => {
+    if (!pendingAction) return;
+    const { type, payload } = pendingAction;
+    if (!mine || mine.hp <= 0) {
+      setPendingAction(null);
+      setMode('none');
+      return;
+    }
     try {
       game.apply(type, payload);
+      setMode('none');
     } catch (e) {
       setToast(e instanceof Error ? e.message : 'action failed');
       setTimeout(() => setToast(null), 4000);
-      return;
     }
-    setMode('none');
-  }, [game, mine]);
+    setPendingAction(null);
+  }, [pendingAction, mine, game]);
+
+  const handleCancel = useCallback(() => {
+    setPendingAction(null);
+  }, []);
 
   return (
     <main className="page game-page">
@@ -224,39 +343,29 @@ function LocalGameView() {
         me={me}
         avatars={{}}
         lastEvent={lastEvent}
-        onCellTap={(pos) => {
-          // historical board taps are inspection only — never commit actions
-          if (scrubbing || mode === 'none') return;
-          const occId = Object.entries(state.players).find(
-            ([, p]) => p.pos.x === pos.x && p.pos.y === pos.y,
-          )?.[0];
-          if (mode === 'move' && (!occId || state.players[occId].hp <= 0)) {
-            // graves are passable: only a LIVING occupant blocks the move
-            // (same rule the board highlight uses)
-            void doAction('move', { to: pos });
-          } else if ((mode === 'attack' || mode === 'give_ap') && occId && occId !== me && state.players[occId].hp > 0) {
-            void doAction(mode, {
-              targetId: occId,
-              ...(mode === 'give_ap' ? { amount: 1 } : {}),
-            });
-          } else if (mode === 'give_heart' && occId && occId !== me) {
-            // hearts may target graves too (a gift to a grave revives)
-            void doAction('give_heart', { targetId: occId });
-          }
-        }}
+        onCellTap={handleCellTap}
       />
 
-      {/* live battle log: final blows + revives only, during play */}
+      {/* live battle log: final blows + revives only, during play —
+          collapsed by default so mobile fits without scrolling */}
       {!state.winner && !scrubbing && battleLines(state).length > 0 && (
-        <section className="card battle-card" aria-label="Battle log" data-testid="battle-log">
-          <h2>Battle log</h2>
-          <ul className="battle-log">
-            {battleLines(state).map((l) => (
-              <li key={l.seq} className={`battle-line kind-${l.kind}`}>{l.text}</li>
-            ))}
-          </ul>
-        </section>
+        <BattleLog lines={battleLines(state)} />
       )}
+
+      {/* Confirmation dialog */}
+      <ConfirmDialog
+        action={pendingAction?.message ?? null}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
+
+      {/* revive chooser: multiple graves on one square */}
+      <ReviveChooser
+        deadIds={reviveChoice}
+        players={state.players}
+        onPick={handleRevivePick}
+        onClose={() => setReviveChoice(null)}
+      />
 
       {/* Event feed is post-game only — identical to the database view so
           both modes behave the same; actions are hidden until the game ends */}
@@ -293,6 +402,13 @@ function DbGameView({ gameId }: DbGameProps) {
   // when this client first saw the game active — fallback base for the AP
   // countdown before the server's first tick exists (lastTickAt is null)
   const gameStartedAtRef = useRef<number | null>(null);
+  const [pendingAction, setPendingAction] = useState<{
+    type: ActionType;
+    payload: Record<string, unknown>;
+    message: string;
+  } | null>(null);
+  // give_heart on a square with 2+ graves: choose who gets revived
+  const [reviveChoice, setReviveChoice] = useState<string[] | null>(null);
 
   useEffect(() => {
     if (detail?.status === 'active' && gameStartedAtRef.current === null) {
@@ -471,37 +587,100 @@ function DbGameView({ gameId }: DbGameProps) {
     }
   }, [me, state, gameId, navigate, scrubbing]);
 
-  const doAction = useCallback(async (type: ActionType, payload: Record<string, unknown>) => {
+  // Every action request — from the action bar buttons or a board cell tap —
+  // becomes a pending confirmation; handleConfirm submits on "Yes".
+  const doAction = useCallback((type: ActionType, payload: Record<string, unknown>) => {
     if (!gameId || !state || !me) return;
-    const token = localStorage.getItem('ttt_token');
-    if (!token) return;
+    if (pendingAction != null) return;
+    setPendingAction({
+      type, payload,
+      message: actionMessage(type, payload, state.players[me], state),
+    });
+  }, [gameId, state, me, pendingAction]);
 
-    // optimistic: validate against authoritative state, then commit locally so
-    // the board updates before the network round-trip completes
+  const handleCellTap = useCallback((pos: { x: number; y: number }) => {
+    if (scrubbing || mode === 'none' || !state) return;
+    const occId = Object.entries(state.players).find(
+      ([, p]) => p.pos.x === pos.x && p.pos.y === pos.y,
+    )?.[0];
+
+    // If there's a pending confirmation, don't queue another
+    if (pendingAction != null) return;
+
+    // Determine action type from mode
+    if (mode === 'move' && (!occId || state.players[occId]?.hp <= 0)) {
+      doAction('move', { to: pos });
+    } else if ((mode === 'attack' || mode === 'give_ap') && occId && occId !== me && state.players[occId]?.hp > 0) {
+      doAction(mode as ActionType, {
+        targetId: occId,
+        ...(mode === 'give_ap' ? { amount: 1 } : {}),
+      });
+    } else if (mode === 'give_heart' && occId && occId !== me) {
+      // multiple graves on this square: pick who gets the revive
+      const crowd = Object.values(state.players).filter(
+        (p) => p.hp <= 0 && p.pos.x === pos.x && p.pos.y === pos.y && p.id !== me,
+      );
+      if (crowd.length > 1) {
+        setReviveChoice(crowd.map((p) => p.id));
+        return;
+      }
+      doAction('give_heart', { targetId: occId });
+    }
+    // toggle off: tapping a cell when no target matches exits the mode
+    else {
+      setMode('none');
+    }
+  }, [scrubbing, mode, state, me, doAction]);
+
+  const handleRevivePick = useCallback((targetId: string) => {
+    setReviveChoice(null);
+    doAction('give_heart', { targetId });
+  }, [doAction]);
+
+  const handleConfirm = useCallback(async () => {
+    if (!pendingAction) return;
+    const { type, payload } = pendingAction;
+    if (!gameId || !state || !me) {
+      setPendingAction(null);
+      setMode('none');
+      return;
+    }
+    const token = localStorage.getItem('ttt_token');
+    if (!token) {
+      setPendingAction(null);
+      setMode('none');
+      return;
+    }
+
+    // optimistic: validate against authoritative state, then commit locally
     const optimisticEvent: GameEvent = {
       seq: state.seq + 1, type, actorId: me, createdAt: new Date().toISOString(), payload,
     };
     try {
       applyEvent(state, optimisticEvent);
-      setMode('none');
     } catch {
-      // invalid locally — engine buttons should have prevented this
+      setPendingAction(null);
+      setMode('none');
       return;
     }
     setPending((prev) => [...prev, optimisticEvent]);
 
     try {
       await action(token, gameId, type, payload);
-      // authoritative response: realtime/refetch reconciles with the server
       void refresh();
     } catch (e) {
-      // roll back the optimistic apply and refetch authoritative state
       setPending([]);
       void refresh();
       setToast(e instanceof Error ? e.message : 'action failed');
       setTimeout(() => setToast(null), 4000);
     }
-  }, [gameId, state, me, refresh]);
+    setPendingAction(null);
+    setMode('none');
+  }, [pendingAction, gameId, state, me, refresh]);
+
+  const handleCancel = useCallback(() => {
+    setPendingAction(null);
+  }, []);
 
   if (loading) return <Loading label="Loading game…" />;
   if (error) return <ErrorScreen message={error} />;
@@ -557,38 +736,29 @@ function DbGameView({ gameId }: DbGameProps) {
         me={me}
         avatars={avatars}
         lastEvent={lastEvent}
-        onCellTap={(pos) => {
-          // tap semantics: in move mode a legal cell commits; in attack/give
-          // mode an occupant in range commits. Graves are passable and
-          // revive-targetable: only LIVING occupants block/attack.
-          if (scrubbing || mode === 'none') return;
-          const occId = Object.entries(state.players).find(
-            ([, p]) => p.pos.x === pos.x && p.pos.y === pos.y,
-          )?.[0];
-          if (mode === 'move' && (!occId || state.players[occId].hp <= 0)) {
-            void doAction('move', { to: pos });
-          } else if ((mode === 'attack' || mode === 'give_ap') && occId && occId !== me && state.players[occId].hp > 0) {
-            void doAction(mode, {
-              targetId: occId,
-              ...(mode === 'give_ap' ? { amount: 1 } : {}),
-            });
-          } else if (mode === 'give_heart' && occId && occId !== me) {
-            void doAction('give_heart', { targetId: occId });
-          }
-        }}
+        onCellTap={handleCellTap}
       />
 
-      {/* live battle log: final blows + revives only, during play */}
+      {/* live battle log: final blows + revives only, during play —
+          collapsed by default so mobile fits without scrolling */}
       {!displayState.winner && !scrubbing && battleLines(state).length > 0 && (
-        <section className="card battle-card" aria-label="Battle log" data-testid="battle-log">
-          <h2>Battle log</h2>
-          <ul className="battle-log">
-            {battleLines(state).map((l) => (
-              <li key={l.seq} className={`battle-line kind-${l.kind}`}>{l.text}</li>
-            ))}
-          </ul>
-        </section>
+        <BattleLog lines={battleLines(state)} />
       )}
+
+      {/* Confirmation dialog */}
+      <ConfirmDialog
+        action={pendingAction?.message ?? null}
+        onConfirm={handleConfirm}
+        onCancel={handleCancel}
+      />
+
+      {/* revive chooser: multiple graves on one square */}
+      <ReviveChooser
+        deadIds={reviveChoice}
+        players={state.players}
+        onPick={handleRevivePick}
+        onClose={() => setReviveChoice(null)}
+      />
 
       {/* Event feed is post-game only — actions are hidden until the game ends */}
       {(displayState.winner || scrubbing) && (

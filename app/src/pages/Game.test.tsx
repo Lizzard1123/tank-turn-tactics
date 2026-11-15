@@ -73,23 +73,31 @@ describe('Game page', () => {
     expect(screen.queryByTestId('battle-log')).not.toBeInTheDocument();
   });
 
-  test('live battle log shows only kills/revives during play', () => {
+  test('live battle log is a dropdown: closed by default, shows only kills/revives when opened', () => {
     setup({
       state: {
         ...STATE,
         log: [
           { seq: 1, text: 'game started' },
           { seq: 2, text: 'foe attacked me for 1 damage' },
-          { seq: 3, text: 'me attacked foe for 1 damage', kind: 'kill' },
+          { seq: 3, text: 'me dealt the final blow to foe', kind: 'kill' },
           { seq: 4, text: 'me revived foe with a heart!', kind: 'revive' },
         ],
       },
     });
     const log = screen.getByTestId('battle-log');
+    // closed by default (mobile fits without scrolling) — no rows rendered
+    expect(within(log).queryAllByRole('listitem')).toHaveLength(0);
+    // open it: only kill/revive rows, newest first
+    fireEvent.click(screen.getByTestId('battle-log'));
     const lines = within(log).getAllByRole('listitem').map((li) => li.textContent);
     expect(lines).toHaveLength(2); // kind-less rows are filtered out
     expect(lines[0]).toMatch(/revived/); // newest first
+    expect(lines[1]).toMatch(/dealt the final blow/); // final-kill wording
     expect(lines.some((t) => t?.includes('attacked me'))).toBe(false);
+    // toggle closed again
+    fireEvent.click(screen.getByTestId('battle-log'));
+    expect(within(log).queryAllByRole('listitem')).toHaveLength(0);
     // full feed stays post-game
     expect(screen.queryByTestId('event-feed')).not.toBeInTheDocument();
   });
@@ -101,14 +109,27 @@ describe('Game page', () => {
     expect(screen.queryByTestId('ap-timer')).not.toBeInTheDocument();
   });
 
-  test('move: select move mode then tap legal cell posts action', async () => {
+  test('move: select move mode then tap legal cell posts action after confirming', async () => {
     vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4 });
     setup();
     fireEvent.click(screen.getByTestId('btn-move'));
     fireEvent.click(screen.getByTestId('tap-legal'));
+    // action waits behind the confirmation dialog
+    expect(vi.mocked(api.action)).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('confirm-yes'));
     await waitFor(() =>
       expect(vi.mocked(api.action)).toHaveBeenCalledWith('tok-1', 'g1', 'move', { to: { x: 1, y: 0 } }),
     );
+  });
+
+  test('move confirm shows the directional message, not coordinates', async () => {
+    setup();
+    fireEvent.click(screen.getByTestId('btn-move'));
+    fireEvent.click(screen.getByTestId('tap-legal'));
+    expect(screen.getByTestId('confirm-message')).toHaveTextContent('move right');
+    fireEvent.click(screen.getByTestId('confirm-no'));
+    expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument();
+    expect(vi.mocked(api.action)).not.toHaveBeenCalled();
   });
 
   test('move: tapping a square with a grave on it commits the move (graves passable)', async () => {
@@ -126,12 +147,13 @@ describe('Game page', () => {
     });
     fireEvent.click(screen.getByTestId('btn-move'));
     fireEvent.click(screen.getByTestId('tap-legal'));
+    fireEvent.click(screen.getByTestId('confirm-yes'));
     await waitFor(() =>
       expect(vi.mocked(api.action)).toHaveBeenCalledWith('tok-1', 'g1', 'move', { to: { x: 1, y: 0 } }),
     );
   });
 
-  test('give heart: tapping a grave commits the revive gift (revives on)', async () => {
+  test('give heart: tapping a grave commits the revive gift after confirming (revives on)', async () => {
     vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4 });
     setup({
       state: {
@@ -146,6 +168,8 @@ describe('Game page', () => {
     });
     fireEvent.click(screen.getByTestId('btn-give-heart'));
     fireEvent.click(screen.getByTestId('tap-legal'));
+    expect(screen.getByTestId('confirm-message')).toHaveTextContent('give heart to late to revive');
+    fireEvent.click(screen.getByTestId('confirm-yes'));
     await waitFor(() =>
       expect(vi.mocked(api.action)).toHaveBeenCalledWith('tok-1', 'g1', 'give_heart', { targetId: 'p3' }),
     );
@@ -155,9 +179,11 @@ describe('Game page', () => {
     const refresh = vi.fn();
     vi.mocked(api.action).mockRejectedValue(new Error('server rejected'));
     setup({ refresh });
-    // attack p2 who is in range: first click selects attack mode, second commits
+    // attack p2 who is in range: first click selects attack mode, second
+    // requests the action, confirm commits it
     fireEvent.click(screen.getByTestId('btn-attack'));
     fireEvent.click(screen.getByTestId('btn-attack'));
+    fireEvent.click(screen.getByTestId('confirm-yes'));
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(/server rejected/i));
     expect(refresh).toHaveBeenCalled();
   });
@@ -168,6 +194,7 @@ describe('Game page', () => {
     setup();
     fireEvent.click(screen.getByTestId('btn-move'));
     fireEvent.click(screen.getByTestId('tap-legal'));
+    fireEvent.click(screen.getByTestId('confirm-yes'));
     expect(screen.getByTestId('ap-counter')).toHaveTextContent('0 AP');
   });
 
@@ -177,6 +204,7 @@ describe('Game page', () => {
     setup({ refresh });
     fireEvent.click(screen.getByTestId('btn-move'));
     fireEvent.click(screen.getByTestId('tap-legal'));
+    fireEvent.click(screen.getByTestId('confirm-yes'));
     await waitFor(() => expect(screen.getByTestId('ap-counter')).toHaveTextContent('1 AP'));
   });
 
@@ -358,6 +386,60 @@ describe('Game page', () => {
   });
 
   // --- B2 fix: give_ap to a dead player is rejected by the engine ---
+
+  test('give heart on a square with 2+ graves opens the revive chooser; pick routes through confirm', async () => {
+    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4 });
+    setup({
+      state: {
+        ...STATE,
+        config: { ...STATE.config, heartGifts: true, revives: true },
+        players: {
+          ...STATE.players,
+          p3: { id: 'p3', name: 'late', pos: { x: 1, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+          p4: { id: 'p4', name: 'early', pos: { x: 1, y: 0 }, hp: 0, ap: 0, range: 2, isBot: true, botDifficulty: 'easy' },
+        },
+        order: ['p1', 'p2', 'p3', 'p4'],
+      },
+    });
+    fireEvent.click(screen.getByTestId('btn-give-heart'));
+    fireEvent.click(screen.getByTestId('tap-legal'));
+    // chooser names every grave on the square — no action submitted yet
+    const chooser = screen.getByTestId('revive-chooser');
+    expect(chooser).toBeInTheDocument();
+    expect(screen.getByTestId('revive-option-p3')).toHaveTextContent('late');
+    expect(screen.getByTestId('revive-option-p4')).toHaveTextContent('early');
+    expect(vi.mocked(api.action)).not.toHaveBeenCalled();
+    // picking a grave routes through the normal confirm flow
+    fireEvent.click(screen.getByTestId('revive-option-p4'));
+    expect(screen.getByTestId('confirm-message')).toHaveTextContent('give heart to early to revive');
+    fireEvent.click(screen.getByTestId('confirm-yes'));
+    await waitFor(() =>
+      expect(vi.mocked(api.action)).toHaveBeenCalledWith('tok-1', 'g1', 'give_heart', { targetId: 'p4' }),
+    );
+  });
+
+  test('upgrade range confirms with the player\'s CURRENT range, not baseRange', async () => {
+    vi.mocked(api.action).mockResolvedValue({ ok: true, seq: 4 });
+    setup({
+      // p1 already upgraded once (range 3); baseRange stays 2
+      state: { ...STATE, players: { ...STATE.players, p1: { ...STATE.players.p1, ap: 5, range: 3 } } },
+    });
+    fireEvent.click(screen.getByTestId('btn-upgrade'));
+    expect(screen.getByTestId('confirm-message')).toHaveTextContent('upgrade range from 3 to 4');
+    fireEvent.click(screen.getByTestId('confirm-yes'));
+    await waitFor(() =>
+      expect(vi.mocked(api.action)).toHaveBeenCalledWith('tok-1', 'g1', 'upgrade_range', {}),
+    );
+  });
+
+  test('upgrade range does not submit when the player clicks No', () => {
+    setup({ state: { ...STATE, players: { ...STATE.players, p1: { ...STATE.players.p1, ap: 5 } } } });
+    fireEvent.click(screen.getByTestId('btn-upgrade'));
+    expect(screen.getByTestId('confirm-dialog')).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('confirm-no'));
+    expect(screen.queryByTestId('confirm-dialog')).not.toBeInTheDocument();
+    expect(vi.mocked(api.action)).not.toHaveBeenCalled();
+  });
 
   test('engine rejects give_ap to a dead player', () => {
     const s = createInitialState(STATE.config, [

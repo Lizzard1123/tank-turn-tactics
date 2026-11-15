@@ -57,7 +57,6 @@ describe('localGame history', () => {
 
   test('apply updates state', () => {
     const game = createLocalGame({ startingAp: 4 });
-    const stateBefore = game.state();
     game.apply('move', { to: stepFrom(game) });
     const stateAfter = game.state();
     expect(stateAfter.seq).toBe(1);
@@ -119,7 +118,7 @@ describe('localGame history', () => {
     const step = candidates.find((c) => c.x >= 0 && c.y >= 0 && c.x < 8 && c.y < 8 && !occ.has(`${c.x},${c.y}`))!;
     game.apply('move', { to: step });
     const posAfter = game.state().players['me'].pos;
-    expect(posAfter.x).not.toBe(p.x) || expect(posAfter.y).not.toBe(p.y);
+    expect(posAfter).not.toEqual(p); // the move changed the square
   });
 
   test('apply upgrade_range increases range', () => {

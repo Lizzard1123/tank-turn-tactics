@@ -14,7 +14,7 @@ const state = (overrides?: Partial<GameState>): GameState => ({
   ...overrides,
 });
 
-const props = (s: GameState, mode: 'none' | 'move' | 'attack' | 'give_ap', onAction = vi.fn(), onModeChange = vi.fn()) =>
+const props = (s: GameState, mode: 'none' | 'move' | 'attack' | 'give_ap' | 'give_heart', onAction = vi.fn(), onModeChange = vi.fn()) =>
   ({ state: s, me: 'p1', mode, onAction, onModeChange });
 
 describe('ActionBar', () => {
@@ -55,11 +55,50 @@ describe('ActionBar', () => {
     expect(onAction).toHaveBeenCalledWith('attack', { targetId: 'p2' });
   });
 
-  test('attack disabled when no enemy in range', () => {
+  test('attack stays enabled in active mode with no enemy in range (so it can toggle off)', () => {
     const s = state();
     s.players.p2.pos = { x: 7, y: 7 };
     render(<ActionBar {...props(s, 'attack')} />);
-    expect(screen.getByRole('button', { name: /attack/i })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /attack/i })).toBeEnabled();
+  });
+
+  test('toggle-off: clicking the active attack button with no target unselects the mode', () => {
+    const onAction = vi.fn();
+    const onModeChange = vi.fn();
+    const s = state();
+    s.players.p2.pos = { x: 7, y: 7 }; // nothing in range
+    render(<ActionBar {...props(s, 'attack', onAction, onModeChange)} />);
+    fireEvent.click(screen.getByRole('button', { name: /attack/i }));
+    expect(onModeChange).toHaveBeenCalledWith('none');
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  test('toggle-off: clicking the active move button unselects the mode', () => {
+    const onModeChange = vi.fn();
+    render(<ActionBar {...props(state(), 'move', vi.fn(), onModeChange)} />);
+    fireEvent.click(screen.getByRole('button', { name: /move/i }));
+    expect(onModeChange).toHaveBeenCalledWith('none');
+  });
+
+  test('toggle-off: clicking the active give AP button with no target unselects the mode', () => {
+    const onAction = vi.fn();
+    const onModeChange = vi.fn();
+    const s = state();
+    s.players.p2.pos = { x: 7, y: 7 };
+    render(<ActionBar {...props(s, 'give_ap', onAction, onModeChange)} />);
+    fireEvent.click(screen.getByRole('button', { name: /give ap/i }));
+    expect(onModeChange).toHaveBeenCalledWith('none');
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  test('toggle-off: clicking the active give heart button with no target unselects the mode', () => {
+    const onAction = vi.fn();
+    const onModeChange = vi.fn();
+    const s = state({ config: { ...state().config, heartGifts: true } });
+    render(<ActionBar {...props(s, 'give_heart', onAction, onModeChange)} />);
+    fireEvent.click(screen.getByRole('button', { name: /give heart/i }));
+    expect(onModeChange).toHaveBeenCalledWith('none');
+    expect(onAction).not.toHaveBeenCalled();
   });
 
   test('give AP acts on target in give mode', () => {
@@ -79,11 +118,53 @@ describe('ActionBar', () => {
     expect(onAction).toHaveBeenCalledWith('upgrade_range', {});
   });
 
-  test('give AP is disabled when the only in-range target is dead', () => {
+  test('give AP with a dead in-range target toggles off instead of acting', () => {
+    const onAction = vi.fn();
+    const onModeChange = vi.fn();
     const s = state();
     s.players.p2.hp = 0; // dead — give_ap to a grave is rejected server-side
-    render(<ActionBar {...props(s, 'give_ap')} />);
-    expect(screen.getByRole('button', { name: /give ap/i })).toBeDisabled();
+    render(<ActionBar {...props(s, 'give_ap', onAction, onModeChange)} />);
+    fireEvent.click(screen.getByRole('button', { name: /give ap/i }));
+    expect(onModeChange).toHaveBeenCalledWith('none');
+    expect(onAction).not.toHaveBeenCalled();
+  });
+
+  // --- jury AP tints: golden the day after a bonus, purple when haunted ---
+
+  test('AP counter is un-tinted on a normal day', () => {
+    render(<ActionBar {...props(state(), 'none')} />);
+    expect(screen.getByTestId('ap-counter')).not.toHaveAttribute('data-ap-tint');
+  });
+
+  test('AP counter goes golden the day the jury bonus landed on me', () => {
+    const s = state({ day: 4, haunted: null, lastBonus: [{ id: 'p1', day: 4 } as never] });
+    render(<ActionBar {...props(s, 'none')} />);
+    expect(screen.getByTestId('ap-counter')).toHaveAttribute('data-ap-tint', 'golden');
+    expect(screen.getByTestId('ap-counter')).toHaveTextContent('★');
+  });
+
+  test('golden tint expires the day after (bonus day does not match)', () => {
+    const s = state({ day: 5, haunted: null, lastBonus: [{ id: 'p1', day: 4 } as never] });
+    render(<ActionBar {...props(s, 'none')} />);
+    expect(screen.getByTestId('ap-counter')).not.toHaveAttribute('data-ap-tint');
+  });
+
+  test('AP counter goes purple when the jury haunted me', () => {
+    const s = state({ day: 4, haunted: 'p1', lastBonus: [] });
+    render(<ActionBar {...props(s, 'none')} />);
+    expect(screen.getByTestId('ap-counter')).toHaveAttribute('data-ap-tint', 'purple');
+  });
+
+  test('haunt beats bonus when both fired the same tick', () => {
+    const s = state({ day: 4, haunted: 'p1', lastBonus: [{ id: 'p1', day: 4 } as never] });
+    render(<ActionBar {...props(s, 'none')} />);
+    expect(screen.getByTestId('ap-counter')).toHaveAttribute('data-ap-tint', 'purple');
+  });
+
+  test('someone else\'s bonus or haunt does not tint my counter', () => {
+    const s = state({ day: 4, haunted: 'p2', lastBonus: [{ id: 'p2', day: 4 } as never] });
+    render(<ActionBar {...props(s, 'none')} />);
+    expect(screen.getByTestId('ap-counter')).not.toHaveAttribute('data-ap-tint');
   });
 
 });

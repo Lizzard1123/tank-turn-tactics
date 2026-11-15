@@ -20,6 +20,13 @@ export default function ActionBar({ state, me, mode, onAction, onModeChange }: A
   const ap = mine.ap;
   const cost = 1;
 
+  // AP icon tint from the jury: golden when you received the bonus vote AP,
+  // purple when the jury haunted you (you lost that tick's drip). Each shows
+  // only on the day AFTER the vote was tallied — lastBonus carries the tick's
+  // day, and `haunted` is cleared/replaced by the next tick.
+  const bonusMine = (state.lastBonus ?? []).find((b) => b.id === me && b.day === state.day);
+  const apTint = state.haunted === me ? 'purple' : bonusMine ? 'golden' : null;
+
   // find a target for attack/give in the current mode (living players only:
   // give_ap to a dead player is rejected server-side with "player is dead")
   const targetId = Object.values(state.players).find(
@@ -27,8 +34,10 @@ export default function ActionBar({ state, me, mode, onAction, onModeChange }: A
       && (mode !== 'attack' || p.hp > 0),
   )?.id ?? null;
 
-  const canAttack = ap >= cost && (mode !== 'attack' || targetId !== null);
-  const canGive = ap >= cost && (mode !== 'give_ap' || targetId !== null);
+  // Active-mode buttons stay clickable so a second click toggles them off —
+  // even when no target is in range (that click then just unselects).
+  const canAttack = mode === 'attack' || ap >= cost;
+  const canGive = mode === 'give_ap' || ap >= cost;
   const canUpgrade = ap >= state.config.upgradeCost;
 
   // heart gifts cost 1 of the GIVER's hp (never the last one); targets are
@@ -37,19 +46,27 @@ export default function ActionBar({ state, me, mode, onAction, onModeChange }: A
     (p) => p.id !== me && inRange(mine.pos, p.pos, mine.range)
       && (p.hp > 0 ? p.hp < state.config.startingHp : !!state.config.revives),
   )?.id ?? null;
-  const canGiveHeart = mine.hp >= 2 && (mode !== 'give_heart' || heartTarget !== null);
+  const canGiveHeart = mode === 'give_heart' || mine.hp >= 2;
 
   function handleAttack() {
-    if (mode === 'attack' && targetId) onAction('attack', { targetId });
-    else onModeChange('attack');
+    if (mode === 'attack') {
+      // toggle off: clicking the active button unselects it (also when no
+      // target is in range, since the button stays enabled in active mode)
+      if (!targetId || ap < cost) onModeChange('none');
+      else onAction('attack', { targetId });
+    } else onModeChange('attack');
   }
   function handleGive() {
-    if (mode === 'give_ap' && targetId) onAction('give_ap', { targetId, amount: 1 });
-    else onModeChange('give_ap');
+    if (mode === 'give_ap') {
+      if (!targetId || ap < cost) onModeChange('none');
+      else onAction('give_ap', { targetId, amount: 1 });
+    } else onModeChange('give_ap');
   }
   function handleGiveHeart() {
-    if (mode === 'give_heart' && heartTarget) onAction('give_heart', { targetId: heartTarget });
-    else onModeChange('give_heart');
+    if (mode === 'give_heart') {
+      if (!heartTarget || mine.hp < 2) onModeChange('none');
+      else onAction('give_heart', { targetId: heartTarget });
+    } else onModeChange('give_heart');
   }
   function handleMove() {
     onModeChange(mode === 'move' ? 'none' : 'move');
@@ -57,7 +74,13 @@ export default function ActionBar({ state, me, mode, onAction, onModeChange }: A
 
   return (
     <div className="action-bar" data-testid="action-bar">
-      <span className="ap-counter" data-testid="ap-counter">{ap} AP</span>
+      <span
+        className={`ap-counter${apTint ? ` ap-${apTint}` : ''}`}
+        data-testid="ap-counter"
+        {...(apTint ? { 'data-ap-tint': apTint } : {})}
+      >
+        {ap} AP{apTint === 'golden' ? ' ★' : apTint === 'purple' ? ' ☾' : ''}
+      </span>
       <button
         data-testid="btn-move"
         disabled={ap < cost}
