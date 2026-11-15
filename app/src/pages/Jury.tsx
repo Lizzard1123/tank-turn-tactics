@@ -42,7 +42,7 @@ export default function Jury() {
       await action(token, gameId, 'jury_vote', { candidateId });
       await refresh();
     } catch {
-      // vote rejected (already voted, candidate dead, etc.) — refetch to sync
+      // vote rejected (candidate dead, not on jury, etc.) — refetch to sync
       await refresh();
     }
   }
