@@ -67,14 +67,19 @@ const log = (...a) => console.log(...a);
 const manhattan = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// --- direct local-stack powers (freeze) -----------------------------------
-// The jury arenas run a 1-MINUTE AP interval, so the local cron's own tick
-// consumes the staged votes within ~a minute of staging — no waiting on a
-// 12-minute slot. The moment the tint lands we FREEZE the drip by patching
-// games.ap_interval_minutes through PostgREST with the service key (which
-// `supabase status` prints for the local demo stack; service role bypasses
-// RLS) — golden (lastBonus) and purple (haunted) stay live for hours
-// instead of dying at the next minute's tick.
+// --- direct local-stack powers (tick + freeze) ----------------------------
+// The "local cron" is useless for the lab: migration 0011's job posts to the
+// PROD tick URL with the LOCAL app_settings value (empty) — every fire 401s
+// and no game ever ticks. So the driver mints the daily_tick ITSELF with the
+// real engine (the vendored engine_src is plain TS with explicit .ts
+// imports, which node 22 runs natively) and commits it through the same
+// service-role rpc the edge functions use. The moment the tint lands we
+// FREEZE the game's AP drip by patching games.ap_interval_minutes (service
+// role bypasses RLS) — golden (lastBonus) and purple (haunted) stay live for
+// hours instead of dying at the next tick.
+import { applyEvent } from '../supabase/functions/_shared/engine_src/reducer.ts';
+
+const SYSTEM_ID = '00000000-0000-0000-0000-000000000000';
 
 let cachedServiceKey = null;
 function serviceKey() {
@@ -84,6 +89,46 @@ function serviceKey() {
   });
   cachedServiceKey = JSON.parse(out).SERVICE_ROLE_KEY;
   return cachedServiceKey;
+}
+
+// load the TRUE (unscrubbed) detail exactly like the tick function reads it
+async function loadFull(gameId) {
+  const sk = serviceKey();
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/load_game_detail`, {
+    method: 'POST',
+    headers: { apikey: sk, Authorization: `Bearer ${sk}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_game_id: gameId, p_player_id: SYSTEM_ID }),
+  });
+  if (!res.ok) throw new Error(`load_game_detail: HTTP ${res.status}`);
+  return res.json();
+}
+
+async function commitDailyTick(gameId) {
+  const sk = serviceKey();
+  const d = await loadFull(gameId);
+  if (!d.snap) throw new Error('no snapshot to tick');
+  const state = d.snap.state;
+  const event = {
+    seq: state.seq + 1, type: 'daily_tick', actorId: 'system',
+    createdAt: new Date().toISOString(),
+    payload: { apGained: state.config.apPerDay ?? 1, elapsedMinutes: 1440 },
+  };
+  const next = applyEvent(state, event);
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/commit_game_update`, {
+    method: 'POST',
+    headers: { apikey: sk, Authorization: `Bearer ${sk}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      p_game_id: gameId,
+      p_generation: d.game.cur_generation,
+      p_events: [{ seq: event.seq, type: event.type, actor_id: event.actorId, payload: event.payload, created_at: event.createdAt }],
+      p_next_seq: next.seq,
+      p_next_state: next,
+      p_has_winner: !!next.winner,
+      p_member_states: [],
+      p_game_patch: { lastTickAt: new Date().toISOString() },
+    }),
+  });
+  if (!res.ok) throw new Error(`commit_game_update: HTTP ${res.status} ${await res.text()}`);
 }
 
 async function freezeAp(gameId, minutes) {
@@ -101,25 +146,22 @@ async function freezeAp(gameId, minutes) {
 
 const AP_FREEZE_MINUTES = 600; // 10h — the tint outlives any look at the UI
 
-// Poll until the tint lands (the local cron consumes the staged votes), then
-// freeze the drip. Re-casts any votes a racing cron tick consumed empty.
-async function settleTint(d, label, pred, stageVotes, timeoutMin = 4) {
+// Stage the votes, drive daily_ticks DIRECTLY until the tint lands, then
+// freeze the drip. Re-casts votes if a stray tick consumed them empty.
+async function settleTint(d, label, pred, stageVotes, timeoutMin = 2) {
   const s0 = await d.state();
   if (pred(s0)) {
     await freezeAp(d.gameId, AP_FREEZE_MINUTES); // re-run: re-freeze, harmless
     return;
-  }
-  if ((s0.config.apIntervalMinutes ?? 0) >= AP_FREEZE_MINUTES) {
-    throw new Error(`${label}: tint already expired (drip frozen) — rebuild with --only`);
   }
   const deadline = Date.now() + timeoutMin * 60_000;
   for (;;) {
     const s = await d.state();
     if (pred(s)) break;
     if ((s.pendingVotes ?? []).length === 0) await stageVotes();
-    if (Date.now() > deadline) throw new Error(`${label}: tint did not land within ${timeoutMin} min (is the local cron running?)`);
-    log(`    · waiting for the cron tick to consume the votes (${label})…`);
-    await sleep(4000);
+    await commitDailyTick(d.gameId); // consumes the votes + advances the day
+    if (Date.now() > deadline) throw new Error(`${label}: tint did not land within ${timeoutMin} min`);
+    await sleep(500);
   }
   await freezeAp(d.gameId, AP_FREEZE_MINUTES);
   log(`    · ${label} tint live — AP drip frozen for ${AP_FREEZE_MINUTES} min`);
@@ -264,10 +306,7 @@ const PLANS = [
     name: 'Jury Screen & Voting',
     humans: ['A', 'B', 'E'],
     about: 'Revives OFF: DevB is dead for good — their window shows the JURY screen (DevB has ALREADY voted for DevA). The vote was consumed by a tick, so DevA is HAUNTED: PURPLE AP counter (and DevA loses a future tick\'s drip). Vote in DevB\'s window to see the voting UI.',
-    // 1-min interval: the drip is due immediately, so a DIRECT tick call
-    // consumes the staged vote on the spot; then the drip is frozen for 10h
-    // so `haunted` stays set while you look at the UI
-    cfg: { juryHaunt: true, board: 5, apIntervalMinutes: 1 },
+    cfg: { juryHaunt: true, board: 5, apSchedule: 'interval', apIntervalMinutes: 1 },
     setup: async (d) => {
       await d.killPair('A', 'B');
       await settleTint(d, 'haunt', (s) => s.haunted === d.ids.A, async () => {
@@ -282,7 +321,7 @@ const PLANS = [
     name: 'Jury Bonus & Golden AP',
     humans: ['A', 'B', 'C', 'D', 'E'],
     about: 'DevB/C/D are dead and have ALREADY voted for DevA (3 votes, consumed by a tick). DevA got +1 jury AP and a GOLDEN counter — frozen live for hours. Haunt is OFF here so the tint is purely golden — see Jury Screen for the purple one.',
-    cfg: { juryHaunt: false, startingHp: 4, board: 5, apIntervalMinutes: 1 },
+    cfg: { juryHaunt: false, startingHp: 4, board: 5, apSchedule: 'interval', apIntervalMinutes: 1 },
     setup: async (d) => {
       await d.topUpTo('B', 'A', 30); // DevB dies first and never walks
       for (const body of ['B', 'C', 'D']) await d.killPair('A', body);
