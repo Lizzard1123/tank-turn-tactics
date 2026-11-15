@@ -990,7 +990,13 @@ button.ap-counter:focus-visible {
   margin: 0 0 6px;
   color: var(--signal);
 }
+/* modal titles read clean: no stencil dash (the page-section h2 stamp
+   must not bleed into the ConfirmDialog / AP popup / revive chooser) */
+.confirm-dialog h2::before {
+  content: none;
+}
 .confirm-dialog p {
+
   font-family: var(--font-mono);
   font-size: 0.9rem;
   margin: 0 0 16px;

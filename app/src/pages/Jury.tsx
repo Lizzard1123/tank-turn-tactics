@@ -72,6 +72,14 @@ export default function Jury() {
         )}
       </header>
 
+      {/* revive waiting goes at the very top (under the AP timer, above the
+          board) — it is the dead player's single most important status line */}
+      {state.config.revives && (
+        <p className="banner" data-testid="revive-waiting">
+          Waiting for a heart… a living player can revive you by giving you one.
+        </p>
+      )}
+
       {/* the board is always visible — jury members spectate the war (with
           revives on, the live event feed stays hidden — the board is all a
           dead player sees; with revives off it shows below). */}
@@ -82,7 +90,8 @@ export default function Jury() {
         <p className="subtitle" data-testid="jury-subtitle">
           <Icon html={skullSvg} width={14} height={14} className="stat-icon" />{' '}
           You are on the jury — vote daily to grant a player bonus AP (3+ votes
-          needed). Your votes are not public — no one can see who you voted for.
+          needed). You can change your vote after casting it. Your votes are
+          not public — no one can see who you voted for.
         </p>
         {alive.map((p) => {
           const mine = p.id === myVote;
@@ -113,11 +122,7 @@ export default function Jury() {
         </p>
       )}
 
-      {state.config.revives ? (
-        <p className="banner" data-testid="revive-waiting">
-          Waiting for a heart… a living player can revive you by giving you one.
-        </p>
-      ) : (
+      {!state.config.revives && (
         <section className="card" aria-label="Events">
           <h2>Events</h2>
           <EventFeed entries={state.log.map((l) => ({ seq: l.seq, text: l.text }))} activeIndex={null} live replaying={false} />

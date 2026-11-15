@@ -443,12 +443,26 @@ describe('jury page extras', () => {
     const note = await screen.findByTestId('jury-subtitle');
     expect(note.textContent).toMatch(/You are on the jury/);
     expect(note.textContent).toMatch(/3\+ votes needed/);
+    expect(note.textContent).toMatch(/change your vote after casting it/i);
     expect(note.textContent).toMatch(/votes are not public/i);
     // the note renders inside the same card, after the heading
     expect(note.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     // and above the first vote button
     const btn = screen.getByTestId('vote-p2');
     expect(note.compareDocumentPosition(btn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  test('revive-waiting banner sits at the top: under the status bar, above the board', async () => {
+    renderJury({ ...deadState, config: { ...deadState.config, revives: true } });
+    const banner = await screen.findByTestId('revive-waiting');
+    expect(banner.textContent).toMatch(/Waiting for a heart/);
+    const board = await screen.findByTestId('board');
+    // banner precedes the board...
+    expect(banner.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // ...and follows the status header (which holds the AP timer chip)
+    const status = banner.closest('.page')?.querySelector('.game-status');
+    expect(status).not.toBeNull();
+    expect(status!.compareDocumentPosition(banner) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
 
