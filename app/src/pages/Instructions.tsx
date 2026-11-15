@@ -161,8 +161,9 @@ export default function Instructions() {
       <div className="panel">
         <div className="panel-body">
           <h2>Your stats</h2>
-          <p><Icon html={heartSvg} width={14} height={14} className="stat-icon" /> <strong>Health (HP)</strong> — starts at 3. There is no healing
-          beyond your starting HP. At 0 HP you die and join the Jury.</p>
+          <p><Icon html={heartSvg} width={14} height={14} className="stat-icon" />
+          <strong>Health (HP)</strong> — starts at 3. You can only heal by
+          picking up hearts on the board. At 0 HP you die and join the Jury.</p>
           <p><Icon html={boltSvg} width={14} height={14} className="stat-icon" /> <strong>Action Points (AP)</strong> — the resource to act
           with. Everyone starts with 4 AP and gains more each day.</p>
           <p><Icon html={targetSvg} width={14} height={14} className="stat-icon" /> <strong>Range</strong> — the distance (in grid steps) at which
@@ -233,7 +234,7 @@ export default function Instructions() {
           <ul>
             <li><strong>Move:</strong> tap an adjacent empty cell (or a gravestone — dead players don't block movement).</li>
             <li><strong>Attack / Give AP:</strong> tap an <em>alive</em> player in range.</li>
-            <li><strong>Give Heart:</strong> tap any in-range player (alive or dead).</li>
+            <li><strong>Give Heart:</strong> tap any player in range — alive or dead.</li>
           </ul>
         </div>
       </div>
