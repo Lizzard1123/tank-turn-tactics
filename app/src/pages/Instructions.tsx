@@ -1,42 +1,33 @@
 import { Link } from 'react-router-dom';
 import { Icon, heartSvg, boltSvg, targetSvg } from '../lib/icons';
 
-// Info-page graphics, drawn in the field-operations design system
+// ---------------------------------------------------------------------------
+// Info-page graphics — field-operations design system
 // (khaki stock, olive-drab grid, ink outlines, signal-orange accents).
 // The standalone SVG sources live in docs/graphics/.
+// ---------------------------------------------------------------------------
 
 function BoardOutline() {
   return (
     <svg width="200" height="200" viewBox="0 0 200 200" aria-label="8x8 tactical board">
       <rect width="200" height="200" fill="#e9e2cf" />
       <defs>
-        <pattern id="ttt-grid" width="25" height="25" patternUnits="userSpaceOnUse">
+        <pattern id="ttt-grid-inst" width="25" height="25" patternUnits="userSpaceOnUse">
           <path d="M25 0V200 M0 25H200" stroke="#6b6a4f" stroke-width="1" />
         </pattern>
       </defs>
-      <rect width="200" height="200" fill="url(#ttt-grid)" />
+      <rect width="200" height="200" fill="url(#ttt-grid-inst)" />
       <rect width="200" height="200" fill="none" stroke="#26251d" stroke-width="3" />
     </svg>
   );
 }
 
-function TankIcon() {
+/** A flag marker — what players actually see on the board (avatars / flags). */
+function FlagIcon() {
   return (
-    <svg width="160" height="130" viewBox="0 0 160 130" aria-label="Tank">
-      <circle cx="80" cy="64" r="30" fill="#c8471f" stroke="#26251d" stroke-width="3" />
-      <rect x="68" y="46" width="24" height="18" fill="#c8471f" stroke="#26251d" stroke-width="2" rx="2" />
-      <rect x="46" y="82" width="68" height="12" fill="none" stroke="#26251d" stroke-width="2" />
-      <text
-        x="80"
-        y="71"
-        textAnchor="middle"
-        fill="#e9e2cf"
-        fontFamily="'Black Ops One', sans-serif"
-        fontSize="22"
-        fontWeight="700"
-      >
-        T
-      </text>
+    <svg width="140" height="130" viewBox="0 0 140 130" aria-label="Flag marker — player token on the board">
+      <line x1="62" y1="32" x2="62" y2="108" stroke="#26251d" strokeWidth="4" strokeLinecap="round" />
+      <rect x="62" y="42" width="44" height="30" fill="#c8471f" stroke="#26251d" stroke-width="2" />
     </svg>
   );
 }
@@ -46,8 +37,7 @@ function APIcon() {
     <svg width="140" height="140" viewBox="0 0 140 140" aria-label="Action points (AP)">
       <circle cx="70" cy="70" r="32" fill="#a07a1e" stroke="#26251d" stroke-width="3" />
       <text
-        x="70"
-        y="78"
+        x="70" y="78"
         textAnchor="middle"
         fill="#e9e2cf"
         fontFamily="'Black Ops One', sans-serif"
@@ -61,33 +51,18 @@ function APIcon() {
   );
 }
 
-function FlagIcon() {
-  return (
-    <svg width="140" height="130" viewBox="0 0 140 130" aria-label="Flag marker">
-      <line x1="62" y1="32" x2="62" y2="108" stroke="#26251d" strokeWidth="4" strokeLinecap="round" />
-      <rect x="62" y="42" width="44" height="30" fill="#c8471f" stroke="#26251d" stroke-width="2" />
-    </svg>
-  );
-}
-
 function HeartGraphic() {
   return (
-    <svg width="220" height="110" viewBox="0 0 220 110" aria-label="Heart pickup — a tank moves onto an adjacent heart">
+    <svg width="220" height="110" viewBox="0 0 220 110" aria-label="Heart pickup — a flag moves onto an adjacent heart">
       <rect width="220" height="110" fill="#e9e2cf" stroke="#26251d" stroke-width="3" />
-      {/* two board cells: the tank's square and the heart's square next door */}
+      {/* two board cells: the flag's square and the heart's square next door */}
       <line x1="110" y1="5" x2="110" y2="105" stroke="#6b6a4f" strokeWidth="1.5" />
-      {/* your tank, parked in the left square */}
-      <circle cx="55" cy="55" r="24" fill="#c8471f" stroke="#26251d" strokeWidth="3" />
-      <rect x="45" y="40" width="20" height="15" fill="#c8471f" stroke="#26251d" strokeWidth="2" rx="2" />
-      <text
-        x="55" y="61" textAnchor="middle"
-        fill="#e9e2cf" fontFamily="'Black Ops One', sans-serif" fontSize="18" fontWeight="700"
-      >
-        T
-      </text>
+      {/* your flag, parked in the left square */}
+      <line x1="52" y1="42" x2="52" y2="88" stroke="#26251d" strokeWidth="3" strokeLinecap="round" />
+      <rect x="52" y="50" width="30" height="20" fill="#c8471f" stroke="#26251d" strokeWidth="2" />
       {/* move arrow: one step onto the heart's square picks it up */}
-      <line x1="84" y1="55" x2="118" y2="55" stroke="#26251d" strokeWidth="3" strokeDasharray="6 4" />
-      <path d="M118 55 l-9 -5 v10 Z" fill="#26251d" />
+      <line x1="84" y1="60" x2="118" y2="60" stroke="#26251d" strokeWidth="3" strokeDasharray="6 4" />
+      <path d="M118 60 l-9 -5 v10 Z" fill="#26251d" />
       {/* the ration-token heart sitting in the neighbouring square */}
       <g transform="translate(116.8 15.4) scale(0.72)">
         <rect
@@ -100,6 +75,49 @@ function HeartGraphic() {
         />
       </g>
     </svg>
+  );
+}
+
+/** Mock action bar — what the player sees at the bottom of the game screen. */
+function MockActionBar() {
+  return (
+    <div className="mock-action-bar" aria-label="Mock action bar">
+      <button className="mock-ap-counter" aria-label="4 AP">4 AP</button>
+      <button className="mock-btn" disabled>Move <small>1 AP</small></button>
+      <button className="mock-btn">Attack <small>1 AP</small></button>
+      <button className="mock-btn">Give AP <small>1 AP</small></button>
+      <button className="mock-btn" disabled>Give Heart <small>1 HP</small></button>
+      <button className="mock-btn" disabled>Upgrade Range <small>2 AP</small></button>
+    </div>
+  );
+}
+
+/** Mock battle log — collapsed by default on mobile. */
+function MockBattleLog() {
+  return (
+    <div className="mock-battle-log" aria-label="Mock battle log">
+      <div className="mock-battle-head">
+        <span>Battle log</span>
+        <span className="mock-chevron">▸</span>
+      </div>
+    </div>
+  );
+}
+
+/** Mock AP info popup — shown when you tap the AP counter. */
+function MockApPopup() {
+  return (
+    <div className="mock-popup" aria-label="Mock AP info popup">
+      <div className="mock-popup-inner">
+        <h3>Action Points</h3>
+        <p>You have 4 AP. 12 have been given out in total.</p>
+        <p className="mock-popup-note">
+          <Icon html={boltSvg} width={12} height={12} className="mock-golden" />
+          {' '}The jury awarded you bonus AP — your counter shines golden today.
+        </p>
+        <button>OK</button>
+      </div>
+    </div>
   );
 }
 
@@ -122,10 +140,11 @@ export default function Instructions() {
       <Link to="/" className="link-button btn">← Back</Link>
       <h1>How to play</h1>
 
+      {/* ---- Goal ---------------------------------------------------------------- */}
       <div className="panel">
         <div className="panel-body">
           <h2>Goal</h2>
-          <p>Be the last tank standing. Attack others, form alliances, give
+          <p>Be the last flag standing. Attack others, form alliances, give
           (and take) Action Points — and outsmart everyone with superior
           group strategy.</p>
         </div>
@@ -134,46 +153,93 @@ export default function Instructions() {
         </Figure>
       </div>
 
+      {/* ---- Stats ---------------------------------------------------------------- */}
       <div className="panel">
         <div className="panel-body">
-          <h2>Stats</h2>
-          <p><Icon html={heartSvg} width={14} height={14} className="stat-icon" /> <strong>Health (HP)</strong> — starts at 3. Never heals. At 0,
-          you die and join the Jury.</p>
-          <p><Icon html={boltSvg} width={14} height={14} className="stat-icon" /> <strong>Action Points (AP)</strong> — used for everything.
-          Everyone starts at 4 and gains AP every day.</p>
+          <h2>Your stats</h2>
+          <p><Icon html={heartSvg} width={14} height={14} className="stat-icon" /> <strong>Health (HP)</strong> — starts at 3. There is no healing
+          beyond your starting HP. At 0 HP you die and join the Jury.</p>
+          <p><Icon html={boltSvg} width={14} height={14} className="stat-icon" /> <strong>Action Points (AP)</strong> — the resource you spend
+          to act. Everyone starts with 4 AP and gains more each day.</p>
           <p><Icon html={targetSvg} width={14} height={14} className="stat-icon" /> <strong>Range</strong> — the distance (in grid steps) at which
           you can interact with other players. Starts at 2.</p>
         </div>
         <div className="graphic-row">
-          <Figure caption="Tank"><TankIcon /></Figure>
-          <Figure caption="Action points"><APIcon /></Figure>
+          <Figure caption="Player token — a flag on the board"><FlagIcon /></Figure>
+          <Figure caption="Action points — spend to act"><APIcon /></Figure>
         </div>
       </div>
 
+      {/* ---- Actions ------------------------------------------------------------- */}
       <div className="panel">
         <div className="panel-body">
           <h2>Actions (cost AP)</h2>
-          <p><strong>Move</strong> — 1 square (no diagonals) per 1 AP.</p>
-          <p><strong>Attack</strong> — 1 HP damage to a player in range, per 1 AP.</p>
-          <p><strong>Give AP</strong> — transfer 1 AP to a player in range, per 1 AP.</p>
-          <p><strong>Upgrade Range</strong> — +1 range per 2 AP.</p>
+          <table className="actions-table">
+            <thead>
+              <tr>
+                <th>Action</th>
+                <th>Cost</th>
+                <th>Effect</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Move</strong></td>
+                <td>1 AP</td>
+                <td>Shift 1 square (up / down / left / right). No diagonals.</td>
+              </tr>
+              <tr>
+                <td><strong>Attack</strong></td>
+                <td>1 AP</td>
+                <td>Deal 1 damage to a player within your range.</td>
+              </tr>
+              <tr>
+                <td><strong>Give AP</strong></td>
+                <td>1 AP</td>
+                <td>Transfer 1 AP to a player within your range.</td>
+              </tr>
+              <tr>
+                <td><strong>Give Heart</strong></td>
+                <td>1 HP</td>
+                <td>
+                  Heal an ally below max HP by 1, or <strong>revive</strong> a dead player at 1 HP / 0 AP (if revives are enabled).
+                  You always keep at least 1 HP — never costs AP.
+                </td>
+              </tr>
+              <tr>
+                <td><strong>Upgrade Range</strong></td>
+                <td>Configurable (default 2)</td>
+                <td>+1 to your interaction range. Permanent.</td>
+              </tr>
+            </tbody>
+          </table>
         </div>
-        <Figure caption="Tank — 1 square per AP"><TankIcon /></Figure>
+        <Figure caption="Your action bar — buttons arm or cancel modes"><MockActionBar /></Figure>
       </div>
 
+      {/* ---- Targeting ----------------------------------------------------------- */}
       <div className="panel">
         <div className="panel-body">
-          <h2>The Day Cycle</h2>
-          <p>Once per day, every alive player receives 1 AP. Dead players
-          can't act — but they can vote.</p>
+          <h2>How targeting works</h2>
+          <p>Buttons on the action bar <strong>only arm or cancel a mode</strong> —
+          they never pick a target or confirm an action by themselves.</p>
+          <p>After arming a mode, <strong>tap a cell on the board</strong> to
+          choose your target. A confirmation dialog appears; press "Yes" to
+          commit, "No" to cancel.</p>
+          <ul>
+            <li><strong>Move:</strong> tap any adjacent empty (or gravestone) cell.</li>
+            <li><strong>Attack / Give AP:</strong> tap an <em>alive</em> player in range.</li>
+            <li><strong>Give Heart:</strong> tap any in-range player (alive or dead).</li>
+          </ul>
         </div>
-        <Figure caption="Action points — gained once per day"><APIcon /></Figure>
       </div>
 
+      {/* ---- AP Schedules -------------------------------------------------------- */}
       <div className="panel">
         <div className="panel-body">
-          <h2>AP schedules (host-configurable)</h2>
-          <p>How AP lands on the board depends on the game's schedule:</p>
+          <h2>How you receive AP</h2>
+          <p>How AP lands on the board depends on the game's schedule —
+          set by the host, not visible to players:</p>
           <p><strong>Fixed interval</strong> — AP drips every N minutes from
           the moment the game starts. The countdown shows the next grant.</p>
           <p><strong>Daily at a fixed time</strong> — AP lands once per day at
@@ -185,10 +251,14 @@ export default function Instructions() {
           mode — stay ready, and don't assume anyone else's AP either.</p>
           <p><strong>AP is secret</strong> — hoard it, spend it, or gift it;
           only your own stash is visible to you.</p>
+          <p>Tap your AP counter to see a popup: your current AP, the lifetime
+          total the game has granted you, and any jury tint explanation.</p>
         </div>
-        <Figure caption="Action points — three ways to receive them"><APIcon /></Figure>
+        <Figure caption="Three ways to receive AP — tap the counter for details"><APIcon /></Figure>
+        <MockApPopup />
       </div>
 
+      {/* ---- Heart Spawns -------------------------------------------------------- */}
       <div className="panel">
         <div className="panel-body">
           <h2>Heart spawns (host-configurable)</h2>
@@ -198,24 +268,26 @@ export default function Instructions() {
           <strong> spawn delay</strong> keeps the early game heart-free: no
           hearts appear until the chosen time after the game starts.</p>
           <p><strong>Claiming:</strong> move onto a heart to pick it up —
-          +1 HP, capped at your starting HP. At full HP the heart converts to
-          <strong> +2 AP</strong> instead — a heart is never wasted. Hosts can
-          also cap how many unclaimed hearts sit on the board at once: once
-          the cap is reached, new spawns wait until one is picked up.</p>
+          <strong> +1 HP</strong>, capped at your starting HP. At full HP the
+          heart converts to <strong>+2 AP</strong> instead — a heart is never
+          wasted.</p>
           <p><strong>Placement:</strong> <em>Random</em> scatters hearts
           anywhere free; <em>Smart</em> places each heart as far away from
           every living player (and the previous heart) as possible — expect a
           hike.</p>
+          <p>Hosts can also cap how many unclaimed hearts sit on the board at
+          once: once the cap is reached, new spawns wait until one is picked up.</p>
         </div>
         <Figure caption="Hearts — find them, claim them"><HeartGraphic /></Figure>
       </div>
 
+      {/* ---- Heart Gifts & Revives ----------------------------------------------- */}
       <div className="panel">
         <div className="panel-body">
           <h2>Heart gifts &amp; revives (host-configurable)</h2>
           <p>When heart gifts are enabled, you can <strong>give a heart</strong>
-          to a player in range. It costs <strong>1 of YOUR hearts</strong> (you
-          always keep at least one) — never AP.</p>
+          to a player in range. It costs <strong>1 of YOUR HP</strong> (you
+          always keep at least one) — <em>never</em> AP.</p>
           <p><strong>Heal:</strong> a living ally below max HP gains 1 HP.</p>
           <p><strong>Revive:</strong> if revives are enabled, giving a heart
           to a <em>dead</em> player brings them back at <strong>1 HP / 0
@@ -226,75 +298,82 @@ export default function Instructions() {
         <Figure caption="Hearts — give them, receive them"><HeartGraphic /></Figure>
       </div>
 
+      {/* ---- Special Rules ------------------------------------------------------- */}
       <div className="panel">
         <div className="panel-body">
-          <h2>Blood money &amp; haunted tanks (host-configurable)</h2>
-          <p><strong>Steal AP on kill:</strong> with this rule on, the final
-          blow transfers the victim's entire AP stash to their killer. Off,
-          a dead player's AP dies with them. Choose your assassinations by
-          the loot.</p>
-          <p><strong>Jury haunt:</strong> the jury's most-voted living player
-          is <em>haunted</em> for the day — they receive no AP on the next
-          tick. A tie haunts nobody; the 3-vote jury bonus still applies to
-          the haunted player. Vote carefully.</p>
-          <p><strong>Jury AP tints:</strong> the day after the votes are
-          tallied, your AP counter changes color so you know the jury's
-          verdict. <span className="ap-counter ap-golden" style={{ display: 'inline-block' }}>4 AP ★</span> —
-          you were the jury's favorite: 3+ votes landed you a bonus AP.
-          <span className="ap-counter ap-purple" style={{ display: 'inline-block', marginLeft: 6 }}>1 AP ☾</span> —
-          you are haunted: the jury took your AP drip for the day. Colors
-          clear at the next day tick.</p>
-          <p><strong>Gravestones:</strong> dead tanks stay on the board as
-          gravestones with their name on them. Graves don't block movement —
-          drive right over them (and hearts can spawn beside them).</p>
+          <h2>Special rules</h2>
+
+          <h3>AP Steal on Kill</h3>
+          <p>With this rule on, the final blow transfers the victim's entire
+          AP stash to the killer. Off, a dead player's AP dies with them.
+          Choose your assassinations by the loot.</p>
+
+          <h3>Jury Haunt</h3>
+          <p>The jury's most-voted living player is <em>haunted</em> for the
+          day — they receive no AP on the next tick. A tie haunts nobody;
+          the 3-vote jury bonus still applies to the haunted player.
+          Vote carefully.</p>
+
+          <h3>Jury AP Tints</h3>
+          <p>The day after the votes are tallied, your AP counter changes
+          color so you know the jury's verdict:</p>
+          <p>
+            <span className="ap-counter ap-golden" style={{ display: 'inline-block' }}>4 AP ★</span>
+            {' '}— you were the jury's favorite: 3+ votes landed you a bonus AP.
+          </p>
+          <p>
+            <span className="ap-counter ap-purple" style={{ display: 'inline-block' }}>1 AP ☾</span>
+            {' '}— you are haunted: the jury took your AP drip for the day.
+          </p>
+          <p>Colors clear at the next day tick.</p>
+
+          <h3>Gravestones</h3>
+          <p>Dead tanks stay on the board as gravestones with their name on
+          them. Graves <strong>don't block movement</strong> — drive right
+          over them (and hearts can spawn beside them).</p>
         </div>
       </div>
 
+      {/* ---- Battle Log ---------------------------------------------------------- */}
       <div className="panel">
         <div className="panel-body">
           <h2>Battle log</h2>
-          <p>During a game the live battle log only shows what matters:
-          <strong> who dealt a final blow</strong> and <strong>who got
-          revived</strong>. The full event history unlocks after the game
+          <p>During a game the live battle log only shows what matters:</p>
+          <ul>
+            <li><strong>Who dealt a final blow</strong> (shown as "dealt the final blow to …").</li>
+            <li><strong>Who got revived</strong> (a heart brought someone back).</li>
+          </ul>
+          <p>The battle log is <strong>collapsed by default</strong> on mobile
+          — tap the banner to expand it.</p>
+          <p>The full event history unlocks after the game
           ends (test-mode hosts can scrub it anytime).</p>
         </div>
+        <Figure caption="Battle log — collapsed by default"><MockBattleLog /></Figure>
       </div>
 
+      {/* ---- The Jury ------------------------------------------------------------ */}
       <div className="panel">
         <div className="panel-body">
           <h2>The Jury</h2>
-          <p>When a player dies, they join the Jury. The Jury votes every day;
-          any living player with 3+ votes receives 1 bonus AP. Don't make
-          enemies on your way out.</p>
+          <p>When a player dies, they join the Jury. From the jury screen
+          you can watch the board and <strong>vote for a living player</strong>
+          each day.</p>
+          <p>Any living player with <strong>3 or more votes</strong> receives
+          1 bonus AP on the next tick. You can <strong>change your vote</strong>
+          at any time before the tick — your current choice is pinned, but
+          others can switch.</p>
+          <p>Your votes are secret — no one can see who you voted for.</p>
+          <p>Don't make enemies on your way out.</p>
         </div>
-        <Figure caption="Flag marker"><FlagIcon /></Figure>
+        <Figure caption="Flag marker — player token on the board"><FlagIcon /></Figure>
       </div>
 
-      <div className="panel">
-        <div className="panel-body">
-          <h2>Bots</h2>
-          <p>Test-mode games fill empty seats with bots. Each living bot spends
-          its Action Points during the AP drip, using planBotAction:</p>
-          <p><strong>Easy:</strong> acts about 40% of the time. When it acts,
-          it attacks a random in-range target half the time, otherwise moves to
-          a random free square.</p>
-          <p><strong>Medium:</strong> acts about 80% of the time. Attacks a
-          random in-range target whenever one is present; otherwise sometimes
-          upgrades range (30% chance when AP allows), else moves randomly.</p>
-          <p><strong>Hard:</strong> acts about 95% of the time. Attacks the
-          lowest-HP player in range, gives AP to a target when flush, upgrades
-          range when AP allows, and otherwise moves toward the nearest player.</p>
-          <p><strong>Bot AI is a placeholder.</strong> Current behavior is a
-          simple deterministic stub — real bot AI will be designed later and is
-          not part of this plan.</p>
-        </div>
-      </div>
-
+      {/* ---- Winning ------------------------------------------------------------- */}
       <div className="panel">
         <div className="panel-body">
           <h2>Winning</h2>
-          <p>Survive to the end and win. Alliances burn bright and betrayals
-          burn deeper — trust carefully.</p>
+          <p>Be the last player alive and you win. Alliances burn bright and
+          betrayals burn deeper — trust carefully.</p>
         </div>
       </div>
     </main>

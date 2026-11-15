@@ -1075,3 +1075,157 @@ button.ap-counter:focus-visible {
   width: 100%;
   min-height: 40px;
 }
+
+/* ============================================================
+   Instructions page: mock UI elements (illustrative only)
+   ============================================================ */
+
+/* Mock action bar — shows the row of buttons a player sees in-game */
+.mock-action-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 10px;
+  background: var(--paper-raised);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  max-width: 360px;
+  width: 100%;
+  font-size: 0.75rem;
+}
+.mock-action-bar button {
+  min-height: 36px;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  flex: 1 1 auto;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1.2;
+  cursor: default;
+}
+.mock-action-bar button small {
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--olive);
+}
+.mock-ap-counter {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  font-size: 0.8rem;
+  padding: 4px 8px;
+  border: 2px solid var(--brass);
+  border-radius: var(--radius);
+  color: var(--ink);
+  background: var(--paper-raised);
+  cursor: default;
+}
+
+/* Mock battle log — collapsed by default */
+.mock-battle-log {
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  box-shadow: var(--shadow);
+  max-width: 360px;
+  width: 100%;
+  cursor: default;
+}
+.mock-battle-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.mock-chevron {
+  font-size: 0.9rem;
+  color: var(--olive);
+  flex: none;
+}
+
+/* Mock AP info popup — overlay dialog */
+.mock-popup {
+  position: fixed;
+  inset: 0;
+  background: rgba(38, 37, 29, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+  padding: 16px;
+}
+.mock-popup-inner {
+  background: var(--paper-raised);
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  max-width: 280px;
+  width: 100%;
+  text-align: center;
+}
+.mock-popup-inner h3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  font-size: 1.2rem;
+  letter-spacing: 0.04em;
+  margin: 0 0 6px;
+  color: var(--signal);
+}
+.mock-popup-inner h3::before {
+  content: none;
+}
+.mock-popup-inner p {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  margin: 0 0 8px;
+  color: var(--ink);
+}
+.mock-popup-note {
+  font-family: var(--font-body) !important;
+  font-size: 0.8rem !important;
+  color: var(--brass) !important;
+}
+.mock-golden {
+  color: var(--brass);
+}
+
+/* Actions table — for the "Actions" panel */
+.actions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-bottom: 8px;
+}
+.actions-table th {
+  text-align: left;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--olive);
+  padding: 4px 8px 4px 0;
+  border-bottom: 2px solid var(--olive);
+}
+.actions-table td {
+  padding: 6px 8px 6px 0;
+  border-bottom: 1px solid var(--olive-soft);
+  vertical-align: top;
+}
+.actions-table td:first-child {
+  font-weight: 700;
+  white-space: nowrap;
+}
+.actions-table td:nth-child(2) {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--olive);
+  white-space: nowrap;
+}
