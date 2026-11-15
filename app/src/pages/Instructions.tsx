@@ -259,7 +259,7 @@ export default function Instructions() {
           <p>Tap your AP counter to see a popup: your current AP, the lifetime
           total the game has granted you (all AP you've ever earned), and any
           jury tint explanation — why your counter is golden or purple.</p>
-          <Figure caption="Tap the counter for details"><APIcon /></Figure>
+          <Figure caption="Tap the counter for details"><MockApPopup /></Figure>
         </div>
       </div>
 
