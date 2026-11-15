@@ -15,17 +15,22 @@ const h = vi.hoisted(() => ({
   removeChannel: vi.fn(),
   setAuth: vi.fn(),
 }));
+const refreshSession = vi.hoisted(() => vi.fn());
 vi.mock('./supabaseClient', () => ({
   supabase: {
     channel: h.channelMock,
     removeChannel: h.removeChannel,
     realtime: { setAuth: h.setAuth },
+    auth: { refreshSession },
   },
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
   localStorage.setItem('ttt_token', 'tok-test');
+  // default: no refreshable session — the 401-retry path rethrows the
+  // original error instead of retrying
+  refreshSession.mockResolvedValue({ data: { session: null } });
   h.channelMock.mockReturnValue({ on: h.channelOn, subscribe: h.channelSubscribe });
   h.channelOn.mockReturnValue({ subscribe: h.channelSubscribe });
 });
@@ -278,5 +283,187 @@ describe('useGameEvents', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test('finished game stops polling', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(api.gameGet).mockResolvedValue({
+        ...detail(),
+        state: { ...BASE_STATE, seq: 5 },
+        events: [],
+        history: [],
+      });
+      render(<HookProbe />);
+      await act(async () => {});
+      const calls = () => vi.mocked(api.gameGet).mock.calls.length;
+      expect(calls()).toBe(1);
+
+      // realtime row finishes the game
+      act(() => realtimeCallback()({
+        new: {
+          game_id: 'g1', player_id: 'p1', seq: 6,
+          state: { ...BASE_STATE, seq: 6, winner: 'p2' },
+        },
+      }));
+      expect(screen.getByTestId('seq')).toHaveTextContent('6');
+
+      // no more polls after winner is set
+      const pollsBefore = calls();
+      await act(async () => { vi.advanceTimersByTime(30000); });
+      expect(calls()).toBe(pollsBefore);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('error state sets error message and keeps retrying', async () => {
+    vi.mocked(api.gameGet).mockRejectedValue(new Error('fetch failed'));
+    render(<HookProbe />);
+    expect(await screen.findByTestId('error')).toHaveTextContent('fetch failed');
+    expect(screen.getByTestId('loading')).toHaveTextContent('false');
+  });
+
+  test('an auth failure after a backgrounded tab refreshes the session and retries once', async () => {
+    // first fetch hits the expired-JWT 401 (gateway failure), the retry with
+    // the refreshed token succeeds
+    vi.mocked(api.gameGet)
+      .mockRejectedValueOnce(new Error('fetch failed'))
+      .mockResolvedValue({ ...detail(), state: { ...BASE_STATE, seq: 9 }, events: [], history: [] });
+    refreshSession.mockResolvedValue({ data: { session: { access_token: 'tok-fresh' } } });
+    render(<HookProbe />);
+    expect(await screen.findByTestId('seq')).toHaveTextContent('9');
+    expect(screen.getByTestId('error')).toHaveTextContent('');
+    // retried with the fresh token, and the mirror is updated for later calls
+    expect(api.gameGet).toHaveBeenNthCalledWith(1, 'tok-test', 'g1');
+    expect(api.gameGet).toHaveBeenNthCalledWith(2, 'tok-fresh', 'g1');
+    expect(localStorage.getItem('ttt_token')).toBe('tok-fresh');
+    expect(refreshSession).toHaveBeenCalledTimes(1);
+  });
+
+  test('a failure with nothing to refresh rethrows the original error (no retry)', async () => {
+    vi.mocked(api.gameGet).mockRejectedValue(new Error('fetch failed'));
+    render(<HookProbe />);
+    expect(await screen.findByTestId('error')).toHaveTextContent('fetch failed');
+    // refreshSession ran (nothing came back) but no second gameGet fired
+    expect(refreshSession).toHaveBeenCalledTimes(1);
+    expect(api.gameGet).toHaveBeenCalledTimes(1);
+  });
+
+  test('empty gameId does not call gameGet', async () => {
+    function EmptyHook() {
+      const g = useGameEvents(undefined);
+      return (
+        <div>
+          <div data-testid="loading">{String(g.loading)}</div>
+        </div>
+      );
+    }
+    render(<EmptyHook />);
+    expect(screen.getByTestId('loading')).toHaveTextContent('true');
+    expect(vi.mocked(api.gameGet).mock.calls.length).toBe(0);
+  });
+
+  test('visibilitychange triggers refresh when visible', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.mocked(api.gameGet).mockResolvedValue({
+        ...detail(),
+        state: { ...BASE_STATE, seq: 5 },
+        events: [],
+        history: [],
+      });
+      render(<HookProbe />);
+      await act(async () => {});
+      const calls = () => vi.mocked(api.gameGet).mock.calls.length;
+      expect(calls()).toBe(1);
+
+      // hide then show -> refresh on visible
+      Object.defineProperty(window.document, 'visibilityState', { value: 'hidden', writable: true });
+      await act(async () => { vi.advanceTimersByTime(5000); });
+      const afterHide = calls();
+      Object.defineProperty(window.document, 'visibilityState', { value: 'visible', writable: true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      await act(async () => { vi.advanceTimersByTime(100); });
+      expect(calls()).toBeGreaterThan(afterHide);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // --- realtime guards the direct-apply path never exercised before ---
+
+  test('a realtime row at the SAME seq as current is ignored (not just older seqs)', async () => {
+    vi.mocked(api.gameGet).mockResolvedValue({
+      ...detail(),
+      state: { ...BASE_STATE, seq: 5 },
+      events: [],
+      history: [],
+    });
+    render(<HookProbe />);
+    await screen.findByTestId('seq');
+    act(() => realtimeCallback()({
+      new: { game_id: 'g1', player_id: 'p1', seq: 5, state: { ...BASE_STATE, seq: 5, day: 9 } },
+    }));
+    expect(screen.queryByText(/9/)).not.toBeInTheDocument();
+    expect(screen.getByTestId('seq')).toHaveTextContent('5');
+  });
+
+  test('a realtime row with no state payload is ignored', async () => {
+    vi.mocked(api.gameGet).mockResolvedValue({
+      ...detail(),
+      state: { ...BASE_STATE, seq: 5 },
+      events: [],
+      history: [],
+    });
+    render(<HookProbe />);
+    await screen.findByTestId('seq');
+    act(() => realtimeCallback()({
+      new: { game_id: 'g1', player_id: 'p1', seq: 9, state: null },
+    }));
+    expect(screen.getByTestId('seq')).toHaveTextContent('5');
+  });
+
+  test('single-flight guard: poller ticks during an in-flight fetch do not stack fetches', async () => {
+    vi.useFakeTimers();
+    try {
+      let release!: (v: unknown) => void;
+      // the initial load resolves immediately; every LATER fetch hangs
+      vi.mocked(api.gameGet)
+        .mockResolvedValueOnce({ ...detail(), state: { ...BASE_STATE, seq: 5 }, events: [], history: [] })
+        .mockImplementation(() => new Promise((r: (v: never) => void) => { release = r as typeof release; }));
+      render(<HookProbe />);
+      await act(async () => {}); // initial refresh resolved
+      const calls = vi.mocked(api.gameGet).mock.calls.length;
+      expect(calls).toBe(1);
+      expect(screen.getByTestId('seq')).toHaveTextContent('5');
+
+      // poller tick starts the second fetch; the tick 4s later is swallowed
+      // by the in-flight guard — no stacked fetch while one is pending
+      await act(async () => { vi.advanceTimersByTime(4000); });
+      expect(vi.mocked(api.gameGet).mock.calls.length).toBe(2);
+      await act(async () => { vi.advanceTimersByTime(4000); });
+      expect(vi.mocked(api.gameGet).mock.calls.length).toBe(2);
+
+      // once it resolves, the next tick fetches again
+      await act(async () => {
+        release({ ...detail(), state: { ...BASE_STATE, seq: 6 }, events: [], history: [] } as never);
+      });
+      await act(async () => {});
+      expect(screen.getByTestId('seq')).toHaveTextContent('6');
+      await act(async () => { vi.advanceTimersByTime(4000); });
+      expect(vi.mocked(api.gameGet).mock.calls.length).toBe(3);
+    } finally {
+      vi.useRealTimers();
+      // drop the never-resolving implementation so later tests get a clean fn
+      vi.mocked(api.gameGet).mockRestore();
+    }
+  });
+
+  test('missing token surfaces the not-signed-in error', async () => {
+    localStorage.removeItem('ttt_token');
+    render(<HookProbe />);
+    expect(await screen.findByTestId('error')).toHaveTextContent(/not signed in/i);
+    expect(vi.mocked(api.gameGet)).not.toHaveBeenCalled();
   });
 });

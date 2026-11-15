@@ -59,7 +59,21 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
     try {
       const token = localStorage.getItem('ttt_token');
       if (!token) throw new Error('not signed in');
-      const d = await gameGet(token, gameId);
+      let d: GameDetail;
+      try {
+        d = await gameGet(token, gameId);
+      } catch (first) {
+        // A tab parked in the background (bfcache / throttled timers)
+        // outlives its JWT: the first fetch after returning home 401s before
+        // supabase-js has re-run its auto-refresh, and bfcache also severs
+        // the realtime socket. Force a session refresh and retry once with
+        // the new token — the poller only surfaces an error if THIS fails.
+        const s = await supabase.auth.refreshSession();
+        const fresh = s.data.session?.access_token;
+        if (!fresh || fresh === token) throw first;
+        localStorage.setItem('ttt_token', fresh);
+        d = await gameGet(fresh, gameId);
+      }
       if (!aliveRef.current) return;
       const base = normalizeHeartState(d.state as GameState);
       // Stale-response guard: a refetch that raced a direct-apply (its fetch
