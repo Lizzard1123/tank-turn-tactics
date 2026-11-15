@@ -1229,3 +1229,53 @@ button.ap-counter:focus-visible {
   color: var(--olive);
   white-space: nowrap;
 }
+
+/* ---------- Screenshots gallery (Instructions page) ---------- */
+
+.screenshot-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.screenshot-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.screenshot-item {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.screenshot-item img {
+  width: 100%;
+  max-width: 280px;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  object-fit: contain;
+  background: var(--paper-raised);
+}
+
+.screenshot-item figcaption {
+  font-size: 0.75rem;
+  color: var(--olive);
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 700;
+}
+
+@media (max-width: 500px) {
+  .screenshot-row {
+    grid-template-columns: 1fr;
+  }
+  .screenshot-item img {
+    max-width: 100%;
+  }
+}

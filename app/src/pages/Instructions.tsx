@@ -1,5 +1,9 @@
 import { Link } from 'react-router-dom';
 import { Icon, heartSvg, boltSvg, targetSvg } from '../lib/icons';
+import gameMobile from '../assets/screenshots/game-mobile.png';
+import gameDesktop from '../assets/screenshots/game-desktop.png';
+import dashboardMobile from '../assets/screenshots/dashboard-mobile.png';
+import dashboardDesktop from '../assets/screenshots/dashboard-desktop.png';
 
 // ---------------------------------------------------------------------------
 // Info-page graphics — field-operations design system
@@ -366,6 +370,36 @@ export default function Instructions() {
           <p>Don't make enemies on your way out.</p>
         </div>
         <Figure caption="Flag marker — player token on the board"><FlagIcon /></Figure>
+      </div>
+
+      {/* ---- Screenshots --------------------------------------------------------- */}
+      <div className="panel">
+        <div className="panel-body">
+          <h2>Screenshots</h2>
+          <p>Here's what the game looks like in action — both on mobile and desktop.</p>
+        </div>
+        <div className="screenshot-gallery">
+          <div className="screenshot-row">
+            <figure className="screenshot-item">
+              <img src={gameMobile} alt="Game board on mobile — grid with flag avatars and action bar" />
+              <figcaption>Mobile game board</figcaption>
+            </figure>
+            <figure className="screenshot-item">
+              <img src={gameDesktop} alt="Game board on desktop — grid with flag avatars and action bar" />
+              <figcaption>Desktop game board</figcaption>
+            </figure>
+          </div>
+          <div className="screenshot-row">
+            <figure className="screenshot-item">
+              <img src={dashboardMobile} alt="Mobile games dashboard — create and join games" />
+              <figcaption>Mobile games dashboard</figcaption>
+            </figure>
+            <figure className="screenshot-item">
+              <img src={dashboardDesktop} alt="Desktop games dashboard — create and join games" />
+              <figcaption>Desktop games dashboard</figcaption>
+            </figure>
+          </div>
+        </div>
       </div>
 
       {/* ---- Winning ------------------------------------------------------------- */}

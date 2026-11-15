@@ -68,6 +68,20 @@ Open http://localhost:5173 — **Test Mode** signs you in as a guest and drops y
 
 For function-local details (env vars, engine sync into `supabase/functions/_shared/engine_src/`), see `supabase/functions/README.md`.
 
+## Screenshots
+
+### Mobile (390px)
+
+| Game Board | Dashboard |
+|---|---|
+| ![Mobile game board](docs/screenshots/390w-game.png) | ![Mobile dashboard](docs/screenshots/390w-dashboard.png) |
+
+### Desktop (1280px)
+
+| Game Board | Dashboard |
+|---|---|
+| ![Desktop game board](docs/screenshots/1280w-game.png) | ![Desktop dashboard](docs/screenshots/1280w-dashboard.png) |
+
 ## Tests
 
 ```bash
