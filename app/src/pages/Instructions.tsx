@@ -218,7 +218,7 @@ export default function Instructions() {
             </tbody>
           </table>
         </div>
-        <Figure caption="Your action bar — buttons arm or cancel modes"><MockActionBar /></Figure>
+        <Figure caption="Your action bar — arm a mode, then tap the board"><MockActionBar /></Figure>
       </div>
 
       {/* ---- Targeting ----------------------------------------------------------- */}
@@ -231,7 +231,7 @@ export default function Instructions() {
           choose your target. A confirmation dialog appears; press "Yes" to
           commit, "No" to cancel.</p>
           <ul>
-            <li><strong>Move:</strong> tap any adjacent empty (or gravestone) cell.</li>
+            <li><strong>Move:</strong> tap an adjacent empty cell (or a gravestone — dead players don't block movement).</li>
             <li><strong>Attack / Give AP:</strong> tap an <em>alive</em> player in range.</li>
             <li><strong>Give Heart:</strong> tap any in-range player (alive or dead).</li>
           </ul>
@@ -247,8 +247,8 @@ export default function Instructions() {
           <p><strong>Fixed interval</strong> — AP drips every N minutes from
           the moment the game starts. The countdown shows the next grant.</p>
           <p><strong>Daily at a fixed time</strong> — AP lands once per day at
-          a fixed wall-clock time in the configured timezone (work-days
-          style). The countdown shows time until that slot.</p>
+          a fixed wall-clock time in the configured timezone. The countdown
+          shows time until that slot.</p>
           <p><strong>Random time within a period</strong> — the day is split
           into periods (e.g. every 6 hours); AP lands once per period at a
           secret random minute. There is <strong>no countdown</strong> in this
@@ -257,9 +257,8 @@ export default function Instructions() {
           only your own stash is visible to you.</p>
           <p>Tap your AP counter to see a popup: your current AP, the lifetime
           total the game has granted you, and any jury tint explanation.</p>
+          <Figure caption="Tap the counter for details"><APIcon /></Figure>
         </div>
-        <Figure caption="Three ways to receive AP — tap the counter for details"><APIcon /></Figure>
-        <MockApPopup />
       </div>
 
       {/* ---- Heart Spawns -------------------------------------------------------- */}
@@ -322,17 +321,17 @@ export default function Instructions() {
           <p>The day after the votes are tallied, your AP counter changes
           color so you know the jury's verdict:</p>
           <p>
-            <span className="ap-counter ap-golden" style={{ display: 'inline-block' }}>4 AP ★</span>
+            <span className="ap-counter ap-golden" style={{ display: 'inline-block' }}>4 AP</span>
             {' '}— you were the jury's favorite: 3+ votes landed you a bonus AP.
           </p>
           <p>
-            <span className="ap-counter ap-purple" style={{ display: 'inline-block' }}>1 AP ☾</span>
+            <span className="ap-counter ap-purple" style={{ display: 'inline-block' }}>1 AP</span>
             {' '}— you are haunted: the jury took your AP drip for the day.
           </p>
           <p>Colors clear at the next day tick.</p>
 
           <h3>Gravestones</h3>
-          <p>Dead tanks stay on the board as gravestones with their name on
+          <p>Dead flags stay on the board as gravestones with their name on
           them. Graves <strong>don't block movement</strong> — drive right
           over them (and hearts can spawn beside them).</p>
         </div>
@@ -342,7 +341,7 @@ export default function Instructions() {
       <div className="panel">
         <div className="panel-body">
           <h2>Battle log</h2>
-          <p>During a game the live battle log only shows what matters:</p>
+          <p>During a game the battle log only shows key events:</p>
           <ul>
             <li><strong>Who dealt a final blow</strong> (shown as "dealt the final blow to …").</li>
             <li><strong>Who got revived</strong> (a heart brought someone back).</li>
@@ -363,9 +362,8 @@ export default function Instructions() {
           you can watch the board and <strong>vote for a living player</strong>
           each day.</p>
           <p>Any living player with <strong>3 or more votes</strong> receives
-          1 bonus AP on the next tick. You can <strong>change your vote</strong>
-          at any time before the tick — your current choice is pinned, but
-          others can switch.</p>
+          1 bonus AP on the next tick. Your vote stays locked until you change
+          it — but everyone else can switch theirs too.</p>
           <p>Your votes are secret — no one can see who you voted for.</p>
           <p>Don't make enemies on your way out.</p>
         </div>
@@ -380,21 +378,21 @@ export default function Instructions() {
         </div>
         <div className="screenshot-gallery">
           <div className="screenshot-row">
-            <figure className="screenshot-item">
+            <figure className="screenshot-item screenshot-mobile">
               <img src={gameMobile} alt="Game board on mobile — grid with flag avatars and action bar" />
               <figcaption>Mobile game board</figcaption>
             </figure>
-            <figure className="screenshot-item">
+            <figure className="screenshot-item screenshot-desktop">
               <img src={gameDesktop} alt="Game board on desktop — grid with flag avatars and action bar" />
               <figcaption>Desktop game board</figcaption>
             </figure>
           </div>
           <div className="screenshot-row">
-            <figure className="screenshot-item">
+            <figure className="screenshot-item screenshot-mobile">
               <img src={dashboardMobile} alt="Mobile games dashboard — create and join games" />
               <figcaption>Mobile games dashboard</figcaption>
             </figure>
-            <figure className="screenshot-item">
+            <figure className="screenshot-item screenshot-desktop">
               <img src={dashboardDesktop} alt="Desktop games dashboard — create and join games" />
               <figcaption>Desktop games dashboard</figcaption>
             </figure>

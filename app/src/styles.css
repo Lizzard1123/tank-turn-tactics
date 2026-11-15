@@ -816,6 +816,55 @@ button.ap-counter:focus-visible {
 
 /* --- new-rules feature: graves, hearts, battle log, config view --- */
 
+/* Screenshot gallery: mobile images smaller, desktop images larger */
+.screenshot-gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 8px;
+}
+.screenshot-row {
+  display: grid;
+  grid-template-columns: 2fr 3fr;
+  gap: 12px;
+  align-items: start;
+}
+.screenshot-mobile img {
+  max-width: 200px;
+  width: 100%;
+}
+.screenshot-desktop img {
+  max-width: 340px;
+  width: 100%;
+}
+
+/* Mock action bar buttons — match the real action bar style */
+.mock-action-bar button.mock-btn {
+  min-height: 40px;
+  padding: 6px 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  border: 2px solid var(--ink);
+  border-radius: var(--radius);
+  background: var(--paper-raised);
+  color: var(--ink);
+  cursor: default;
+  box-shadow: 1px 1px 0 var(--ink);
+  flex: 1 1 auto;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  line-height: 1.2;
+}
+.mock-action-bar button.mock-btn:disabled {
+  opacity: 0.45;
+  box-shadow: none;
+  transform: translate(1px, 1px);
+}
+
 /* gravestones: non-blocking dead-player markers (tanks drive over them) */
 .grave-stone {
   fill: var(--olive);
@@ -1084,9 +1133,8 @@ button.ap-counter:focus-visible {
 .mock-action-bar {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
-  padding: 10px;
   background: var(--paper-raised);
   border: 2px solid var(--ink);
   border-radius: var(--radius);
@@ -1275,7 +1323,8 @@ button.ap-counter:focus-visible {
   .screenshot-row {
     grid-template-columns: 1fr;
   }
-  .screenshot-item img {
+  .screenshot-mobile img,
+  .screenshot-desktop img {
     max-width: 100%;
   }
 }
