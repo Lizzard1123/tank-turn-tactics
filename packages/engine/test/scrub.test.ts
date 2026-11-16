@@ -359,7 +359,10 @@ describe('scrubConfig', () => {
 });
 
 describe('jury secrecy in the scrub layer', () => {
-  const emptyMask = { masked: new Set<number>(), victimBySeq: new Map<number, PlayerId>(), upgrades: new Set<number>() };
+  const emptyMask = {
+    masked: new Set<number>(), victimBySeq: new Map<number, PlayerId>(),
+    upgrades: new Set<number>(), gifts: new Map<number, PlayerId>(),
+  };
   const noActors = new Map<number, PlayerId>();
   const idName = (id: PlayerId) => id;
 
@@ -392,7 +395,8 @@ describe('jury secrecy in the scrub layer', () => {
     ];
     const masked = maskEvents(events, 'p3', emptyMask);
     expect(masked[0].payload).toEqual({ redacted: true });
-    expect(masked[0].type).toBe('jury_result'); // seq/type intact for replay
+    expect(masked[0].type).toBe('redacted'); // not even WHICH secret event it was
+    expect(masked[0].seq).toBe(1); // seq intact for the scrubber's chain
     expect(masked[1]).toBe(events[1]); // attacks untouched by an empty mask
   });
 

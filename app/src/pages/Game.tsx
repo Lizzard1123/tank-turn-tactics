@@ -111,7 +111,9 @@ function feedEntries(events: GameEvent[], live: GameState | null, showJury: bool
   const textBySeq = new Map<number, string>();
   for (const l of live?.log ?? []) textBySeq.set(l.seq, l.text);
   return events
-    .filter((e) => e.type !== 'jury_vote' && (showJury || e.type !== 'jury_result'))
+    .filter((e) => e.type !== 'redacted'
+      && e.type !== 'jury_vote'
+      && (showJury || e.type !== 'jury_result'))
     .map((e) => ({
       seq: e.seq,
       type: e.type,
@@ -413,7 +415,9 @@ function DbGameView({ gameId }: DbGameProps) {
     if (!authState || pending.length === 0) return authState;
     let s = authState;
     for (const e of pending) {
-      try { s = applyEvent(s, e); } catch { break; }
+      // trusted: scrubbed/optimistic replays skip AP+range re-validation —
+      // the server already validated every event against canonical state
+      try { s = applyEvent(s, e, true); } catch { break; }
     }
     return s;
   }, [authState, pending]);
@@ -436,7 +440,9 @@ function DbGameView({ gameId }: DbGameProps) {
       ? (structuredClone(detail.initial) as GameState)
       : createInitialState(state.config, specsFromDetail(state));
     for (const e of history.slice(0, scrubIdx)) {
-      try { s = applyEvent(s, e); } catch { break; }
+      // trusted: masked upgrades/gifts leave stale private fields (range, AP)
+      // in the replayed state — re-validation would reject real history
+      try { s = applyEvent(s, e, true); } catch { break; }
     }
     return s;
   }, [scrubIdx, state, detail, history]);

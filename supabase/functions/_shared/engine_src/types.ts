@@ -98,7 +98,11 @@ export interface GameConfig {
 export type ActionType =
   | 'move' | 'attack' | 'give_ap' | 'give_heart' | 'upgrade_range'
   | 'daily_tick' | 'jury_vote' | 'jury_result' | 'fork' | 'bot_action' | 'join'
-  | 'heart_spawn';
+  | 'heart_spawn'
+  // server-scrubbed replay form only (maskEvents): a no-op that hides even
+  // WHICH kind of private event happened. Never produced by the engine
+  // itself; the action endpoint strips `redacted` from client payloads.
+  | 'redacted';
 
 export interface GameEvent {
   seq: number;

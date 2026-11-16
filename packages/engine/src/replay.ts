@@ -8,9 +8,9 @@ export function replay(config: GameConfig, specs: PlayerSpec[], events: GameEven
   return state;
 }
 
-export function applyEvents(state: GameState, events: GameEvent[]): GameState {
+export function applyEvents(state: GameState, events: GameEvent[], trusted = false): GameState {
   let s = state;
-  for (const e of events) s = applyEvent(s, e);
+  for (const e of events) s = applyEvent(s, e, trusted);
   return s;
 }
 

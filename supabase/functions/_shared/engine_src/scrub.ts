@@ -21,6 +21,8 @@ export interface AttackMask {
   victimBySeq: Map<number, PlayerId>;
   /** upgrade_range seqs — range progression is private to the upgrader */
   upgrades: Set<number>;
+  /** give_ap / give_heart seq -> receiver id, for dropping/rewriting gift lines */
+  gifts: Map<number, PlayerId>;
 }
 
 // Which human attacks must be masked for a canonical timeline: every
@@ -34,8 +36,14 @@ export function attackMask(canonical: GameEvent[]): AttackMask {
   const seqsByVictim = new Map<PlayerId, number[]>();
   const victimBySeq = new Map<number, PlayerId>();
   const upgrades = new Set<number>();
+  const gifts = new Map<number, PlayerId>();
   for (const e of canonical) {
     if (e.type === 'upgrade_range') { upgrades.add(e.seq); continue; }
+    if (e.type === 'give_ap' || e.type === 'give_heart') {
+      const t = (e.payload as { targetId?: string }).targetId;
+      if (t) gifts.set(e.seq, t);
+      continue;
+    }
     if (e.type !== 'attack') continue;
     const targetId = (e.payload as { targetId?: string }).targetId;
     if (!targetId) continue;
@@ -48,30 +56,46 @@ export function attackMask(canonical: GameEvent[]): AttackMask {
   for (const seqs of seqsByVictim.values()) {
     for (let i = 0; i < seqs.length - 1; i++) masked.add(seqs[i]);
   }
-  return { masked, victimBySeq, upgrades };
+  return { masked, victimBySeq, upgrades, gifts };
 }
 
-// Transform events for one viewer: hidden attacks lose their actor entirely
+// Transform events for one viewer. Hidden attacks lose their actor entirely
 // (the engine replays them via the `anon` branch — identity never on the
-// wire). The attacker always sees their own attacks unmasked. For LIVING
-// viewers the jury's business and everyone's range progression are no-ops
-// too: ballots and outcomes scrub to an empty form (actor included — who
-// voted is as secret as how), and upgrades scrub so range stays private.
-// Dead viewers (jury members) keep the real ballots and outcomes: they cast
-// the votes, so they must see how they landed. `juryEntitled` is the
-// viewer's dead status — pass `(state.players[me]?.hp ?? 1) <= 0`.
+// wire). The attacker always sees their own attacks unmasked. Everything
+// else that is private ECONOMY — the jury's business, everyone's range
+// progression, AP transfers — scrubs to an anonymous `{ type: 'redacted' }`
+// no-op for viewers who are not participants: no type, no actor, no payload,
+// not even the FACT that an upgrade or a gift happened (existence itself
+// narrows what an observer can deduce). Participants keep their real events
+// (the upgrader, the gift's giver and receiver). give_heart events stay real
+// for everyone: hp is public, so the effect is observable from the board
+// anyway — only the log line is masked. Dead viewers (jury members) keep the
+// real ballots and outcomes: they cast the votes, so they must see how they
+// landed. `juryEntitled` is the viewer's dead status — pass
+// `(state.players[me]?.hp ?? 1) <= 0`.
 export function maskEvents(events: GameEvent[], me: PlayerId, mask: AttackMask, juryEntitled = false): GameEvent[] {
   return events.map((e) => {
+    const redacted = (): GameEvent => ({
+      seq: e.seq, type: 'redacted', actorId: HIDDEN_ACTOR,
+      createdAt: e.createdAt, payload: { redacted: true },
+    });
     // ballots AND outcomes are the jury's business: living viewers get
-    // no-op forms with the actor hidden — even the fact that a given
-    // player voted stays off the wire
-    if ((e.type === 'jury_result' || e.type === 'jury_vote') && !juryEntitled) {
-      return { ...e, actorId: HIDDEN_ACTOR, payload: { redacted: true } };
+    // no-op forms — even the fact that a given player voted stays off
+    // the wire
+    if (e.type === 'jury_vote' || e.type === 'jury_result') {
+      return juryEntitled ? e : redacted();
     }
-    // range progression is private: a living viewer's scrubber must not be
-    // able to rebuild who upgraded when (own upgrades stay real)
+    // range progression is private: a viewer's scrubber must not be able to
+    // rebuild who upgraded when (own upgrades stay real)
     if (e.type === 'upgrade_range' && mask.upgrades.has(e.seq) && e.actorId !== me) {
-      return { ...e, actorId: HIDDEN_ACTOR, payload: { redacted: true } };
+      return redacted();
+    }
+    // AP transfers are private to their two participants (AP itself is a
+    // scrubbed field, and the redacted no-op replays safely — no AP
+    // validation runs in trusted replays)
+    if (e.type === 'give_ap') {
+      const targetId = (e.payload as { targetId?: string }).targetId;
+      if (e.actorId !== me && targetId !== me) return redacted();
     }
     if (e.type !== 'attack' || !mask.masked.has(e.seq) || e.actorId === me) return e;
     const targetId = (e.payload as { targetId?: string }).targetId ?? mask.victimBySeq.get(e.seq);
@@ -96,9 +120,21 @@ export function maskLog(
     // jury business is dead-viewer-only: outcome entries (kind 'jury') and
     // legacy per-vote lines never reach a LIVING player's log
     if (!juryEntitled && (entry.kind === 'jury' || /^Jury member /.test(entry.text))) return [];
-    // upgrades mask to an actor-less, value-less line (range is private)
-    if (mask.upgrades.has(entry.seq) && actorBySeq.get(entry.seq) !== me) {
-      return [{ ...entry, text: 'Someone upgraded their range' }];
+    // upgrades: the line is DROPPED for non-owners — even an anonymized
+    // "someone upgraded" line reveals that an upgrade happened, which
+    // narrows the deduction space (who just got stronger, and when)
+    if (mask.upgrades.has(entry.seq) && actorBySeq.get(entry.seq) !== me) return [];
+    // AP/heart transfers: participants (giver and receiver) keep their line;
+    // everyone else gets nothing — a heart gift to a LIVING player is
+    // hp-observable anyway, but the confirmation stays off their log.
+    // Revives are public board events (the player visibly returns), so the
+    // line stays with the giver's name hidden.
+    const giftTarget = mask.gifts.get(entry.seq);
+    if (giftTarget !== undefined && actorBySeq.get(entry.seq) !== me && giftTarget !== me) {
+      if (entry.kind === 'revive') {
+        return [{ ...entry, text: `Someone revived ${targetName(giftTarget)} with a heart!` }];
+      }
+      return [];
     }
     // legacy daily_tick lines embedded the jury outcome in the day line
     const text = entry.text

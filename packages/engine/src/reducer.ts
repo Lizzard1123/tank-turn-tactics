@@ -132,10 +132,17 @@ function findBonusWinner(votes: { voterId: string; candidateId: string }[]): { i
   return null;
 }
 
-function applyAction(s: GameState, actorId: string, type: string, payload: Record<string, unknown>): GameState {
+function applyAction(s: GameState, actorId: string, type: string, payload: Record<string, unknown>, trusted = false): GameState {
   const actor = assertAlive(s, actorId);
   const cost = requiredAp(type, s.config);
-  if (actor.ap < cost) throw new EngineError('not enough AP');
+  // `trusted` (server-scrubbed replays only): the server validated every
+  // event against the canonical state before sending it, and a scrubbed
+  // timeline carries stale private fields — redacted upgrades leave a stale
+  // range, redacted gifts leave short AP — so re-validating them here would
+  // reject events the canonical timeline accepted. AP and range checks are
+  // skipped; public-field checks (adjacency, occupancy, hp, aliveness)
+  // still run, since hp and positions are never scrubbed.
+  if (!trusted && actor.ap < cost) throw new EngineError('not enough AP');
   switch (type) {
     case 'move': {
       const to = payload.to as Vec;
@@ -159,7 +166,7 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
       const targetId = payload.targetId as string;
       if (targetId === actorId) throw new EngineError('cannot attack self');
       const target = assertAlive(s, targetId);
-      if (!inRange(actor.pos, target.pos, actor.range)) throw new EngineError('target out of range');
+      if (!trusted && !inRange(actor.pos, target.pos, actor.range)) throw new EngineError('target out of range');
       const hp = target.hp - 1;
       let jury = s.jury, winner = s.winner;
       // AP steal on kill: the killer loots the victim's stash on the final
@@ -179,7 +186,7 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
     case 'give_ap': {
       const targetId = payload.targetId as string;
       const target = assertAlive(s, targetId);
-      if (!inRange(actor.pos, target.pos, actor.range)) throw new EngineError('target out of range');
+      if (!trusted && !inRange(actor.pos, target.pos, actor.range)) throw new EngineError('target out of range');
       return { ...s, players: { ...s.players,
         [actorId]: { ...actor, ap: actor.ap - 1 },
         [target.id]: gainAp({ ...target, ap: target.ap + 1 }, 1) } };
@@ -190,7 +197,7 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
       if (targetId === actorId) throw new EngineError('cannot gift yourself');
       const target = s.players[targetId];
       if (!target) throw new EngineError('unknown player');
-      if (!inRange(actor.pos, target.pos, actor.range)) throw new EngineError('target out of range');
+      if (!trusted && !inRange(actor.pos, target.pos, actor.range)) throw new EngineError('target out of range');
       if (actor.hp < 2) throw new EngineError('need at least 2 hp to give a heart');
       if (target.hp > 0) {
         if (target.hp >= s.config.startingHp) throw new EngineError('target at max hp');
@@ -231,15 +238,16 @@ function applyAction(s: GameState, actorId: string, type: string, payload: Recor
   }
 }
 
-export function applyEvent(state: GameState, event: GameEvent): GameState {
+export function applyEvent(state: GameState, event: GameEvent, trusted = false): GameState {
   if (event.seq !== state.seq + 1) throw new EngineError(`seq gap: expected ${state.seq + 1}, got ${event.seq}`);
   let s = state;
 
   // Universal scrubbed no-op (server-scrubbed replays only): maskEvents
-  // rewrites events a living viewer is not entitled to into an empty form
-  // that keeps the seq chain intact while carrying no actor, no payload and
-  // no log line. The action endpoint strips `redacted` from client payloads,
-  // so this branch can never be triggered by a client-submitted event.
+  // rewrites events a viewer is not entitled to into an anonymous `{ type:
+  // 'redacted' }` form that keeps the seq chain intact while carrying no
+  // actor, no payload and no log line — not even WHICH kind of private event
+  // it was. The action endpoint strips `redacted` from client payloads, so
+  // this branch can never be triggered by a client-submitted event.
   if ((event.payload as { redacted?: boolean } | null)?.redacted === true) {
     return { ...s, seq: event.seq };
   }
@@ -249,7 +257,7 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     if (!actor || !actor.isBot) throw new EngineError('bot_action actor must be a bot');
     const inner = event.payload.inner as { type: string; payload: Record<string, unknown> } | undefined;
     if (!inner) throw new EngineError('bot_action requires inner action');
-    s = applyAction(s, event.actorId, inner.type, inner.payload ?? {});
+    s = applyAction(s, event.actorId, inner.type, inner.payload ?? {}, trusted);
   } else if (event.type === 'daily_tick') {
     const apGained = (event.payload.apGained as number) ?? s.config.apPerDay;
     // jury haunt: the strictly-most-voted candidate (>0 votes; a tie haunts
@@ -372,7 +380,7 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     }
     s = { ...s, players, jury, winner };
   } else {
-    s = applyAction(s, event.actorId, event.type, event.payload);
+    s = applyAction(s, event.actorId, event.type, event.payload, trusted);
   }
 
   const line = logLine(s, state, event.actorId, event.type, event.payload);

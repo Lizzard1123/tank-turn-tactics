@@ -113,7 +113,7 @@ describe('maskEvents + maskLog', () => {
     s = applyEvent(s, ev(s, 'p1', 'attack', { targetId: 'p2' }));
     const events = [1, 2].map((i) => ({ seq: i, type: 'attack', actorId: 'p1', payload: { targetId: 'p2' } } as GameEvent));
     const mask = attackMask(events);
-    const replayed = applyEvents(initial, maskEvents(events, 'p3', mask));
+    const replayed = applyEvents(initial, maskEvents(events, 'p3', mask), true);
     const rewritten = maskLog(s.log, attackActors(events), 'p3', mask, (id) => s.players[id]?.name ?? id);
     expect(replayed.log.map((l) => l.text)).toEqual(rewritten.map((l) => l.text));
   });
@@ -151,7 +151,7 @@ describe('masked replay equivalence', () => {
     const { initial, events, final } = realTimeline();
     const mask = attackMask(events);
     const actors = attackActors(events);
-    const replayed = applyEvents(initial, maskEvents(events, 'p3', mask));
+    const replayed = applyEvents(initial, maskEvents(events, 'p3', mask), true);
 
     // identical: positions, hp, range, jury, winner, day, hearts, seq, order
     for (const id of Object.keys(final.players)) {
@@ -180,7 +180,7 @@ describe('masked replay equivalence', () => {
   it('inflates only the hidden attacker’s ap, which never breaks later replay validation', () => {
     const { initial, events, final } = realTimeline();
     const mask = attackMask(events);
-    const replayed = applyEvents(initial, maskEvents(events, 'nobody-in-particular', mask));
+    const replayed = applyEvents(initial, maskEvents(events, 'nobody-in-particular', mask), true);
     // p1 landed 3 attacks; only seq 1 is masked for a third party (seq 2 is
     // p3's LAST hit -> named; seq 3 is p2's only hit -> named; seq 4 is p2's
     // attack on p1 -> named)
@@ -360,6 +360,7 @@ describe('jury outcome entitlement', () => {
     const mask = attackMask([up]);
     expect(mask.upgrades.has(up.seq)).toBe(true);
     const forLiving = maskEvents([up], 'p1', mask, false)[0];
+    expect(forLiving.type).toBe('redacted'); // not even THAT an upgrade happened
     expect(forLiving.actorId).toBe(HIDDEN_ACTOR);
     expect(forLiving.payload).toEqual({ redacted: true });
     // replaying the scrubbed form from the pre-upgrade state: seq advances
@@ -376,7 +377,7 @@ describe('jury outcome entitlement', () => {
     expect(own.payload).toEqual({});
   });
 
-  it('maskLog rewrites other players’ upgrade lines actor-less and value-less', () => {
+  it('maskLog DROPS other players’ upgrade lines entirely and keeps own lines', () => {
     let s = { ...base, players: { ...base.players, p1: { ...base.players.p1, ap: 5 }, p2: { ...base.players.p2, ap: 5 } } };
     s = applyEvent(s, ev(s, 'p2', 'upgrade_range', {})); // "Bob upgraded range to 3"
     s = applyEvent(s, ev(s, 'p1', 'upgrade_range', {})); // own line for p1
@@ -387,8 +388,109 @@ describe('jury outcome entitlement', () => {
     const mask = attackMask(events);
     const actors = attackActors(events);
     const forP1 = maskLog(s.log, actors, 'p1', mask, (id) => id, false);
-    expect(forP1.find((l) => l.seq === 1)!.text).toBe('Someone upgraded their range');
+    expect(forP1.find((l) => l.seq === 1)).toBeUndefined(); // not even the fact of it
     expect(forP1.find((l) => l.seq === 2)!.text).toBe('Alice upgraded range to 3');
+  });
+
+  it('AP gifts are invisible to non-participants: event redacted, log line dropped', () => {
+    let s0 = placeAdjacent(base, 'p1', 'p2');
+    s0 = { ...s0, players: { ...s0.players, p2: { ...s0.players.p2, ap: 5 } } };
+    const gift = ev(s0, 'p2', 'give_ap', { targetId: 'p1' });
+    const s = applyEvent(s0, gift);
+    const mask = attackMask([gift]);
+    expect(mask.gifts.get(gift.seq)).toBe('p1');
+    // third party: anonymous no-op event, no log line, replay changes nothing
+    const forP3 = maskEvents([gift], 'p3', mask, false)[0];
+    expect(forP3.type).toBe('redacted');
+    expect(forP3.payload).toEqual({ redacted: true });
+    const replayed = applyEvent(s0, forP3, true);
+    expect(replayed.seq).toBe(s.seq);
+    expect(replayed.players.p1).toEqual(s0.players.p1);
+    // giver and receiver keep the real event (and the real log line)
+    expect(maskEvents([gift], 'p2', mask, false)[0]).toBe(gift);
+    expect(maskEvents([gift], 'p1', mask, false)[0]).toBe(gift);
+    const forP3log = maskLog(s.log, attackActors([gift]), 'p3', mask, (id) => id, false);
+    expect(forP3log.find((l) => l.seq === gift.seq)).toBeUndefined();
+    const forP1log = maskLog(s.log, attackActors([gift]), 'p1', mask, (id) => id, false);
+    expect(forP1log.find((l) => l.seq === gift.seq)!.text).toContain('gave');
+  });
+
+  it('heart gifts keep a public anonymized revive line; heal-gift lines are dropped', () => {
+    // revive: p1 gives a heart to dead p2 — the revive itself is public
+    const dead = {
+      ...base,
+      config: { ...base.config, revives: true },
+      players: { ...base.players, p2: { ...base.players.p2, hp: 0 } },
+    };
+    let s = placeAdjacent(dead, 'p1', 'p2');
+    const revive = ev(s, 'p1', 'give_heart', { targetId: 'p2' });
+    s = applyEvent(s, revive);
+    const mask = attackMask([revive]);
+    // give_heart events stay real on the wire for everyone (hp is public)
+    expect(maskEvents([revive], 'p3', mask, false)[0]).toBe(revive);
+    const forP3log = maskLog(s.log, attackActors([revive]), 'p3', mask, (id) => id, false);
+    expect(forP3log.find((l) => l.kind === 'revive')!.text).toBe('Someone revived p2 with a heart!');
+    const forP1log = maskLog(s.log, attackActors([revive]), 'p1', mask, (id) => id, false);
+    expect(forP1log.find((l) => l.kind === 'revive')!.text).toContain('revived'); // giver keeps the real names
+    // plain heal-gift to a living target: line dropped for non-participants
+    const full = { ...base, players: {
+      ...base.players,
+      p1: { ...base.players.p1, hp: 2 },
+      p2: { ...base.players.p2, hp: 2 },
+    } };
+    let s2 = placeAdjacent(full, 'p1', 'p2');
+    const heal = ev(s2, 'p1', 'give_heart', { targetId: 'p2' });
+    s2 = applyEvent(s2, heal);
+    const healMask = attackMask([heal]);
+    expect(maskEvents([heal], 'p3', healMask, false)[0]).toBe(heal); // event stays
+    expect(maskLog(s2.log, attackActors([heal]), 'p3', healMask, (id) => id, false)
+      .find((l) => l.seq === heal.seq)).toBeUndefined();
+  });
+
+  it('trusted replays survive redacted upgrades: stale range cannot fail later attacks', () => {
+    // p1 upgrades to range 3, then hits p2 at distance 3 — impossible with
+    // the stale range 2 a redacted-upgrade replay would carry
+    const spread = { ...base, players: {
+      ...base.players,
+      p1: { ...base.players.p1, pos: { x: 0, y: 0 }, ap: 10 },
+      p2: { ...base.players.p2, pos: { x: 3, y: 0 } },
+    } };
+    const up = ev(spread, 'p1', 'upgrade_range', {});
+    let s = applyEvent(spread, up);
+    const atk = ev(s, 'p1', 'attack', { targetId: 'p2' });
+    s = applyEvent(s, atk);
+    const mask = attackMask([up, atk]);
+    const masked = maskEvents([up, atk], 'p3', mask, false);
+    expect(masked[0].type).toBe('redacted'); // upgrade hidden
+    expect(masked[1].type).toBe('attack');   // only hit on p2 -> named
+    // without trusted, re-validation rejects the real history (range 2 < 3)
+    expect(() => applyEvents(spread, masked)).toThrow();
+    // with trusted it replays exactly: hp and seq match the real timeline
+    const replayed = applyEvents(spread, masked, true);
+    expect(replayed.players.p2.hp).toBe(s.players.p2.hp);
+    expect(replayed.seq).toBe(s.seq);
+  });
+
+  it('trusted replays survive redacted gifts: short AP cannot fail later attacks', () => {
+    // p1 has 0 AP, receives a gift from p2, then attacks with the gifted AP
+    let s0 = placeAdjacent(base, 'p1', 'p2');
+    s0 = { ...s0, players: {
+      ...s0.players,
+      p1: { ...s0.players.p1, ap: 0 },
+      p2: { ...s0.players.p2, ap: 5 },
+    } };
+    const gift = ev(s0, 'p2', 'give_ap', { targetId: 'p1' });
+    let s = applyEvent(s0, gift);
+    const atk = ev(s, 'p1', 'attack', { targetId: 'p2' });
+    s = applyEvent(s, atk);
+    const mask = attackMask([gift, atk]);
+    const masked = maskEvents([gift, atk], 'p3', mask, false);
+    expect(masked[0].type).toBe('redacted'); // gift hidden from p3
+    // without trusted the replay throws 'not enough AP' (p1 replayed at 0)
+    expect(() => applyEvents(s0, masked)).toThrow();
+    const replayed = applyEvents(s0, masked, true);
+    expect(replayed.players.p2.hp).toBe(s.players.p2.hp);
+    expect(replayed.seq).toBe(s.seq);
   });
 
   it('redacted ballots replay as no-ops: seq advances, pendingVotes stays empty', () => {

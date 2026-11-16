@@ -90,7 +90,9 @@ export function useGameEvents(gameId: string | undefined): UseGameEvents {
       // current server, but correct if it ever ships raw snapshots again).
       const tail = d.events as GameEvent[];
       const future = tail.filter((e) => e.seq > base.seq);
-      const merged = future.length > 0 ? applyEvents(base, future) : base;
+      // trusted: masked upgrades/gifts leave stale private fields (range, AP)
+      // in the replayed state — re-validation would reject real history
+      const merged = future.length > 0 ? applyEvents(base, future, true) : base;
       // Backfill the apEarned lifetime counter for legacy snapshots (the
       // engine's own baseline: apEarned ??= ap). Defense in depth alongside
       // the server-side backfill — the Action Points popup stays exact even
