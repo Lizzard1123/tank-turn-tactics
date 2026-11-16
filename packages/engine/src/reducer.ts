@@ -114,10 +114,19 @@ function logLine(
   }
 }
 
-function countBonusVotes(votes: { voterId: string; candidateId: string }[]): Record<string, number> {
+// Return the single most-voted candidate with a CLEAR majority (no tie for
+// most votes) and 3+ votes — at most one bonus AP is awarded per day.
+// Returns null when there is a tie, or when no candidate reaches 3 votes.
+function findBonusWinner(votes: { voterId: string; candidateId: string }[]): { id: string; n: number } | null {
   const tally: Record<string, number> = {};
   for (const v of votes) tally[v.candidateId] = (tally[v.candidateId] ?? 0) + 1;
-  return Object.fromEntries(Object.entries(tally).filter(([, n]) => n >= 3));
+  let bestId: string | null = null, bestN = 0, tie = false;
+  for (const [id, n] of Object.entries(tally)) {
+    if (n > bestN) { bestN = n; bestId = id; tie = false; }
+    else if (n === bestN) tie = true;
+  }
+  if (bestId && !tie && bestN >= 3) return { id: bestId, n: bestN };
+  return null;
 }
 
 function applyAction(s: GameState, actorId: string, type: string, payload: Record<string, unknown>): GameState {
@@ -249,19 +258,19 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
       if (p.hp > 0 && p.id !== lastHaunted)
         players[p.id] = gainAp({ ...p, ap: p.ap + apGained }, apGained);
     }
-    // jury bonus: candidates with >= 3 pending votes get +1
-    const bonus = countBonusVotes(s.pendingVotes);
+    // jury bonus: the most-voted candidate (clear majority, no ties) with 3+
+    // votes gets +1 AP — at most one bonus per day.
+    const bonusWinner = findBonusWinner(s.pendingVotes);
     const nextDay = s.day + 1;
-    for (const [candidateId] of Object.entries(bonus)) {
-      const p = players[candidateId];
-      if (p && p.hp > 0) players[candidateId] = gainAp({ ...p, ap: p.ap + 1 }, 1);
+    if (bonusWinner && players[bonusWinner.id] && players[bonusWinner.id].hp > 0) {
+      players[bonusWinner.id] = gainAp({ ...players[bonusWinner.id], ap: players[bonusWinner.id].ap + 1 }, 1);
     }
     const elapsed = (event.payload.elapsedMinutes as number) ?? 0;
     s = { ...s, day: nextDay, tickClockMinutes: s.tickClockMinutes + elapsed,
       players, pendingVotes: [], haunted: lastHaunted,
       // remembered for the "golden AP icon the day after chosen" UI
-      lastBonus: Object.keys(bonus).length
-        ? Object.keys(bonus).map((id) => ({ id, day: nextDay }))
+      lastBonus: bonusWinner
+        ? [{ id: bonusWinner.id, day: nextDay }]
         : [] };
   } else if (event.type === 'heart_spawn') {
     // system-only event (the tick function mints it): place another board
