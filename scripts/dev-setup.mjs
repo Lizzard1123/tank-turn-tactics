@@ -356,6 +356,24 @@ const PLANS = [
     },
   },
   {
+    name: 'Jury Outcome Secrecy',
+    humans: ['A', 'B', 'E'],
+    about: 'Revives ON (zbar round 1 shape): DevB is dead and their vote for DevA was ALREADY consumed by a tick — DevA is HAUNTED (purple counter; the jury outcome event says so to the dead only). VERIFY THE SPLIT: DevB\'s jury window shows the outcome in Key events (death + "The jury haunted DevA") — DevA\'s game window shows NONE of it: no jury event, no ballot, just the purple tint. DevE is the third living player so the kill cannot end the game.',
+    cfg: { juryHaunt: true, revives: true, heartGifts: true, board: 5, apSchedule: 'interval', apIntervalMinutes: 1 },
+    setup: async (d) => {
+      await d.killPair('A', 'B'); // DevB dies → joins the jury (revives on: returnable)
+      // DevB votes DevA; a tick consumes the ballot and the haunt lands.
+      // DevA's own purple tint (haunted === me) survives the scrub, so the
+      // pred still reads true from the host's living view.
+      await settleTint(d, 'haunt', (s) => s.haunted === d.ids.A, async () => {
+        const s = await d.state();
+        if (!(s.pendingVotes ?? []).some((v) => v.voterId === d.ids.B)) {
+          await doAction(d.tokens.B, d.gameId, 'jury_vote', { candidateId: d.ids.A });
+        }
+      });
+    },
+  },
+  {
     name: 'AP Steal On Kill',
     humans: ['A', 'B'],
     about: 'apStealOnKill ON, everyone starts with 20 AP. Kill DevB (walked into range) — their whole AP stash transfers to you. Watch the counter jump.',
