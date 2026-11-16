@@ -128,6 +128,30 @@ export default function Jury() {
           <EventFeed entries={state.log.map((l) => ({ seq: l.seq, text: l.text }))} activeIndex={null} live replaying={false} />
         </section>
       )}
+
+      {/* With revives on, the full event feed stays hidden (fog of war — the
+          live feed would leak HP intel), but the jury still needs the story of
+          the war: who died, who came back, and how the jury's own votes landed.
+          Newest first, matching the battle log's order. */}
+      {state.config.revives && (
+        <section className="card" aria-label="Key events" data-testid="jury-key-events">
+          <h2>Key events</h2>
+          <ul className="event-feed jury-key-feed" data-testid="jury-key-events-list">
+            {[...state.log]
+              .filter((l) => l.kind === 'kill' || l.kind === 'revive' || l.kind === 'jury')
+              .slice(-12)
+              .reverse()
+              .map((l) => (
+                <li className="feed-row" key={l.seq}>
+                  <div className="feed-main">{l.text}</div>
+                </li>
+              ))}
+            {state.log.filter((l) => l.kind === 'kill' || l.kind === 'revive' || l.kind === 'jury').length === 0 && (
+              <li className="feed-row"><div className="feed-main">Nothing has happened yet — the war is young.</div></li>
+            )}
+          </ul>
+        </section>
+      )}
     </main>
   );
 }
