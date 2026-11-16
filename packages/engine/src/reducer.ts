@@ -68,7 +68,10 @@ function logLine(
         : { text: `${name(actorId)} gave ${name(targetId)} a heart` };
     }
     case 'upgrade_range':
-      return { text: `${name(actorId)} upgraded range to ${s.players[actorId].range + 1}` };
+      // logLine runs on the POST-action state: `range` is already the new
+      // value (one upgrade: 2 -> 3), so no +1 here — that logged 4 for a
+      // single upgrade (off by one).
+      return { text: `${name(actorId)} upgraded range to ${s.players[actorId].range}` };
     case 'daily_tick':
       // public day line only — jury business (who was haunted / awarded) is
       // recorded separately as a dead-viewer-only `jury_result` event, so a
@@ -232,6 +235,15 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
   if (event.seq !== state.seq + 1) throw new EngineError(`seq gap: expected ${state.seq + 1}, got ${event.seq}`);
   let s = state;
 
+  // Universal scrubbed no-op (server-scrubbed replays only): maskEvents
+  // rewrites events a living viewer is not entitled to into an empty form
+  // that keeps the seq chain intact while carrying no actor, no payload and
+  // no log line. The action endpoint strips `redacted` from client payloads,
+  // so this branch can never be triggered by a client-submitted event.
+  if ((event.payload as { redacted?: boolean } | null)?.redacted === true) {
+    return { ...s, seq: event.seq };
+  }
+
   if (event.type === 'bot_action') {
     const actor = s.players[event.actorId];
     if (!actor || !actor.isBot) throw new EngineError('bot_action actor must be a bot');
@@ -293,18 +305,14 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     // viewers only) and its own scrubber row.
   } else if (event.type === 'jury_vote') {
     const voter = s.players[event.actorId];
-    if (event.payload.redacted !== true) {
-      if (!voter) throw new EngineError('unknown player');
-      if (voter.hp > 0) throw new EngineError('alive players cannot vote');
-      const candidateId = event.payload.candidateId as string;
-      if (!s.players[candidateId]) throw new EngineError('unknown candidate');
-      // a juror may CHANGE their vote for the day: re-voting replaces their
-      // earlier ballot (still exactly one vote per juror per day)
-      const others = s.pendingVotes.filter(v => v.voterId !== event.actorId);
-      s = { ...s, pendingVotes: [...others, { voterId: event.actorId, candidateId }] };
-    }
-    // redacted ballot (server-scrubbed replays only): no state change — the
-    // seq still advances, and logLine already yields nothing for jury_vote
+    if (!voter) throw new EngineError('unknown player');
+    if (voter.hp > 0) throw new EngineError('alive players cannot vote');
+    const candidateId = event.payload.candidateId as string;
+    if (!s.players[candidateId]) throw new EngineError('unknown candidate');
+    // a juror may CHANGE their vote for the day: re-voting replaces their
+    // earlier ballot (still exactly one vote per juror per day)
+    const others = s.pendingVotes.filter(v => v.voterId !== event.actorId);
+    s = { ...s, pendingVotes: [...others, { voterId: event.actorId, candidateId }] };
   } else if (event.type === 'join') {
     // mid-game late join: spawn on the first free cell (row-major scan —
     // deterministic, so replays reconstruct the same position)

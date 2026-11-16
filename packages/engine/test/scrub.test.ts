@@ -196,7 +196,7 @@ describe('maskLog', () => {
 });
 
 describe('attackActors', () => {
-  it('builds map of attack seqs to actor ids', () => {
+  it('builds map of event seqs to actor ids (every event, not just attacks)', () => {
     const events: GameEvent[] = [
       { seq: 1, type: 'attack', actorId: 'p1', createdAt: '', payload: { targetId: 'p2' } },
       { seq: 2, type: 'daily_tick', actorId: 'system', createdAt: '', payload: { apGained: 1 } },
@@ -205,7 +205,9 @@ describe('attackActors', () => {
     const actors = attackActors(events);
     expect(actors.get(1)).toBe('p1');
     expect(actors.get(3)).toBe('p3');
-    expect(actors.has(2)).toBe(false); // not an attack
+    // non-attack events map too: maskLog needs them to keep the viewer's OWN
+    // upgrade lines attributed while hiding everyone else's
+    expect(actors.get(2)).toBe('system');
   });
 
   it('handles empty events', () => {
@@ -213,12 +215,13 @@ describe('attackActors', () => {
     expect(actors.size).toBe(0);
   });
 
-  it('handles only non-attack events', () => {
+  it('maps non-attack events with their actors', () => {
     const events: GameEvent[] = [
       { seq: 1, type: 'daily_tick', actorId: 'system', createdAt: '', payload: { apGained: 1 } },
     ];
     const actors = attackActors(events);
-    expect(actors.size).toBe(0);
+    expect(actors.size).toBe(1);
+    expect(actors.get(1)).toBe('system');
   });
 
   it('overwrites with latest actor per seq', () => {
@@ -356,7 +359,7 @@ describe('scrubConfig', () => {
 });
 
 describe('jury secrecy in the scrub layer', () => {
-  const emptyMask = { masked: new Set<number>(), victimBySeq: new Map<number, PlayerId>() };
+  const emptyMask = { masked: new Set<number>(), victimBySeq: new Map<number, PlayerId>(), upgrades: new Set<number>() };
   const noActors = new Map<number, PlayerId>();
   const idName = (id: PlayerId) => id;
 

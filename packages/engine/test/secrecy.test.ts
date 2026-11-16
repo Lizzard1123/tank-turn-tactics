@@ -186,8 +186,11 @@ describe('masked replay equivalence', () => {
     // attack on p1 -> named)
     expect(replayed.players.p1.ap).toBe(final.players.p1.ap + 1); // masked seq 1 not charged
     expect(replayed.players.p2.ap).toBe(final.players.p2.ap);     // own named attack replays charged
-    // a later real action by p3 (upgrade, cost 2) replayed fine — validated above via range
-    expect(replayed.players.p3.range).toBe(final.players.p3.range);
+    // p3's upgrade is SCRUBBED for a third party: the replay never applies
+    // it, so range stays pre-upgrade and the cost is not charged (drift is
+    // invisible — scrubState zeroes others' range/ap on the wire anyway)
+    expect(replayed.players.p3.range).toBe(final.players.p3.range - 1);
+    expect(replayed.players.p3.ap).toBe(final.players.p3.ap + 2);
   });
 
   it('keeps victim ap exact under apStealOnKill even in masked replay', () => {
@@ -342,9 +345,50 @@ describe('jury outcome entitlement', () => {
       seq: 1, type: 'jury_vote', actorId: 'p2',
       createdAt: new Date().toISOString(), payload: { candidateId: 'p1' },
     };
-    expect(maskEvents([ballot], 'p1', attackMask([]), false)[0].payload).toEqual({ redacted: true });
+    const forLiving = maskEvents([ballot], 'p1', attackMask([]), false)[0];
+    expect(forLiving.payload).toEqual({ redacted: true });
+    expect(forLiving.actorId).toBe(HIDDEN_ACTOR); // even WHO voted is hidden
     // a dead jury member keeps the real ballot
     expect(maskEvents([ballot], 'p2', attackMask([]), true)[0].payload).toEqual({ candidateId: 'p1' });
+    expect(maskEvents([ballot], 'p2', attackMask([]), true)[0].actorId).toBe('p2');
+  });
+
+  it('UPGRADES are scrubbed for living viewers: no actor, no value, replay is a no-op', () => {
+    const s0 = { ...base, players: { ...base.players, p1: { ...base.players.p1, ap: 5 } } };
+    const up = ev(s0, 'p2', 'upgrade_range', {}); // p2: range 2 -> 3
+    const s = applyEvent(s0, up);
+    const mask = attackMask([up]);
+    expect(mask.upgrades.has(up.seq)).toBe(true);
+    const forLiving = maskEvents([up], 'p1', mask, false)[0];
+    expect(forLiving.actorId).toBe(HIDDEN_ACTOR);
+    expect(forLiving.payload).toEqual({ redacted: true });
+    // replaying the scrubbed form from the pre-upgrade state: seq advances
+    // in lockstep with the real timeline, but the range is untouched and no
+    // AP is charged — for a living viewer's scrubber the upgrade never
+    // happened (their own view of p2's range is wire-scrubbed to -1 anyway)
+    const replayed = applyEvent(s0, forLiving);
+    expect(replayed.seq).toBe(s.seq);
+    expect(replayed.players.p2.range).toBe(s0.players.p2.range);
+    expect(replayed.players.p2.ap).toBe(s0.players.p2.ap);
+    // the upgrader keeps their own event real
+    const own = maskEvents([up], 'p2', mask, false)[0];
+    expect(own.actorId).toBe('p2');
+    expect(own.payload).toEqual({});
+  });
+
+  it('maskLog rewrites other players’ upgrade lines actor-less and value-less', () => {
+    let s = { ...base, players: { ...base.players, p1: { ...base.players.p1, ap: 5 }, p2: { ...base.players.p2, ap: 5 } } };
+    s = applyEvent(s, ev(s, 'p2', 'upgrade_range', {})); // "Bob upgraded range to 3"
+    s = applyEvent(s, ev(s, 'p1', 'upgrade_range', {})); // own line for p1
+    const events: GameEvent[] = [
+      { seq: 1, type: 'upgrade_range', actorId: 'p2', createdAt: new Date().toISOString(), payload: {} },
+      { seq: 2, type: 'upgrade_range', actorId: 'p1', createdAt: new Date().toISOString(), payload: {} },
+    ];
+    const mask = attackMask(events);
+    const actors = attackActors(events);
+    const forP1 = maskLog(s.log, actors, 'p1', mask, (id) => id, false);
+    expect(forP1.find((l) => l.seq === 1)!.text).toBe('Someone upgraded their range');
+    expect(forP1.find((l) => l.seq === 2)!.text).toBe('Alice upgraded range to 3');
   });
 
   it('redacted ballots replay as no-ops: seq advances, pendingVotes stays empty', () => {

@@ -19,16 +19,23 @@ export interface AttackMask {
   masked: Set<number>;
   /** attack event seq -> victim id, for rewriting log text */
   victimBySeq: Map<number, PlayerId>;
+  /** upgrade_range seqs — range progression is private to the upgrader */
+  upgrades: Set<number>;
 }
 
 // Which human attacks must be masked for a canonical timeline: every
 // top-level `attack` event (bots attack via `bot_action` wrappers and stay
 // public) EXCEPT the victim's most recent one. Kills are always the last
 // hit, so kill-kind log lines render identically before and after masking.
+// Upgrade seqs are collected alongside: the state scrub zeroes everyone
+// else's range, but an unmasked upgrade event (actor + "upgraded range to N"
+// log line) would hand out the whole progression anyway.
 export function attackMask(canonical: GameEvent[]): AttackMask {
   const seqsByVictim = new Map<PlayerId, number[]>();
   const victimBySeq = new Map<number, PlayerId>();
+  const upgrades = new Set<number>();
   for (const e of canonical) {
+    if (e.type === 'upgrade_range') { upgrades.add(e.seq); continue; }
     if (e.type !== 'attack') continue;
     const targetId = (e.payload as { targetId?: string }).targetId;
     if (!targetId) continue;
@@ -41,23 +48,30 @@ export function attackMask(canonical: GameEvent[]): AttackMask {
   for (const seqs of seqsByVictim.values()) {
     for (let i = 0; i < seqs.length - 1; i++) masked.add(seqs[i]);
   }
-  return { masked, victimBySeq };
+  return { masked, victimBySeq, upgrades };
 }
 
 // Transform events for one viewer: hidden attacks lose their actor entirely
 // (the engine replays them via the `anon` branch — identity never on the
-// wire). The attacker always sees their own attacks unmasked. jury_result
-// events are redacted to a no-op form for LIVING viewers — the outcome is
-// the jury's business, and the jury is the dead. Dead viewers (jury members)
-// receive the real outcome: they cast the votes, so they must see how they
-// landed. `juryEntitled` is the viewer's dead status — pass
-// `(state.players[me]?.hp ?? 1) <= 0`.
+// wire). The attacker always sees their own attacks unmasked. For LIVING
+// viewers the jury's business and everyone's range progression are no-ops
+// too: ballots and outcomes scrub to an empty form (actor included — who
+// voted is as secret as how), and upgrades scrub so range stays private.
+// Dead viewers (jury members) keep the real ballots and outcomes: they cast
+// the votes, so they must see how they landed. `juryEntitled` is the
+// viewer's dead status — pass `(state.players[me]?.hp ?? 1) <= 0`.
 export function maskEvents(events: GameEvent[], me: PlayerId, mask: AttackMask, juryEntitled = false): GameEvent[] {
   return events.map((e) => {
-    // ballots AND outcomes are the jury's business: living viewers get no-op
-    // forms (seq advances, replay records nothing)
+    // ballots AND outcomes are the jury's business: living viewers get
+    // no-op forms with the actor hidden — even the fact that a given
+    // player voted stays off the wire
     if ((e.type === 'jury_result' || e.type === 'jury_vote') && !juryEntitled) {
-      return { ...e, payload: { redacted: true } };
+      return { ...e, actorId: HIDDEN_ACTOR, payload: { redacted: true } };
+    }
+    // range progression is private: a living viewer's scrubber must not be
+    // able to rebuild who upgraded when (own upgrades stay real)
+    if (e.type === 'upgrade_range' && mask.upgrades.has(e.seq) && e.actorId !== me) {
+      return { ...e, actorId: HIDDEN_ACTOR, payload: { redacted: true } };
     }
     if (e.type !== 'attack' || !mask.masked.has(e.seq) || e.actorId === me) return e;
     const targetId = (e.payload as { targetId?: string }).targetId ?? mask.victimBySeq.get(e.seq);
@@ -65,10 +79,11 @@ export function maskEvents(events: GameEvent[], me: PlayerId, mask: AttackMask, 
   });
 }
 
-// Rewrite attack log lines the same way, keeping kind (masked attacks are
-// never kills, but a defensive kind pass-through costs nothing). Own attack
-// lines stay attributed to the viewer. jury outcome lines (kind 'jury') stay
-// for dead viewers (jury members) and are stripped for living ones.
+// Rewrite log lines the same way, keeping kind (masked attacks are never
+// kills, but a defensive kind pass-through costs nothing). Own attack and
+// own upgrade lines stay attributed to the viewer. jury outcome lines
+// (kind 'jury') stay for dead viewers (jury members) and are stripped for
+// living ones.
 export function maskLog(
   log: LogEntry[],
   actorBySeq: Map<number, PlayerId>,
@@ -81,6 +96,10 @@ export function maskLog(
     // jury business is dead-viewer-only: outcome entries (kind 'jury') and
     // legacy per-vote lines never reach a LIVING player's log
     if (!juryEntitled && (entry.kind === 'jury' || /^Jury member /.test(entry.text))) return [];
+    // upgrades mask to an actor-less, value-less line (range is private)
+    if (mask.upgrades.has(entry.seq) && actorBySeq.get(entry.seq) !== me) {
+      return [{ ...entry, text: 'Someone upgraded their range' }];
+    }
     // legacy daily_tick lines embedded the jury outcome in the day line
     const text = entry.text
       .replace(/ \(\+1 jury AP to [^)]*\)/, '')
@@ -97,11 +116,13 @@ export function maskLog(
   });
 }
 
-// The actor's map of actor ids for attack events (used by maskLog callers to
-// decide "is this MY attack"). Canonical history carries the real actor.
+// The actor's map of actor ids per event seq (used by maskLog callers to
+// decide "is this MY attack / MY upgrade"). Collected for EVERY event so
+// upgrade lines can be self-attributed too; attacks are the ones whose
+// actor is ever rewritten.
 export function attackActors(canonical: GameEvent[]): Map<number, PlayerId> {
   const out = new Map<number, PlayerId>();
-  for (const e of canonical) if (e.type === 'attack') out.set(e.seq, e.actorId);
+  for (const e of canonical) out.set(e.seq, e.actorId);
   return out;
 }
 
