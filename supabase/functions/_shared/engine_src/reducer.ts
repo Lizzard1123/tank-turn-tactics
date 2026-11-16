@@ -114,10 +114,9 @@ function logLine(
   }
 }
 
-// Return the single most-voted candidate and whether they have a clear majority.
-// Returns null if there's a tie for most votes. Returns {id, n} otherwise.
-// This enforces the rule: only one player can get the bonus AP per day, and
-// only if they have 3+ votes AND a clear majority (no ties).
+// Return the single most-voted candidate with a CLEAR majority (no tie for
+// most votes) and 3+ votes — at most one bonus AP is awarded per day.
+// Returns null when there is a tie, or when no candidate reaches 3 votes.
 function findBonusWinner(votes: { voterId: string; candidateId: string }[]): { id: string; n: number } | null {
   const tally: Record<string, number> = {};
   for (const v of votes) tally[v.candidateId] = (tally[v.candidateId] ?? 0) + 1;
@@ -259,8 +258,8 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
       if (p.hp > 0 && p.id !== lastHaunted)
         players[p.id] = gainAp({ ...p, ap: p.ap + apGained }, apGained);
     }
-    // jury bonus: the most-voted candidate (clear majority, no ties) gets +1
-    // AP if they have 3+ votes. At most one player per day.
+    // jury bonus: the most-voted candidate (clear majority, no ties) with 3+
+    // votes gets +1 AP — at most one bonus per day.
     const bonusWinner = findBonusWinner(s.pendingVotes);
     const nextDay = s.day + 1;
     if (bonusWinner && players[bonusWinner.id] && players[bonusWinner.id].hp > 0) {
@@ -294,14 +293,18 @@ export function applyEvent(state: GameState, event: GameEvent): GameState {
     // viewers only) and its own scrubber row.
   } else if (event.type === 'jury_vote') {
     const voter = s.players[event.actorId];
-    if (!voter) throw new EngineError('unknown player');
-    if (voter.hp > 0) throw new EngineError('alive players cannot vote');
-    const candidateId = event.payload.candidateId as string;
-    if (!s.players[candidateId]) throw new EngineError('unknown candidate');
-    // a juror may CHANGE their vote for the day: re-voting replaces their
-    // earlier ballot (still exactly one vote per juror per day)
-    const others = s.pendingVotes.filter(v => v.voterId !== event.actorId);
-    s = { ...s, pendingVotes: [...others, { voterId: event.actorId, candidateId }] };
+    if (event.payload.redacted !== true) {
+      if (!voter) throw new EngineError('unknown player');
+      if (voter.hp > 0) throw new EngineError('alive players cannot vote');
+      const candidateId = event.payload.candidateId as string;
+      if (!s.players[candidateId]) throw new EngineError('unknown candidate');
+      // a juror may CHANGE their vote for the day: re-voting replaces their
+      // earlier ballot (still exactly one vote per juror per day)
+      const others = s.pendingVotes.filter(v => v.voterId !== event.actorId);
+      s = { ...s, pendingVotes: [...others, { voterId: event.actorId, candidateId }] };
+    }
+    // redacted ballot (server-scrubbed replays only): no state change — the
+    // seq still advances, and logLine already yields nothing for jury_vote
   } else if (event.type === 'join') {
     // mid-game late join: spawn on the first free cell (row-major scan —
     // deterministic, so replays reconstruct the same position)

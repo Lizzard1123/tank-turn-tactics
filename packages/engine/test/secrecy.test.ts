@@ -3,7 +3,7 @@ import { applyEvent } from '../src/reducer';
 import { createInitialState } from '../src/state';
 import { applyEvents } from '../src/replay';
 import {
-  attackMask, attackActors, maskEvents, maskLog, scrubState, scrubConfig, viewerLogReveal, HIDDEN_ACTOR,
+  attackMask, attackActors, maskEvents, maskLog, scrubState, scrubConfig, viewerLogReveal, juryEntitled, HIDDEN_ACTOR,
 } from '../src/scrub';
 import type { GameConfig, GameEvent, GameState, LogEntry } from '../src/types';
 
@@ -267,6 +267,118 @@ describe('viewerLogReveal', () => {
 
   it('a viewer missing from the players map defaults to alive (no reveal)', () => {
     expect(viewerLogReveal(base, 'ghost')).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// jury outcome entitlement — the dead are the jury; the living never see it
+// ---------------------------------------------------------------------------
+
+describe('jury outcome entitlement', () => {
+  const juryResult: GameEvent = {
+    seq: 1, type: 'jury_result', actorId: 'system',
+    createdAt: new Date().toISOString(),
+    payload: { haunted: ['p1'], awarded: [] },
+  };
+  const logWithJury: LogEntry[] = [
+    { seq: 1, text: 'The jury haunted Alice', kind: 'jury' },
+    { seq: 2, text: 'Alice attacked Bob for 1 damage' },
+  ];
+
+  it('juryEntitled: dead true, alive false, unknown viewer false', () => {
+    const dead = { ...base, players: { ...base.players, p2: { ...base.players.p2, hp: 0 } } };
+    expect(juryEntitled(dead, 'p2')).toBe(true);
+    expect(juryEntitled(base, 'p1')).toBe(false);
+    expect(juryEntitled(base, 'ghost')).toBe(false);
+  });
+
+  it('a LIVING viewer: jury_result redacted, jury log lines stripped', () => {
+    expect(maskEvents([juryResult], 'p1', attackMask([]), false)[0].payload).toEqual({ redacted: true });
+    const log = maskLog(logWithJury, new Map(), 'p1', attackMask([]), (id) => id, false);
+    expect(log.find((l) => l.kind === 'jury')).toBeUndefined();
+    expect(log.map((l) => l.text)).toEqual(['Alice attacked Bob for 1 damage']);
+  });
+
+  it('a DEAD viewer (jury member): real outcome, even in a revives-on game', () => {
+    const on = { ...base, config: { ...base.config, revives: true } };
+    const dead = { ...on, players: { ...on.players, p2: { ...on.players.p2, hp: 0 } } };
+    expect(juryEntitled(dead, 'p2')).toBe(true);
+    // event passes through unredacted
+    expect(maskEvents([juryResult], 'p2', attackMask([]), true)[0].payload).toEqual({ haunted: ['p1'], awarded: [] });
+    // log keeps the jury line (and legacy "Jury member" lines)
+    const log = maskLog(
+      [...logWithJury, { seq: 3, text: 'Jury member Bob voted for Alice' }],
+      new Map(), 'p2', attackMask([]), (id) => id, true,
+    );
+    expect(log.map((l) => l.text)).toEqual([
+      'The jury haunted Alice',
+      'Alice attacked Bob for 1 damage',
+      'Jury member Bob voted for Alice',
+    ]);
+  });
+
+  it('the entitlement composes with attack masking (dead revives-on viewer)', () => {
+    // revives on keep attack anonymity, but the dead still see jury outcomes
+    const events: GameEvent[] = [
+      juryResult,
+      { seq: 2, type: 'attack', actorId: 'p1', payload: { targetId: 'p2' } },
+      { seq: 3, type: 'attack', actorId: 'p1', payload: { targetId: 'p2' } },
+    ];
+    const mask = attackMask(events);
+    const forDead = maskEvents(events, 'p2', mask, true);
+    expect(forDead[0].payload).toEqual({ haunted: ['p1'], awarded: [] }); // outcome kept
+    expect(forDead[1].actorId).toBe(HIDDEN_ACTOR); // earlier hit still anonymous
+    expect(forDead[2].actorId).toBe('p1');         // last hit stays named
+  });
+
+  it('default (no flag) keeps the strict redaction the old callers relied on', () => {
+    expect(maskEvents([juryResult], 'p2', attackMask([]))[0].payload).toEqual({ redacted: true });
+    expect(maskLog(logWithJury, new Map(), 'p2', attackMask([]), (id) => id).map((l) => l.text))
+      .toEqual(['Alice attacked Bob for 1 damage']);
+  });
+
+  it('BALLOTS are redacted for living viewers too (they could derive the outcome)', () => {
+    const ballot: GameEvent = {
+      seq: 1, type: 'jury_vote', actorId: 'p2',
+      createdAt: new Date().toISOString(), payload: { candidateId: 'p1' },
+    };
+    expect(maskEvents([ballot], 'p1', attackMask([]), false)[0].payload).toEqual({ redacted: true });
+    // a dead jury member keeps the real ballot
+    expect(maskEvents([ballot], 'p2', attackMask([]), true)[0].payload).toEqual({ candidateId: 'p1' });
+  });
+
+  it('redacted ballots replay as no-ops: seq advances, pendingVotes stays empty', () => {
+    const dead = { ...base, players: { ...base.players, p2: { ...base.players.p2, hp: 0 } } };
+    const real = applyEvent(dead, ev(dead, 'p2', 'jury_vote', { candidateId: 'p1' }));
+    expect(real.pendingVotes).toHaveLength(1);
+    // living viewer's copy of the same event
+    const redacted = { ...ev(dead, 'p2', 'jury_vote', { candidateId: 'p1' }), payload: { redacted: true } };
+    const s = applyEvent(dead, redacted);
+    expect(s.pendingVotes).toEqual([]);
+    expect(s.seq).toBe(real.seq);
+    expect(s.log).toEqual(dead.log); // no new line
+  });
+
+  it('scrubState strips ballots and others’ outcomes from a living viewer’s state', () => {
+    const s = {
+      ...base,
+      pendingVotes: [{ voterId: 'p2', candidateId: 'p1' }],
+      haunted: 'p3' as const,
+      lastBonus: [{ id: 'p3', day: 2 }, { id: 'p1', day: 2 }],
+    };
+    const scrubbed = scrubState(s, 'p1'); // p1 alive
+    expect(scrubbed.pendingVotes).toEqual([]);
+    expect(scrubbed.haunted).toBeNull(); // someone else's haunt is hidden
+    expect(scrubbed.lastBonus).toEqual([{ id: 'p1', day: 2 }]); // own golden row kept
+    // the dead keep everything (they are the jury)
+    const deadView = scrubState({ ...s, players: { ...s.players, p2: { ...s.players.p2, hp: 0 } } }, 'p2');
+    expect(deadView.pendingVotes).toEqual([{ voterId: 'p2', candidateId: 'p1' }]);
+    expect(deadView.haunted).toBe('p3');
+    expect(deadView.lastBonus).toEqual([{ id: 'p3', day: 2 }, { id: 'p1', day: 2 }]);
+    // a haunted living player keeps their own haunt (purple tint entitlement)
+    const hauntedView = scrubState(s, 'p3');
+    expect(hauntedView.haunted).toBe('p3');
+    expect(hauntedView.pendingVotes).toEqual([]);
   });
 });
 

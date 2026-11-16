@@ -2,7 +2,7 @@ import { corsHeaders, json } from '../_shared/cors.ts';
 import { admin } from '../_shared/client.ts';
 import {
   applyEvent, planBotAction, heartSpawnPos, normalizeHeartState, ensureApEarned, mulberry32, hashSeed,
-  scrubState, attackMask, attackActors, maskEvents, maskLog, viewerLogReveal, juryResultEvent,
+  scrubState, attackMask, attackActors, maskEvents, maskLog, viewerLogReveal, juryResultEvent, juryEntitled,
   type GameEvent, type GameState,
 } from '../_shared/engine.ts';
 import { canonicalHistory, effectiveForks } from '../_shared/history.ts';
@@ -333,6 +333,9 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
     .filter((m) => UUID_RE.test(m.player_id))
     .map((m) => {
       const reveal = viewerLogReveal(state, m.player_id);
+      // jury outcomes: the dead are the jury — they keep the result even
+      // with revives on; the living never see it.
+      const jury = juryEntitled(state, m.player_id);
       return {
         player_id: m.player_id,
         state: {
@@ -340,11 +343,11 @@ async function tickGame(gameId: string, due: { ap: boolean; heart: boolean }): P
           // eliminated + revives off: the dead viewer gets the full log
           log: reveal
             ? state.log
-            : maskLog(state.log, actors, m.player_id, mask, (id) => state.players[id]?.name ?? id),
+            : maskLog(state.log, actors, m.player_id, mask, (id) => state.players[id]?.name ?? id, jury),
         },
         events: (reveal
           ? newEvents
-          : maskEvents(newEvents, m.player_id, mask)
+          : maskEvents(newEvents, m.player_id, mask, jury)
         ).map((e) => ({ ...e, generation: game.cur_generation })),
         game_patch: patch,
       };

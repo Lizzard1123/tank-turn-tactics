@@ -3,7 +3,7 @@ import { admin } from '../_shared/client.ts';
 import { getAuthUserId } from '../_shared/auth.ts';
 import {
   applyEvent, createInitialState, ensureApEarned,
-  attackMask, attackActors, maskEvents, maskLog, scrubState, scrubConfig, viewerLogReveal,
+  attackMask, attackActors, maskEvents, maskLog, scrubState, scrubConfig, viewerLogReveal, juryEntitled,
   type GameEvent, type GameState,
 } from '../_shared/engine.ts';
 import { canonicalHistory, effectiveForks, type ForkPoint, type HistoryRow } from '../_shared/history.ts';
@@ -116,13 +116,16 @@ Deno.serve(async (req) => {
       const actors = attackActors(history);
       // eliminated + revives off = nothing left to protect: the full,
       // unmasked log goes on the wire (maskEvents stays on `history`, which
-      // only feeds the post-game scrubber)
+      // only feeds the post-game scrubber). Jury outcomes: the dead are the
+      // jury — they keep the result even with revives on; the living never
+      // see it.
       const reveal = viewerLogReveal(state, me.id);
+      const jury = juryEntitled(state, me.id);
       const stateForViewer: GameState = {
         ...scrubState(state, me.id),
         log: reveal
           ? state.log
-          : maskLog(state.log, actors, me.id, mask, (id) => state.players[id]?.name ?? id),
+          : maskLog(state.log, actors, me.id, mask, (id) => state.players[id]?.name ?? id, jury),
       };
       // the scrubber's starting point, computed server-side with the real
       // seed (createInitialState is seed-deterministic, so this is exact).
@@ -148,8 +151,8 @@ Deno.serve(async (req) => {
           initial,
         },
         state: stateForViewer,
-        events: reveal ? tail : maskEvents(tail, me.id, mask),  // authoritative tail (applied)
-        history: maskEvents(history, me.id, mask), // full event record for the scrubber
+        events: reveal ? tail : maskEvents(tail, me.id, mask, jury),  // authoritative tail (applied)
+        history: maskEvents(history, me.id, mask, jury), // full event record for the scrubber
         members,
         avatars,
         names,              // playerId -> display name (lobby shows real names)

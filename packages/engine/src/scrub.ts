@@ -47,11 +47,18 @@ export function attackMask(canonical: GameEvent[]): AttackMask {
 // Transform events for one viewer: hidden attacks lose their actor entirely
 // (the engine replays them via the `anon` branch — identity never on the
 // wire). The attacker always sees their own attacks unmasked. jury_result
-// events are redacted to a no-op form: the outcome is dead-viewer-only, and
-// the engine replays the redacted payload without touching state or log.
-export function maskEvents(events: GameEvent[], me: PlayerId, mask: AttackMask): GameEvent[] {
+// events are redacted to a no-op form for LIVING viewers — the outcome is
+// the jury's business, and the jury is the dead. Dead viewers (jury members)
+// receive the real outcome: they cast the votes, so they must see how they
+// landed. `juryEntitled` is the viewer's dead status — pass
+// `(state.players[me]?.hp ?? 1) <= 0`.
+export function maskEvents(events: GameEvent[], me: PlayerId, mask: AttackMask, juryEntitled = false): GameEvent[] {
   return events.map((e) => {
-    if (e.type === 'jury_result') return { ...e, payload: { redacted: true } };
+    // ballots AND outcomes are the jury's business: living viewers get no-op
+    // forms (seq advances, replay records nothing)
+    if ((e.type === 'jury_result' || e.type === 'jury_vote') && !juryEntitled) {
+      return { ...e, payload: { redacted: true } };
+    }
     if (e.type !== 'attack' || !mask.masked.has(e.seq) || e.actorId === me) return e;
     const targetId = (e.payload as { targetId?: string }).targetId ?? mask.victimBySeq.get(e.seq);
     return { ...e, actorId: HIDDEN_ACTOR, payload: { targetId, anon: true } };
@@ -60,18 +67,20 @@ export function maskEvents(events: GameEvent[], me: PlayerId, mask: AttackMask):
 
 // Rewrite attack log lines the same way, keeping kind (masked attacks are
 // never kills, but a defensive kind pass-through costs nothing). Own attack
-// lines stay attributed to the viewer.
+// lines stay attributed to the viewer. jury outcome lines (kind 'jury') stay
+// for dead viewers (jury members) and are stripped for living ones.
 export function maskLog(
   log: LogEntry[],
   actorBySeq: Map<number, PlayerId>,
   me: PlayerId,
   mask: AttackMask,
   targetName: (id: PlayerId) => string,
+  juryEntitled = false,
 ): LogEntry[] {
   return log.flatMap((entry) => {
     // jury business is dead-viewer-only: outcome entries (kind 'jury') and
-    // legacy per-vote lines never reach a living player's log
-    if (entry.kind === 'jury' || /^Jury member /.test(entry.text)) return [];
+    // legacy per-vote lines never reach a LIVING player's log
+    if (!juryEntitled && (entry.kind === 'jury' || /^Jury member /.test(entry.text))) return [];
     // legacy daily_tick lines embedded the jury outcome in the day line
     const text = entry.text
       .replace(/ \(\+1 jury AP to [^)]*\)/, '')
@@ -96,6 +105,13 @@ export function attackActors(canonical: GameEvent[]): Map<number, PlayerId> {
   return out;
 }
 
+// Jury outcome entitlement: the dead ARE the jury. A dead viewer casts the
+// votes, so they see how they landed (haunt / bonus / fizzle). Living
+// players never do — for them the outcome is redacted end to end.
+export function juryEntitled(state: GameState, viewerId: PlayerId): boolean {
+  return (state.players[viewerId]?.hp ?? 1) <= 0;
+}
+
 // Full-log reveal for eliminated viewers: a dead player in a revives-off
 // game cannot come back, so attacker anonymity protects nothing anymore —
 // they get the complete, unmasked event log (and event stream). With
@@ -109,6 +125,12 @@ export function viewerLogReveal(state: GameState, viewerId: PlayerId): boolean {
 // `initial` state, and TankCard deliberately shows hp/range only), so zeroing
 // them is display-invisible — and makes the JSON honest instead of merely
 // unobserved.
+//
+// Jury business is dead-viewer-only here too: a LIVING viewer's state carries
+// no ballots (pendingVotes) and no outcome aimed at anyone else. The viewer's
+// OWN tint entitlement survives — a haunted player may know they are haunted
+// (the purple AP counter explains a missing drip), and a bonused player keeps
+// their golden row — but never who voted, never the other targets.
 export function scrubState(state: GameState, me: PlayerId): GameState {
   const players: GameState['players'] = {};
   for (const [id, p] of Object.entries(state.players)) {
@@ -117,7 +139,17 @@ export function scrubState(state: GameState, me: PlayerId): GameState {
     // non-self players (jury cards show hp only; Board uses own range only).
     players[id] = id === me ? p : { ...p, ap: -1, range: -1, apEarned: -1 };
   }
-  return { ...state, config: { ...state.config, seed: 0 }, players };
+  const jury = juryEntitled(state, me);
+  return {
+    ...state,
+    config: { ...state.config, seed: 0 },
+    players,
+    pendingVotes: jury ? state.pendingVotes : [],
+    haunted: jury || state.haunted === me ? state.haunted : null,
+    lastBonus: jury
+      ? (state.lastBonus ?? [])
+      : (state.lastBonus ?? []).filter((b) => b.id === me),
+  };
 }
 
 // Same for a bare config payload (game.config echoes).

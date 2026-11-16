@@ -3,7 +3,7 @@ import { admin } from '../_shared/client.ts';
 import { getAuthUserId } from '../_shared/auth.ts';
 import { ALLOWED_KEYS, sanitizePayload } from '../_shared/action-validation.ts';
 import {
-  applyEvent, EngineError, ensureApEarned, scrubState, attackMask, attackActors, maskEvents, maskLog, viewerLogReveal,
+  applyEvent, EngineError, ensureApEarned, scrubState, attackMask, attackActors, maskEvents, maskLog, viewerLogReveal, juryEntitled,
   type GameConfig, type GameEvent, type GameState, type PlayerSpec,
 } from '../_shared/engine.ts';
 import { rebuildStateAt, canonicalHistory, effectiveForks, type ForkPoint, type HistoryRow } from '../_shared/history.ts';
@@ -191,17 +191,19 @@ Deno.serve(async (req) => {
       .filter((m) => UUID_RE.test(m.player_id))
       .map((m) => {
         // eliminated + revives off: the dead viewer gets the full log and
-        // the unmasked event
+        // the unmasked event. Jury outcomes: the dead are the jury — they
+        // keep the result even with revives on; the living never see it.
         const reveal = viewerLogReveal(next, m.player_id);
+        const jury = juryEntitled(next, m.player_id);
         return {
           player_id: m.player_id,
           state: {
             ...scrubState(next, m.player_id),
             log: reveal
               ? next.log
-              : maskLog(next.log, actors, m.player_id, mask, (id) => next.players[id]?.name ?? id),
+              : maskLog(next.log, actors, m.player_id, mask, (id) => next.players[id]?.name ?? id, jury),
           },
-          events: (reveal ? [event] : maskEvents([event], m.player_id, mask))
+          events: (reveal ? [event] : maskEvents([event], m.player_id, mask, jury))
             .map((e) => ({ ...e, generation: game.cur_generation })),
           game_patch: next.winner ? { status: 'finished' } : {},
         };
