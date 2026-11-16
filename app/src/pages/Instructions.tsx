@@ -1,5 +1,4 @@
 import { Link } from 'react-router-dom';
-import { Icon, heartSvg, boltSvg, targetSvg } from '../lib/icons';
 import gameMobile from '../assets/screenshots/game-mobile.png';
 import gameDesktop from '../assets/screenshots/game-desktop.png';
 import dashboardMobile from '../assets/screenshots/dashboard-mobile.png';
@@ -26,13 +25,46 @@ function BoardOutline() {
   );
 }
 
-/** A flag marker — what players actually see on the board (avatars / flags). */
-function FlagIcon() {
+/** A player token as it really renders on the board: a square cell filled
+ *  with the player's real country flag (every player id deterministically
+ *  carries one), their name stamped across the top, and their HP life bars
+ *  at the bottom edge. */
+function FlagTile({ code, name, hp = 3, maxHp = 3 }: { code: string; name: string; hp?: number; maxHp?: number }) {
+  const flag = `${import.meta.env.BASE_URL}flags/${code}.svg`;
+  const bars = Array.from({ length: maxHp }, (_, i) => i < hp);
   return (
-    <svg width="140" height="130" viewBox="0 0 140 130" aria-label="Flag marker — player token on the board">
-      <line x1="62" y1="32" x2="62" y2="108" stroke="#26251d" strokeWidth="4" strokeLinecap="round" />
-      <rect x="62" y="42" width="44" height="30" fill="#c8471f" stroke="#26251d" stroke-width="2" />
+    <svg width="72" height="72" viewBox="0 0 72 72" aria-label={`Player token — the ${code.toUpperCase()} flag with a name plate and life bars`}>
+      <image x="0" y="0" width="72" height="72" href={flag} preserveAspectRatio="xMidYMid slice" />
+      <rect x="0.75" y="0.75" width="70.5" height="70.5" fill="none" stroke="#26251d" strokeWidth="1.5" />
+      {/* name plate: stamped across the top, paper text with an ink halo */}
+      <text
+        x="36" y="10"
+        textAnchor="middle"
+        fill="#f3ecdb" stroke="#26251d" strokeWidth="2.5" paintOrder="stroke"
+        fontFamily="'Black Ops One', sans-serif"
+        fontSize="9" fontWeight="700" letterSpacing="0.04em"
+      >
+        {name.toUpperCase()}
+      </text>
+      {/* life bars: one vertical red bar per HP along the bottom edge */}
+      {bars.map((full, i) => (
+        <rect
+          key={i}
+          x={4 + i * 9} y={64} width={7} height={5}
+          fill={full ? '#c8471f' : 'none'} stroke="#26251d" strokeWidth="1"
+        />
+      ))}
     </svg>
+  );
+}
+
+/** Two tokens side by side, exactly as neighbours appear on the board. */
+function FlagRow() {
+  return (
+    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+      <FlagTile code="de" name="you" hp={2} />
+      <FlagTile code="br" name="bot 1" hp={3} />
+    </div>
   );
 }
 
@@ -57,16 +89,24 @@ function APIcon() {
 
 function HeartGraphic() {
   return (
-    <svg width="220" height="110" viewBox="0 0 220 110" aria-label="Heart pickup — a flag moves onto an adjacent heart">
+    <svg width="220" height="110" viewBox="0 0 220 110" aria-label="Heart pickup — a flag tile moves onto an adjacent heart">
       <rect width="220" height="110" fill="#e9e2cf" stroke="#26251d" stroke-width="3" />
-      {/* two board cells: the flag's square and the heart's square next door */}
+      {/* two board cells: the player's square and the heart's square next door */}
       <line x1="110" y1="5" x2="110" y2="105" stroke="#6b6a4f" strokeWidth="1.5" />
-      {/* your flag, parked in the left square */}
-      <line x1="52" y1="42" x2="52" y2="88" stroke="#26251d" strokeWidth="3" strokeLinecap="round" />
-      <rect x="52" y="50" width="30" height="20" fill="#c8471f" stroke="#26251d" strokeWidth="2" />
+      {/* your token — a real country-flag tile — parked in the left square */}
+      <image x="25" y="25" width="60" height="60" href={`${import.meta.env.BASE_URL}flags/de.svg`} preserveAspectRatio="xMidYMid slice" />
+      <text
+        x="55" y="35"
+        textAnchor="middle"
+        fill="#f3ecdb" stroke="#26251d" strokeWidth="2.5" paintOrder="stroke"
+        fontFamily="'Black Ops One', sans-serif"
+        fontSize="9" fontWeight="700" letterSpacing="0.04em"
+      >
+        YOU
+      </text>
       {/* move arrow: one step onto the heart's square picks it up */}
-      <line x1="84" y1="60" x2="118" y2="60" stroke="#26251d" strokeWidth="3" strokeDasharray="6 4" />
-      <path d="M118 60 l-9 -5 v10 Z" fill="#26251d" />
+      <line x1="90" y1="55" x2="118" y2="55" stroke="#26251d" strokeWidth="3" strokeDasharray="6 4" />
+      <path d="M118 55 l-9 -5 v10 Z" fill="#26251d" />
       {/* the ration-token heart sitting in the neighbouring square */}
       <g transform="translate(116.8 15.4) scale(0.72)">
         <rect
@@ -108,22 +148,6 @@ function MockBattleLog() {
   );
 }
 
-/** Mock AP info popup — shown when you tap the AP counter. */
-function MockApPopup() {
-  return (
-    <div className="mock-popup" aria-label="Mock AP info popup">
-      <div className="mock-popup-inner">
-        <h3>Action Points</h3>
-        <p>You have 4 AP. 12 have been given out in total.</p>
-        <p className="mock-popup-note">
-          <Icon html={boltSvg} width={12} height={12} className="mock-golden" />
-          {' '}The jury awarded you bonus AP — your counter shines golden today.
-        </p>
-        <button>OK</button>
-      </div>
-    </div>
-  );
-}
 
 function Figure({ children, caption }: { children: React.ReactNode; caption?: string }) {
   return (
@@ -148,9 +172,11 @@ export default function Instructions() {
       <div className="panel">
         <div className="panel-body">
           <h2>Goal</h2>
-          <p>Be the last flag standing. Attack others, form alliances, give
-          (and take) Action Points — and outsmart everyone with superior
-          group strategy.</p>
+          <p>Be the last flag standing on an 8×8 board. Attack others, form
+          alliances, give (and take) Action Points — then outsmart everyone
+          with better group strategy.</p>
+          <p>Coordination happens off-board (Discord, iMessage, whatever you
+          like). There is no in-game chat in this version.</p>
         </div>
         <Figure caption="The battlefield — an 8×8 cell tactical map">
           <BoardOutline />
@@ -161,16 +187,25 @@ export default function Instructions() {
       <div className="panel">
         <div className="panel-body">
           <h2>Your stats</h2>
-          <p><Icon html={heartSvg} width={14} height={14} className="stat-icon" />
-          <strong>Health (HP)</strong> — starts at 3. You can only heal by
-          picking up hearts on the board. At 0 HP you die and join the Jury.</p>
-          <p><Icon html={boltSvg} width={14} height={14} className="stat-icon" /> <strong>Action Points (AP)</strong> — the resource to act
-          with. Everyone starts with 0 AP and gains more each day.</p>
-          <p><Icon html={targetSvg} width={14} height={14} className="stat-icon" /> <strong>Range</strong> — the distance (in grid steps) at which
-          you can interact with other players. Starts at 2.</p>
+          <p>Each player has three numbers that matter:</p>
+          <ul className="stats-list">
+            <li>
+              <strong>Health (HP)</strong> — starts at 3. Pick up hearts on the
+              board to heal. At 0 HP you die and join the Jury.
+            </li>
+            <li>
+              <strong>Action Points (AP)</strong> — the resource you spend to act.
+              Everyone starts with 0 AP and gains more each day through the
+              schedule set by the host.
+            </li>
+            <li>
+              <strong>Range</strong> — how far you can reach (in grid steps).
+              Starts at 2. Upgrade it to touch more targets.
+            </li>
+          </ul>
         </div>
         <div className="graphic-row">
-          <Figure caption="Player token — a flag on the board"><FlagIcon /></Figure>
+          <Figure caption="Player tokens — real country flags on the board"><FlagRow /></Figure>
           <Figure caption="Action points — spend to act"><APIcon /></Figure>
         </div>
       </div>
@@ -226,16 +261,19 @@ export default function Instructions() {
       <div className="panel">
         <div className="panel-body">
           <h2>How targeting works</h2>
-          <p>Buttons on the action bar <strong>only arm or cancel a mode</strong> —
-          they never pick a target or confirm an action by themselves.</p>
+          <p>The buttons on the action bar <strong>only arm or cancel a mode</strong>
+          — they never pick a target or confirm an action by themselves.</p>
           <p>After arming a mode, <strong>tap a cell on the board</strong> to
-          choose your target. A confirmation dialog appears; press "Yes" to
-          commit, "No" to cancel.</p>
+          choose your target. A confirmation dialog pops up showing what you
+          are about to do; press <strong>Yes</strong> to commit or
+          <strong>No</strong> to cancel.</p>
           <ul>
-            <li><strong>Move:</strong> tap an adjacent empty cell (or a gravestone — dead players don't block movement).</li>
+            <li><strong>Move:</strong> tap an adjacent empty cell (gravestones don't block movement).</li>
             <li><strong>Attack / Give AP:</strong> tap an <em>alive</em> player in range.</li>
             <li><strong>Give Heart:</strong> tap any player in range — alive or dead.</li>
           </ul>
+          <p><strong>Upgrade Range</strong> is the exception: it fires immediately
+          from the button with no targeting needed.</p>
         </div>
       </div>
 
@@ -259,7 +297,7 @@ export default function Instructions() {
           <p>Tap your AP counter to see a popup: your current AP, the lifetime
           total the game has granted you (all AP you've ever earned), and any
           jury tint explanation — why your counter is golden or purple.</p>
-          <Figure caption="Tap the counter for details"><MockApPopup /></Figure>
+          <Figure caption="Tap the counter for details"><APIcon /></Figure>
         </div>
       </div>
 
@@ -267,7 +305,7 @@ export default function Instructions() {
       <div className="panel">
         <div className="panel-body">
           <h2>Heart spawns (host-configurable)</h2>
-          <p>Game hosts can enable collectible hearts that appear on the board
+          <p>Hosts can enable collectible hearts that appear on the board
           on their own schedule (fixed interval, daily time, or a secret random
           minute inside a period — spawn times are never shown). A configurable
           <strong> spawn delay</strong> keeps the early game heart-free: no
@@ -314,21 +352,20 @@ export default function Instructions() {
           Choose your assassinations by the loot.</p>
 
           <h3>Jury Haunt</h3>
-          <p>The jury's most-voted living player is <em>haunted</em> — they
-          receive no AP on the next tick. A tie for most votes haunts nobody.
-          A player can be haunted and still receive the 3-vote bonus; the two
-          effects are independent. Vote carefully.</p>
+          <p>See <a href="#jury">The Jury</a> section above for full details on
+          how the jury works — including haunts, bonus AP, and ghost votes.</p>
 
           <h3>Jury AP Tints</h3>
           <p>The day after the votes are tallied, your AP counter changes
-          color so you know the jury's verdict:</p>
+          color so you know the jury's verdict at a glance:</p>
           <p>
             <span className="ap-counter ap-golden" style={{ display: 'inline-block' }}>4 AP</span>
-            {' '}— you were the jury's favorite: 3+ votes landed you a bonus AP.
+            {' '}— <strong>golden</strong>: the jury awarded you bonus AP.
+            You were their favorite.
           </p>
           <p>
             <span className="ap-counter ap-purple" style={{ display: 'inline-block' }}>1 AP</span>
-            {' '}— you are haunted: the jury withheld your AP drip for the day.
+            {' '}— <strong>purple</strong>: the jury haunted you. Your AP drip was withheld for the day.
           </p>
           <p>Colors clear at the next day tick.</p>
 
@@ -337,7 +374,7 @@ export default function Instructions() {
           with their name and a portrait. If several players die on the same
           square, each gets a smaller stone; up to 4 keep names, anything
           beyond that shows only a count tag. Graves <strong>don't block
-          movement</strong> — drive right over them (and hearts can spawn
+          movement</strong> — walk right over them (and hearts can spawn
           beside them).</p>
         </div>
       </div>
@@ -346,33 +383,52 @@ export default function Instructions() {
       <div className="panel">
         <div className="panel-body">
           <h2>Battle log</h2>
-          <p>During a game the battle log only shows select key events:</p>
+          <p>During a game the battle log only shows key events:</p>
           <ul>
-            <li><strong>Who dealt a final blow</strong> (shown as "dealt the final blow to …").</li>
-            <li><strong>Who got revived</strong> (a heart brought someone back).</li>
+            <li><strong>Final blows</strong> — who killed whom ("Alice dealt the final blow to Bob").</li>
+            <li><strong>Revives</strong> — a heart brought someone back.</li>
           </ul>
           <p>The battle log is <strong>collapsed by default on mobile</strong>
-          — tap the banner to expand it. On desktop it stays open.</p>
-          <p>The full event history unlocks after the game
-          ends (test-mode hosts can scrub it anytime).</p>
+          — tap the banner to open it.</p>
+          <p>The full event history unlocks after the game ends.</p>
         </div>
-        <Figure caption="Battle log — collapsed by default"><MockBattleLog /></Figure>
+        <Figure caption="Battle log"><MockBattleLog /></Figure>
       </div>
 
       {/* ---- The Jury ------------------------------------------------------------ */}
-      <div className="panel">
+      <div className="panel" id="jury">
         <div className="panel-body">
           <h2>The Jury</h2>
           <p>When a player dies, their job changes: they join the Jury. From
           the jury screen you can watch the board and <strong>vote for a living
           player</strong> each day.</p>
-          <p>Any living player with <strong>3 or more votes</strong> receives
-          1 bonus AP on the next tick. You can change your vote at any
-          time — and so can everyone else.</p>
+          <p>Each day the votes are tallied and the most-voted living player
+          feels the result — the strict winner only; a tie for most votes
+          fizzles and nothing happens:</p>
+          <ul>
+            <li><strong>Haunt</strong> (when enabled): the most-voted player
+            receives <em>no AP</em> on the next tick.</li>
+            <li><strong>Bonus AP</strong>: if the most-voted player has
+            <strong> 3 or more votes</strong>, they also gain 1 AP. At most
+            one bonus AP lands per day.</li>
+          </ul>
+          <p>The two are independent: a heavily-voted player can be haunted
+          and still collect the 3-vote bonus. Vote carefully.</p>
           <p>Your votes are secret — no one can see who you voted for.</p>
+          <p><strong>Ghost votes:</strong> if you vote while dead and then get
+          revived before the next daily tick, your vote <strong>still counts</strong>
+          toward that day's jury result. You cannot change or retract it once
+          you're alive again — it's your last word from the grave.</p>
+          <h3>Jury examples</h3>
+          <ul>
+            <li><strong>Example 1:</strong> Alice gets 5 votes, Bob gets 2 → Alice is haunted (no AP next tick) <em>and</em> gains the +1 bonus. Bob gets nothing.</li>
+            <li><strong>Example 2:</strong> Alice gets 3 votes — clear winner → haunted and bonused, same as above.</li>
+            <li><strong>Example 3:</strong> Alice gets 3 votes and Bob gets 3 — a tie for most → nobody is haunted, nobody gets the bonus. The jury's influence fizzles.</li>
+            <li><strong>Example 4:</strong> You die → you join the jury, watch the board, and vote each day. Your only hope is a teammate giving you a heart to revive you.</li>
+          </ul>
           <p>Don't make enemies on your way out.</p>
         </div>
-        <Figure caption="Flag marker — player token on the board"><FlagIcon /></Figure>
+        <Figure caption="Player tokens — real country flags on the board"><FlagRow /></Figure>
       </div>
 
       {/* ---- Screenshots --------------------------------------------------------- */}
@@ -384,11 +440,11 @@ export default function Instructions() {
         <div className="screenshot-gallery">
           <div className="screenshot-row">
             <figure className="screenshot-item screenshot-mobile">
-              <img src={gameMobile} alt="Game board on mobile — grid with flag avatars and action bar" />
+              <img src={gameMobile} alt="Mobile game board — grid with flag avatars and action bar" />
               <figcaption>Mobile game board</figcaption>
             </figure>
             <figure className="screenshot-item screenshot-desktop">
-              <img src={gameDesktop} alt="Game board on desktop — grid with flag avatars and action bar" />
+              <img src={gameDesktop} alt="Desktop game board — grid with flag avatars and action bar" />
               <figcaption>Desktop game board</figcaption>
             </figure>
           </div>
@@ -411,6 +467,10 @@ export default function Instructions() {
           <h2>Winning</h2>
           <p>Be the last player alive and you win. Alliances burn bright and
           betrayals burn deeper — trust carefully.</p>
+          <p>Remember: you can always see the board, even when you're dead.
+          The jury screen lets you vote for living players each day. Your
+          goal? Keep the living alive long enough to win — or revive
+          yourself with a heart from a teammate.</p>
         </div>
       </div>
     </main>
